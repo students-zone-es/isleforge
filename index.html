@@ -648,7 +648,7 @@ const MATES={
 /* role: melee, ranged, spotter, mortar, air, ram, siege */
 const EDEFS={
   dummy:{name:'BLANCO', role:'dummy', hp:12, speed:0, radius:12, mass:99, view:0, fov:0, dmg:0, score:20, work:2, color:'#c9a74a', look:'dummy', purple:0},
-  emplacement:{name:'EMPLAZAMIENTO', role:'turret', hp:40, speed:0, radius:13, mass:99, view:380, fov:7, dmg:6, score:150, work:3, color:'#7a7f88', look:'emplacement', purple:0},
+  emplacement:{name:'EMPLAZAMIENTO', role:'turret', hp:40, speed:0, radius:13, mass:99, view:380, fov:7, dmg:9, score:150, work:3, color:'#7a7f88', look:'emplacement', purple:0},
   assembler:{name:'ENSAMBLADORA', role:'spawner', hp:90, speed:0, radius:18, mass:99, view:0, fov:0, dmg:0, score:300, work:8, color:'#ff3df0', look:'assembler', purple:0},
   generator:{name:'GENERADOR', role:'structure', hp:70, speed:0, radius:16, mass:99, view:0, fov:0, dmg:0, score:250, work:5, color:'#ff3df0', look:'generator', purple:0},
   brawler:{name:'TRITURADOR', role:'melee', hp:32, speed:2.1, accel:0.3, radius:12, mass:1.3, view:270, fov:2.1, dmg:14, score:90, work:2, color:'#d9622b', look:'brawler', purple:0},
@@ -1648,12 +1648,13 @@ function launchPlayer(x,y,force,ang){
   const a=ang!=null?ang:Math.atan2(p.y-y,p.x-x), v=force/Math.sqrt(p.mass||1)*1.1;
   p.vx=Math.cos(a)*v; p.vy=Math.sin(a)*v; p.launchT=24;
 }
-function damagePlayer(amount){
+function damagePlayer(amount,shieldPierce){
   const p=player;
   if(!p.alive||p.invuln>0||cine>0||god) return;
   amount*=bossDmgK;   // los golpes del jefe crecen con tu equipo
   amount*=p.ch.hurt||1;   // blindaje del vehículo (el Jackal es el más frágil)
-  if(p.shield>0){ p.shield-=amount; if(p.shield<0){ p.hp+=p.shield; p.shield=0; } }
+  if(p.shield>0){ const direct=amount*(shieldPierce||0); p.hp-=direct; amount-=direct;   // parte atraviesa el escudo (vigía de nivel alto)
+    p.shield-=amount; if(p.shield<0){ p.hp+=p.shield; p.shield=0; } }
   else p.hp-=amount;
   p.hurtFlash=8; shake=Math.max(shake,Math.min(10,3+amount*0.25)); S.hurt();
   if(p.hp<=0){ p.hp=0; p.alive=false; onPlayerDeath(); }
@@ -1705,7 +1706,7 @@ function fireBullet(x,y,a,owner,o){
   bullets.push({x,y,ox:x,oy:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,owner,dmg:(o.dmg||5)*(owner==='e'?bossDmgK:1),radius:o.radius||3,life:o.life||90,
     pierce:o.pierce!=null?o.pierce:(owner==='p'?player.pierce:0),
     frag:o.frag!=null?o.frag:(owner==='p'?player.fragment:0),
-    splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src, hitList:null,
+    splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src, hitList:null, sp:o.shieldPierce||0,
     fac:owner==='e'?(o.fac||shotFac):null});
 }
 function updateBullets(dt){
@@ -1745,13 +1746,15 @@ function updateBullets(dt){
           const d2=(b.x-player.x)**2+(b.y-player.y)**2;
           if(!b.grazed && d2<(player.radius+11)**2 && d2>player.radius**2){ b.grazed=true; score+=2; S.graze(); }
           if(d2<(b.radius+player.radius)**2){
-            damagePlayer(b.dmg); dead=true;
+            damagePlayer(b.dmg,b.sp); dead=true;
             if(b.splash) explode(b.x,b.y,b.splash,0,'e',{});
           }
         }
         if(!dead){
           const u=hitFriendly(b.x,b.y,b.radius);
-          if(u){ hurtFriendly(u,b.dmg); dead=true; if(b.splash) explode(b.x,b.y,b.splash,0,'e',{}); }
+          if(u){ hurtFriendly(u,b.dmg);
+            if(b.pierce>0){ b.pierce--; b.x+=b.vx*2; b.y+=b.vy*2; }   // bala perforante: atraviesa al soldado
+            else { dead=true; if(b.splash) explode(b.x,b.y,b.splash,0,'e',{}); } }
         }
         if(!dead&&world&&world.factions){   // balas de un bando contra el otro (robots contra bandidos)
           for(const en of enemies){
@@ -1885,6 +1888,7 @@ function damageEnemy(en,dmg,o){
       for(let i=0;i<4;i++) particles.push({x:en.x+Math.cos(en.angle)*en.radius,y:en.y+Math.sin(en.angle)*en.radius,vx:rand(-1.5,1.5),vy:rand(-1.5,1.5),life:14,maxLife:14,color:'#ffe08a',size:2}); }
   }
   en.hp-=dmg; en.flash=5; en.hurtT=t; S.hit();
+  if(en.def.role==='turret'&&o.bx!=null&&!o.infight){ en.ai='combat'; en.lastKnown={x:o.bx,y:o.by}; }   // la torreta mira de dónde vino el disparo
   if(o.stun){ en.stun=Math.max(en.stun,o.stun); en.ramT=0; en.windup=0; en.lunge=0; }
   if(en.ai!=='combat' && !o.purple && en.def.role!=='dummy' && en.def.role!=='structure' && en.def.role!=='spawner'){
     const src=o.src;
@@ -2899,10 +2903,11 @@ function canAttack(en){
 /* Emplazamiento fijo: gira, vigila y dispara ráfagas dobles */
 function turretAI(en,dt){
   en.fireCd-=dt;
-  if(en.ai==='combat' && en.seen && player.alive){
-    const want=Math.atan2(player.y-en.y,player.x-en.x);
-    en.aim=turnTo(en.aim,want,0.06*dt);
-    if(Math.abs(angDiff(en.aim,want))<0.2 && en.fireCd<=0 && canAttack(en)){ en.burst=3; en.burstT=0; en.fireCd=rand(90,130); }
+  if(en.ai!=='patrol' && player.alive && (en.seen||en.lastKnown)){   // también mientras te busca (al perderte de vista pasa a «buscar»)
+    // si no te ve pero le han disparado, gira hacia donde vino el disparo y contesta
+    const tx=en.seen?player.x:en.lastKnown.x, ty=en.seen?player.y:en.lastKnown.y, want=Math.atan2(ty-en.y,tx-en.x);
+    en.aim=turnTo(en.aim,want,(en.seen?0.07:0.1)*dt);
+    if(Math.abs(angDiff(en.aim,want))<0.2 && en.fireCd<=0 && canAttack(en)){ en.burst=4; en.burstT=0; en.fireCd=rand(80,115); }
   } else en.aim+=0.012*dt;
   if(en.burst>0){
     en.burstT-=dt;
@@ -2973,8 +2978,29 @@ function flankSpot(en,tg,mn,mx,dt){
   }
   return en.flank=best;
 }
+/* VIGÍA: no lleva Hollow Boom; carga un disparo de francotirador con su láser de aviso. Cuanto más nivel (mundo, veces
+   que te ha vencido y nivel de los refuerzos), más rápida la bala, más daño y más perforación (atraviesa a tus soldados
+   y parte de tu escudo). */
+function spotterLvl(en){ return (world?world.id:1)+(en.vengeLvl||0)*2+(en.reinf&&world?Math.floor((world.reinfLvl||0)/2):0); }
+function spotterShot(en,tg,dd,los,dt,mx){
+  en.fireCd-=dt;
+  if(en.lock>0){
+    en.vx*=0.7; en.vy*=0.7; en.lock+=dt;
+    en.aim=turnTo(en.aim,Math.atan2(tg.y-en.y,tg.x-en.x),(en.lock<60?0.08:0.02)*dt); if(!en.def.tank) en.angle=en.aim;
+    if(!los||!canAttack(en)){ en.lock=0; en.fireCd=60; return; }
+    if(en.lock>=80){
+      const L=spotterLvl(en);
+      fireBullet(en.x+Math.cos(en.aim)*(en.radius+5),en.y+Math.sin(en.aim)*(en.radius+5),en.aim,'e',
+        {speed:Math.min(16,8+L*1.4),dmg:Math.round(en.def.dmg*(2+0.35*L)),radius:3,life:90,kind:'ebolt',pierce:Math.min(3,Math.floor(L/2)),shieldPierce:Math.min(0.75,0.12*L)});
+      en.lock=0; en.fireCd=rand(150,200); en.recoil=5; S.cannon();
+    }
+    return;
+  }
+  if(los&&en.fireCd<=0&&canAttack(en)&&dd<mx+160) en.lock=1;
+}
 function combatRanged(en,tg,dd,los,aimed,dt,prefer,weak){
   const mn=prefer[0], mx=prefer[1];
+  if(weak&&en.lock>0){ spotterShot(en,tg,dd,los,dt,mx); return; }   // el vigía se queda quieto mientras apunta
   en.strafeT-=dt; if(en.strafeT<=0){ en.strafe*=-1; en.strafeT=rand(60,130); }
   const scared=en.hp<en.maxHp*0.35 || (weak && dd<200);
   if(!los&&dd<mx+140){ const f=flankSpot(en,tg,mn,mx,dt); steerTo(en,f?f.x:tg.x,f?f.y:tg.y,dt,f?0.95:0.9); }   // sin línea de tiro: flanquear
@@ -2985,6 +3011,7 @@ function combatRanged(en,tg,dd,los,aimed,dt,prefer,weak){
     if(dd<mn||scared){ mvx-=nx; mvy-=ny; } else if(dd>mx){ mvx+=nx; mvy+=ny; }
     accelerate(en,mvx,mvy,dt,0.7);
   }
+  if(weak){ spotterShot(en,tg,dd,los,dt,mx); return; }
   en.fireCd-=dt;
   if(los && aimed && en.fireCd<=0 && canAttack(en) && dd<mx+140){
     en.burst=weak?1:3; en.burstT=0; en.fireCd=rand(80,120)-Math.min(30,wave*2)+(weak?60:0);
@@ -3093,6 +3120,7 @@ function combatSiege(en,tg,dd,los,aimed,dt){
 
 /* ===================== HOLLOW BOOM (enemigos) ===================== */
 function checkPurpleTrigger(en){
+  if(en.def.role==='spotter') return;   // el vigía nunca lanza Hollow Boom
   if(!en.carrier||en.vacioUsed||en.spawnGrace>0||voidCharging>0||!player.alive) return;
   if(en.ai!=='combat'&&en.ai!=='hunt') return;
   const sq=squads[en.squad];
@@ -4366,6 +4394,7 @@ function render(){
   drawDeposits();
   drawTurretsSoldiers();
   for(const en of enemies) if(en.alive&&!en.air) drawEnemy(en);
+  for(const en of enemies) if(en.alive&&en.def.role==='spotter'&&en.lock>0) sniperLaser(en);   // el vigía cargando su disparo
   for(const en of enemies) if(en.alive&&en.vengeLvl&&!en.hidden){   // te vencieron: una marca roja por cada vez
     ctx.fillStyle='#ff4757'; for(let i=0;i<Math.min(3,en.vengeLvl);i++){ const x=en.x-(Math.min(3,en.vengeLvl)-1)*4+i*8, y=en.y-en.radius-14; ctx.beginPath(); ctx.moveTo(x-3,y); ctx.lineTo(x,y+3); ctx.lineTo(x+3,y); ctx.lineTo(x+3,y+2); ctx.lineTo(x,y+5); ctx.lineTo(x-3,y+2); ctx.closePath(); ctx.fill(); }
   }
@@ -5676,7 +5705,7 @@ function callReinforcements(){
     if(d.dmg!=null){ en.def=Object.create(d); en.def.dmg=Math.round(d.dmg*dmgMul); }
     en.maxHp=Math.round(en.maxHp*hpMul); en.hp=en.maxHp;
     en.ai='hunt'; en.aware=1; en.lastKnown={x:p.x,y:p.y}; en.spawnGrace=45;
-    if(L>=3&&Math.random()<Math.min(0.3,0.06*L)) en.carrier=true;
+    if(L>=3&&d.role!=='spotter'&&Math.random()<Math.min(0.3,0.06*L)) en.carrier=true;   // el vigía nunca lleva Hollow Boom
   };
   for(let i=0;i<n;i++){
     const id=(i===0&&L%2===0&&spot.length)?pick(spot):pick(choices), d=EDEFS[id];   // cada dos oleadas viene un vigía
@@ -5699,17 +5728,32 @@ function callReinforcements(){
    te derrotaron se hacen más fuertes (+25% vida, se reparan, +20% daño, acumulable) y te siguen hasta allí. */
 function worldDeathRespawn(){
   const w=world, p=player;
+  // el Orbe siempre cae en un punto concreto: el punto seguro de la sección más avanzada a la que has llegado
+  const st=w.starts&&w.starts.length?w.starts[clamp(w.section,1,w.starts.length)-1]:null, spot=st?{x:st.x,y:st.y}:worldDropSpot();
   const hunters=enemies.filter(e=>e.alive&&!e.static&&!['structure','spawner','turret','dummy'].includes(e.def.role)&&(e.reinf||(e.ai==='combat'&&dist(e,p)<450)));
-  if(!(w.retreating||hunters.some(e=>e.reinf))||w.front==null) return worldDropSpot();
-  const g=w.gates.find(g=>!g.open), minY=g?(g.row+3)*TILE:60;
+  if(!(w.retreating||hunters.some(e=>e.reinf))) return spot;
   for(const e of hunters){
     e.vengeLvl=(e.vengeLvl||0)+1; e.maxHp=Math.round(e.maxHp*1.25); e.hp=e.maxHp;
     if(e.def.dmg!=null){ e.def=Object.create(e.def); e.def.dmg=Math.round(e.def.dmg*1.2); }
   }
   w.pursuers=hunters;
   announce('¡CAÍSTE RETROCEDIENDO!','#ff8a3a','Reapareces en tu posición más avanzada… y los que te vencieron vienen detrás, más fuertes');
-  return worldDropSpot(p.x,Math.max(minY,w.front+60));
+  return spot;
 }
+/* TORRETA destruida: pide refuerzos, que caen en paracaídas a su alrededor (2-3 tropas de su bando) */
+function turretCallHelp(en){
+  if(!world||world.done||(boss&&boss.alive)) return;
+  const pool=worldReinfPool(world), fac=en.def.fac||'r', mine=pool.filter(id=>(EDEFS[id].fac||'r')===fac&&!EDEFS[id].air);
+  const ids=(mine.length?mine:pool).slice(0,3), sid=newSquad({reinf:true}), n=2+(Math.random()<0.5?1:0);
+  for(let i=0;i<n;i++){
+    const s=randomWalkable(en.x,en.y,160)||{x:en.x+rand(-80,80),y:en.y+rand(-80,80)}, id=pick(ids);
+    addLob({x0:s.x+rand(-40,40),y0:s.y-420,x1:s.x,y1:s.y,dur:70+i*8,h:30,owner:'n',kind:'drop',onLand:l=>{
+      if(!world||world.done) return;
+      const e=addEnemy(id,l.x1,l.y1,sid,true); e.reinf=true; e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=40; }});
+  }
+  popup(en.x,en.y-30,'¡LA TORRETA PIDE REFUERZOS!','#ff8a3a',13); alarmT=Math.max(alarmT,120); S.alarm();
+}
+EDEFS.emplacement.onDeath=turretCallHelp;
 /* Al reaparecer, los que te vencieron llegan por detrás (justo fuera de la pantalla) y van a por ti */
 function worldPursuersArrive(){
   const w=world; if(!w||!w.pursuers) return;
