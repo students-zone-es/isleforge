@@ -3263,7 +3263,7 @@ function stunBoss(dur,label){
   rings.push({x:b.x,y:b.y,r:20,max:90,life:24,maxLife:24,color:'#f5c518'});
 }
 function damageBoss(dmg,o){
-  const b=boss; if(!b||!b.alive||b.state==='intro'||b.invuln) return;   // invuln: mientras se transforma
+  const b=boss; if(!b||!b.alive||b.state==='intro'||b.state==='xTransform') return;   // invulnerable solo mientras se transforma
   const mul=(b.state==='stun'?1.5:1)*(b.dmgMul!=null?b.dmgMul:1);   // dmgMul: blindaje de algunos jefes
   b.hp-=dmg*mul; b.flash=4; S.hit();
   if(b.state!=='stun'){
@@ -3354,7 +3354,7 @@ function updateBoss(dt){
   if((b.escortCalls===0&&b.hp<b.maxHp*0.7)||(b.escortCalls===1&&b.hp<b.maxHp*0.35)) callEscorts();
   // Si sus escoltas caen, gana el Hollow Boom
   if(b.escortSid){ const sq=squads[b.escortSid]; if(sq && sq.size>0 && sq.alive<=0){ b.purpleReady=true; b.escortSid=0; } }
-  const busy=b.state==='stun'||b.state==='vacio'||b.state==='charge'||b.state==='chargeWind';
+  const busy=b.state==='stun'||b.state==='vacio'||b.state==='charge'||b.state==='chargeWind'||b.state==='xTransform';
   if(!busy && b.purpleCd<=0 && voidCharging===0 && (b.purpleReady||b.hp<b.maxHp*0.1) && p.alive){
     setBossState('vacio'); b.vacioDur=120; voidCharging++; b.purpleReady=false;
     popup(b.x,b.y-70,'⚠ HOLLOW BOOM','#c77dff',20); S.purpleCharge();
@@ -9139,7 +9139,7 @@ function bossExtra(b,dt,tgt,dd,toA,p){
   const aggr=b.aggr*(b.phase2?1.25:1);
   switch(b.state){
     case 'xTransform':
-      b.vx*=0.85; b.vy*=0.85; b.angle+=0.35*dt; b.aim=b.angle; b.invuln=true;
+      b.vx*=0.85; b.vy*=0.85; b.angle+=0.35*dt; b.aim=b.angle;
       if(Math.random()<0.8){ const a=rand(0,Math.PI*2); particles.push({x:b.x+Math.cos(a)*b.radius,y:b.y+Math.sin(a)*b.radius,vx:Math.cos(a)*2,vy:Math.sin(a)*2,life:22,maxLife:22,color:pick(['#ff4757','#ff8a3a','#ffd76e']),size:4}); }
       if(b.st>=36&&!b.fired){
         b.fired=true; shake=Math.max(shake,20); S.boom(); flashScreen('#ff4757',0.35);
@@ -9147,7 +9147,7 @@ function bossExtra(b,dt,tgt,dd,toA,p){
         popup(b.x,b.y-84,'¡SE TRANSFORMA!','#ff4757',20);
         if(p.alive&&dist(p,b)<240){ damagePlayer(10); launchPlayer(b.x,b.y,12); }
       }
-      if(b.st>=70){ b.invuln=false; setBossState('walk'); }
+      if(b.st>=70) setBossState('walk');
       return true;
     case 'xDashWind': {   // apunta adonde vas a estar y deja de corregir justo antes de salir
       b.vx*=0.85; b.vy*=0.85;
