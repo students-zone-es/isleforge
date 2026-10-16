@@ -24,6 +24,7 @@
   /* el recuadro del juego toma la forma de la ventana y se amplía entero (con su HUD y menús): ver fitGame() */
   #gameWrap{ position:relative; flex:0 0 auto; width:1000px; height:667px; transform-origin:center center; }
   #c{ width:100%; height:100%; display:block; background:#000; border-radius:6px; image-rendering:pixelated; cursor:crosshair; }
+  #c.noCur{ cursor:none; }
   #hud{ position:absolute; inset:0; pointer-events:none; font-family:var(--font-head); color:var(--text); }
   .hudTop{ position:absolute; top:8px; left:8px; font-size:9px; line-height:1.6; text-shadow:2px 2px 0 #000; }
   .hudTop .block{ background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:6px 10px; }
@@ -347,6 +348,7 @@
         <div class="abil" id="abE"><span class="k">E</span><span class="ic">🛸</span><span class="cost">◆8</span><div class="cd"></div></div>
         <div class="abil" id="abT"><span class="k">T</span><span class="ic">🗼</span><span class="cost">◆12</span><div class="cd"></div></div>
         <div class="abil" id="abQ"><span class="k">Q</span><span class="ic">🪖</span><span class="cost">◆10</span><div class="cd"></div></div>
+        <div class="abil" id="abK"><span class="k">G</span><span class="ic">🛡️</span><span class="cost">ESCOLTA</span><div class="cd"></div></div>
       </div>
       <div id="miniWrap"><canvas id="mini" width="150" height="116"></canvas></div>
     </div>
@@ -432,8 +434,8 @@
 
     <div id="scrPause" class="overlay hidden">
       <h1 class="title" style="font-size:16px;">PAUSA</h1>
-      <p class="controls"><b>WASD</b> mover · <b>Ratón</b> apuntar · <b>Clic izq / Espacio</b> disparar · <b>Clic der / Shift</b> ataque en arco · <b>F</b> camuflaje · <b>R</b> evolucionar aliado · <b>E</b> mini-dron · <b>T</b> torreta · <b>Q</b> escuadra · <b>X</b> pedir el Orbe Vital (cada 40 s)</p>
-      <p class="controls">Consejos: los <b>VIGÍAS</b> (amarillos, con radar) avisan a todos si te ven. El <b>pasto alto</b> te esconde. Si un enemigo se queda solo o con menos de 10 de vida puede cargar un <b style="color:#c77dff">HOLLOW BOOM</b> (la prueba de lo que hace la Abyssalita): mátalo antes o apártate de la franja morada. Lleva a los rehenes al Orbe Vital o a un helipuerto para subir el nivel de tu arma. En los mundos, destruye los <b style="color:#ff3df0">GENERADORES</b> para abrir cada compuerta. Puedes <b>volver atrás</b>, pero el enemigo pedirá <b style="color:#ff8a3a">refuerzos cada vez más fuertes</b> mientras retrocedes.</p>
+      <p class="controls"><b>WASD</b> mover · <b>Ratón</b> apuntar · <b>Clic izq / Espacio</b> disparar · <b>Clic der / Shift</b> ataque en arco · <b>F</b> camuflaje · <b>R</b> evolucionar aliado · <b>E</b> mini-dron · <b>T</b> torreta · <b>Q</b> escuadra · <b>G</b> la escuadra escolta a los rehenes · <b>X</b> pedir el Orbe Vital (cada 40 s)</p>
+      <p class="controls">Consejos: los <b>VIGÍAS</b> (amarillos, con radar) avisan a todos si te ven. El <b>pasto alto</b> te esconde. Si un enemigo se queda solo o con menos de 10 de vida puede cargar un <b style="color:#c77dff">HOLLOW BOOM</b> (la prueba de lo que hace la Abyssalita): <b>si te toca, tu máquina queda destruida al instante</b>; mátalo antes o apártate de la franja morada. Con una escuadra (Q) y rehenes, pulsa <b>G</b>: la escuadra los lleva a la zona segura en sigilo y, si los descubren, uno o dos soldados distraen al enemigo. Lleva a los rehenes al Orbe Vital o a un helipuerto para subir el nivel de tu arma. En los mundos, destruye los <b style="color:#ff3df0">GENERADORES</b> para abrir cada compuerta. Puedes <b>volver atrás</b>, pero el enemigo pedirá <b style="color:#ff8a3a">refuerzos cada vez más fuertes</b> mientras retrocedes.</p>
       <div class="row" style="margin-top:8px;">
         <button class="btn small" id="btnResume">▶ CONTINUAR</button>
         <button class="btn small" id="btnQuit">✕ ABANDONAR (volver a la base)</button>
@@ -472,6 +474,7 @@ function normalizeSave(s){
   s.minerals=Object.assign({},s.minerals||{});
   if(s.vol==null) s.vol=1;
   if(s.shake==null) s.shake=true;
+  if(s.mira==null) s.mira=1;   // tamaño de la mira: 0 normal, 1 grande, 2 enorme
   return s;
 }
 function loadSave(){
@@ -482,7 +485,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, minerals:p.minerals });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, minerals:p.minerals });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -629,12 +632,12 @@ function isBossWave(w){ return w%5===0; }
 
 /* ===================== DEFINICIONES ===================== */
 const CHARS={
-  mech:{id:'mech', name:'MÁQUINA BÉLICA', desc:'Mecha bípedo equilibrado. Ametralladoras en ambos brazos y el camuflaje óptico más largo.',
-    hp:100, speed:2.9, accel:0.38, friction:0.84, radius:13, mass:2.2, fireCd:7, dmg:6, cloakDur:480, cloakCd:900, nadeCd:140, nadeDmg:30},
-  tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón con onda expansiva; aplasta robots pequeños.',
-    hp:150, speed:2.3, accel:0.24, friction:0.88, radius:14, mass:4, fireCd:28, dmg:20, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
-  jeep:{id:'jeep', name:'JACKAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil. Ametralladora doble giratoria y misiles en arco con recarga corta.',
-    hp:75, speed:3.7, accel:0.42, friction:0.9, radius:12, mass:1.6, fireCd:8, dmg:4, twin:true, cloakDur:360, cloakCd:1000, nadeCd:70, nadeDmg:24},
+  mech:{id:'mech', name:'MÁQUINA BÉLICA', desc:'Mecha bípedo equilibrado. Ametralladoras en ambos brazos (más cañones al subir el arma) y el camuflaje óptico más largo.',
+    hp:100, speed:2.6, accel:0.32, friction:0.84, radius:13, mass:2.2, fireCd:10, dmg:6, cloakDur:480, cloakCd:900, nadeCd:140, nadeDmg:30},
+  tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón letal con onda expansiva pero de recarga lenta; aplasta robots pequeños.',
+    hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
+  jeep:{id:'jeep', name:'JACKAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
+    hp:60, speed:4.0, accel:0.46, friction:0.9, radius:12, mass:1.6, fireCd:11, dmg:4, twin:true, hurt:1.25, cloakDur:360, cloakCd:1000, nadeCd:70, nadeDmg:24},
 };
 const MATES={
   car:{id:'car', name:'JABALÍ', evo:'MINITANQUE JABALÍ', desc:'Auto con ametralladora giratoria. Con R evoluciona a MINITANQUE con cañón.'},
@@ -1329,6 +1332,7 @@ function limitSpeed(e,max){
 }
 function accelerate(e,dx,dy,dt,k){
   const l=Math.hypot(dx,dy); if(l<0.0001) return;
+  e.goX=dx; e.goY=dy; e.goK=k==null?1:k;   // meta y ganas (la usa la física de la moto)
   const a=(e.accel||0.25)*dt;
   e.vx+=dx/l*a; e.vy+=dy/l*a;
   limitSpeed(e,(e.speedMax||2)*(k==null?1:k));
@@ -1386,7 +1390,7 @@ function nearestWalkable(c,r,R){
   }
   return null;
 }
-function findPath(sx,sy,tx,ty,maxIter){
+function findPath(sx,sy,tx,ty,maxIter,extra){   // extra: coste añadido por casilla (opcional)
   const N=WC*WR;
   if(!PF.g||PF.g.length!==N){ PF.g=new Float32Array(N); PF.came=new Int32Array(N); PF.seen=new Uint32Array(N); PF.closed=new Uint32Array(N); PF.stamp=0; }
   const st=++PF.stamp;
@@ -1411,7 +1415,7 @@ function findPath(sx,sy,tx,ty,maxIter){
       const ni=nr*WC+nc;
       if(SOLID[map[ni]]||PF.closed[ni]===st) continue;
       if(dc&&dr&&(SOLID[map[cr*WC+nc]]||SOLID[map[nr*WC+cc]])) continue;
-      const ng=PF.g[cur]+(dc&&dr?1.414:1)+(map[ni]===BUSH?0.15:0)+(map[ni]===MOLTEN||map[ni]===FIRE||map[ni]===QSAND?8:0)+(map[ni]===WIRE?3:0);
+      const ng=PF.g[cur]+(dc&&dr?1.414:1)+(map[ni]===BUSH?0.15:0)+(map[ni]===MOLTEN||map[ni]===FIRE||map[ni]===QSAND?8:0)+(map[ni]===WIRE?3:0)+(extra?extra[ni]:0);
       if(PF.seen[ni]!==st||ng<PF.g[ni]){
         PF.seen[ni]=st; PF.g[ni]=ng; PF.came[ni]=cur;
         heapPush(hn,hf,ni,ng+octile(nc,nr,tc,tr));
@@ -1498,7 +1502,7 @@ function updatePlayer(dt){
       const want=Math.atan2(iy,ix);
       let diff=angDiff(p.body,want), dir=1;
       if(Math.abs(diff)>2.3){ diff=angDiff(p.body,want+Math.PI); dir=-1; }
-      p.body+=clamp(diff,-0.075*dt,0.075*dt);
+      p.body+=clamp(diff,-0.06*dt,0.06*dt);
       const align=Math.max(0,Math.cos(diff));
       p.vx+=Math.cos(p.body)*dir*p.accel*align*dt; p.vy+=Math.sin(p.body)*dir*p.accel*align*dt;
       limitSpeed(p,p.speedMax*(dir<0?0.7:1));
@@ -1575,7 +1579,7 @@ function firePlayerWeapon(){
     };
     if(ch.twin){ shoot(-4,0); shoot(4,0); }
     else { p.armAlt=!p.armAlt; shoot(p.armAlt?7:-7,0); }
-    for(let i=1;i<wl;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }
+    for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
     S.shoot();
   }
   p.fireCd=p.fireCdBase;
@@ -1610,10 +1614,19 @@ function activateCloak(){
 function damagePlayer(amount){
   const p=player;
   if(!p.alive||p.invuln>0||cine>0||god) return;
+  amount*=p.ch.hurt||1;   // blindaje del vehículo (el Jackal es el más frágil)
   if(p.shield>0){ p.shield-=amount; if(p.shield<0){ p.hp+=p.shield; p.shield=0; } }
   else p.hp-=amount;
   p.hurtFlash=8; shake=Math.max(shake,Math.min(10,3+amount*0.25)); S.hurt();
   if(p.hp<=0){ p.hp=0; p.alive=false; onPlayerDeath(); }
+}
+/* Muerte instantánea (contacto con el Hollow Boom): ignora el escudo, pero no la protección al reaparecer */
+function killPlayer(reason){
+  const p=player;
+  if(!p.alive||p.invuln>0||cine>0||god) return;
+  p.shield=0; p.hp=0; p.alive=false; p.hurtFlash=12; shake=Math.max(shake,18);
+  if(reason) popup(p.x,p.y-46,reason,'#c77dff',16);
+  onPlayerDeath();
 }
 function onPlayerDeath(){
   const p=player;
@@ -1621,7 +1634,7 @@ function onPlayerDeath(){
   spawnBlast(p.x,p.y,60); spawnDebris(p.x,p.y,20,'#ffd76e');
   for(let i=0;i<14;i++) particles.push({x:p.x+rand(-12,12),y:p.y+rand(-12,12),vx:rand(-0.4,0.4),vy:rand(-1,-0.3),life:rand(50,90),maxLife:90,color:'#555',size:5,smoke:true});
   p.cloak=0;
-  pows.forEach(pw=>pw.follow=false);
+  pows.forEach(pw=>{ if(!pw.escort) pw.follow=false; });
   if(lives<=0){ popup(p.x,p.y-30,'SIN VIDAS','#ff4757',22); gameOverT=110; }
   else {
     respawnTimer=150; popup(p.x,p.y-30,'MÁQUINA DESTRUIDA','#ff4757',18);
@@ -1754,6 +1767,10 @@ function hitFriendly(x,y,r){
 }
 function hurtFriendly(u,dmg){
   if(!u.alive) return;
+  if(escort&&!escort.detected&&(u.escort||u.role==='escort'||u.role==='decoy')){
+    const en=nearestEnemyFrom(u.x,u.y,450,false);
+    if(en&&en!==boss) escortDetected(en,u); else { escort.detected=true; escort.pathT=0; }
+  }
   u.hp-=dmg; u.flash=5; spawnDebris(u.x,u.y,2,'#9ff');
   if(u.hp<=0){
     u.alive=false; spawnBlast(u.x,u.y,u.radius*2); spawnDebris(u.x,u.y,10,'#9ff');
@@ -1888,14 +1905,14 @@ function deploySquad(){
   const base=soldiers.filter(s=>s.alive).length;
   for(let i=0;i<3;i++){
     soldiers.push({kind:'soldier',x:player.x+rand(-20,20),y:player.y+rand(10,24),vx:0,vy:0,angle:player.aim,radius:6,mass:0.6,
-      hp:14,maxHp:14,speedMax:2.5,accel:0.34,friction:0.84,fireCd:rand(0,30),alive:true,slot:base+i,flash:0,walk:0});
+      hp:14,maxHp:14,speedMax:2.5,accel:0.34,friction:0.84,fireCd:rand(0,30),alive:true,slot:base+i,flash:0,walk:0,role:'follow'});
   }
   popup(player.x,player.y-24,'ESCUADRA','#ffd76e',14);
 }
 function nearestEnemyFrom(x,y,range,needLos,filter){
   let best=null, bd=range*range;
   for(const en of enemies){
-    if(!en.alive||en.practice||(filter&&!filter(en))) continue;   // los aliados no tocan los objetivos de prácticas
+    if(!en.alive||en.practice||en.hidden||(filter&&!filter(en))) continue;   // ni objetivos de prácticas ni camaleones camuflados
     const d=(en.x-x)**2+(en.y-y)**2;
     if(d<bd && (!needLos||en.air||lineClear(x,y,en.x,en.y))){ bd=d; best=en; }
   }
@@ -1936,23 +1953,184 @@ function updateSupport(dt){
     }
   }
   turrets=turrets.filter(tu=>tu.alive);
+  for(const so of soldiers){ so.wantMove=false; if(so.flash>0) so.flash-=dt; }
+  updateEscort(dt);   // los que escoltan o distraen tienen su propia lógica
   const anchor=player.alive?player:orb;
-  const alive=soldiers.filter(s=>s.alive), n=Math.max(1,alive.length);
+  const alive=soldiers.filter(s=>s.alive&&s.role!=='escort'&&s.role!=='decoy'), n=Math.max(1,alive.length);
   alive.forEach((so,i)=>{
-    so.wantMove=false; if(so.flash>0) so.flash-=dt;
     const tg=nearestEnemyFrom(so.x,so.y,200,true);
     const a=i*(Math.PI*2/n)+t*0.01;
-    const fx=anchor.x+Math.cos(a)*42, fy=anchor.y+Math.sin(a)*42;
-    if(Math.hypot(fx-so.x,fy-so.y)>14) steerTo(so,fx,fy,dt,1);
+    if(anchor){ const fx=anchor.x+Math.cos(a)*42, fy=anchor.y+Math.sin(a)*42; if(Math.hypot(fx-so.x,fy-so.y)>14) steerTo(so,fx,fy,dt,1); }
     if(tg){
       so.angle=Math.atan2(tg.y-so.y,tg.x-so.x);
       so.fireCd-=dt;
       if(so.fireCd<=0){ fireBullet(so.x,so.y,so.angle,'p',{dmg:3,pierce:0,frag:0,speed:6.5,life:45,radius:2.5,src:so}); so.fireCd=34; }
     } else if(player.alive) so.angle=player.aim;
-    so.walk+=Math.hypot(so.vx,so.vy)*dt*0.2;
-    moveUnit(so,dt);
   });
+  for(const so of soldiers){ if(!so.alive) continue; so.walk+=Math.hypot(so.vx,so.vy)*dt*0.2; moveUnit(so,dt); }
   soldiers=soldiers.filter(s=>s.alive);
+}
+
+/* ===================== ESCOLTA DE REHENES (tecla G) =====================
+   La escuadra se lleva a los rehenes a la zona segura más cercana (Orbe Vital o helipuerto).
+   Primero en SIGILO: van despacio, no disparan y siguen un camino que rodea lo que vigilan los
+   enemigos (A* con coste extra cerca de ellos; el pasto alto los esconde). Si un enemigo los
+   descubre, 1 o 2 soldados se separan para DISTRAERLO (se ponen al otro lado, disparan y hacen ruido
+   para alejarlo) mientras el resto sigue escoltando y dispara a quien se acerque a los rehenes. */
+let escort=null;
+function escortTeam(){ return soldiers.filter(s=>s.alive&&(s.role==='escort'||s.role==='decoy')); }
+function escortLeader(){ return escort?soldiers.find(s=>s.alive&&s.role==='escort')||null:null; }
+function escortAvailable(){
+  return !escort&&soldiers.some(s=>s.alive&&s.role!=='escort'&&s.role!=='decoy')&&pows.some(pw=>pw.alive&&!pw.escort);
+}
+function startEscort(){
+  if(!player||!player.alive) return;
+  if(escort){ popup(player.x,player.y-24,'La escuadra ya está escoltando','#8ea0b8',12); return; }
+  const sq=soldiers.filter(s=>s.alive&&s.role!=='escort'&&s.role!=='decoy');
+  if(!sq.length){ popup(player.x,player.y-24,'Necesitas una escuadra (Q)','#ff6b6b',12); return; }
+  const list=pows.filter(pw=>pw.alive&&!pw.escort&&(pw.follow||dist(pw,player)<260||sq.some(s=>dist(s,pw)<220)));
+  if(!list.length){ popup(player.x,player.y-24,'No hay rehenes cerca para escoltar','#ff6b6b',12); return; }
+  if(!deliveryPoints().length){ popup(player.x,player.y-24,'No hay ninguna zona segura','#ff6b6b',12); return; }
+  escort={pows:list,dest:null,detected:false,t:0,path:null,pathI:0,pathT:0,danger:null,saved:0,gone:0};
+  escortPickDest();
+  list.forEach(pw=>{ pw.follow=true; pw.escort=true; });
+  sq.forEach(s=>{ s.role='escort'; s.decoyTarget=null; });
+  announce('ESCOLTA EN MARCHA','#3ee67a','La escuadra lleva a los rehenes a la zona segura sin que la vean');
+  S.rescue();
+}
+function escortPickDest(){
+  const E=escort, dps=deliveryPoints(); if(!dps.length) return;
+  const c=E.pows[0]||player;
+  E.dest=dps.reduce((a,b)=>dist(a,c)<=dist(b,c)?a:b);
+}
+function endEscort(){
+  const E=escort; escort=null;
+  for(const s of soldiers) if(s.role==='escort'||s.role==='decoy'){ s.role='follow'; s.decoyTarget=null; }
+  for(const pw of pows) if(pw.escort){ pw.escort=false; pw.follow=false; }
+  if(!E) return;
+  const lost=Math.max(0,E.gone-E.saved);
+  if(E.saved&&!lost) announce('¡REHENES A SALVO!','#3ee67a','La escuadra vuelve contigo');
+  else if(E.saved) announce('ESCOLTA TERMINADA','#ffd76e',E.saved+' a salvo · '+lost+' perdido'+(lost>1?'s':''));
+  else if(lost) announce('LOS REHENES NO LO HAN LOGRADO','#ff6b6b','');
+}
+/* Cuánto vigilan los enemigos cada casilla: la escolta busca el camino que menos se ve */
+function escortDangerMap(){
+  const E=escort, N=WC*WR;
+  if(!E.danger||E.danger.length!==N) E.danger=new Float32Array(N); else E.danger.fill(0);
+  for(const en of enemies){
+    if(!en.alive||en.practice||en.def.role==='structure'||en.def.role==='dummy') continue;
+    const R=Math.max(3,Math.round((en.def.view||300)*0.7/TILE)), c0=Math.floor(en.x/TILE), r0=Math.floor(en.y/TILE);
+    for(let r=r0-R;r<=r0+R;r++) for(let c=c0-R;c<=c0+R;c++){
+      if(c<0||r<0||c>=WC||r>=WR) continue;
+      const d=Math.hypot(c-c0,r-r0); if(d>R) continue;
+      E.danger[r*WC+c]+=6*(1-d/R)*(map[r*WC+c]===BUSH?0.4:1);
+    }
+  }
+}
+/* ¿Algún enemigo ve a la escolta? La sospecha sube como contigo (el «?»), pero los ven peor:
+   van agachados (60% del alcance) y en el pasto alto casi no se les ve */
+function escortWatch(E,dt){
+  const units=[...escortTeam(),...E.pows];
+  for(const en of enemies){
+    if(!en.alive||en.practice||en.stun>0) continue;
+    const role=en.def.role; if(role==='structure'||role==='dummy'||role==='spawner'||role==='turret') continue;
+    if(en.ai==='combat'){   // ya está peleando (contigo u otros): si la escolta pasa a su lado, la ve
+      for(const u of units) if(dist(en,u)<150&&(en.air||lineClear(en.x,en.y,u.x,u.y))){ escortDetected(en,u); return; }
+      continue;
+    }
+    const view=(en.def.view||300)*0.6;
+    let gain=0, who=null;
+    for(const u of units){
+      const dx=u.x-en.x, dy=u.y-en.y, d=Math.hypot(dx,dy);
+      let range=view; if(tileAt(u.x,u.y)===BUSH) range*=0.45;
+      if(d>range) continue;
+      const facing=en.ai!=='patrol'||(en.def.fov||2)>=6||(en.eyes?en.eyes.some(a=>Math.abs(angDiff(a,Math.atan2(dy,dx)))<en.def.fov/2):Math.abs(angDiff(en.def.tank?en.aim:en.angle,Math.atan2(dy,dx)))<(en.def.fov||2)/2);
+      if(!facing&&d>60) continue;
+      if(!en.air&&!lineClear(en.x,en.y,u.x,u.y)) continue;
+      const gg=0.012+0.05*(1-d/range); if(gg>gain){ gain=gg; who=u; }
+    }
+    if(who){ en.aware=Math.min(1,en.aware+gain*dt); if(en.aware>=1){ escortDetected(en,who); return; } }
+  }
+}
+function escortDetected(en,u){
+  const E=escort; if(!E||E.detected) return;
+  E.detected=true; E.pathT=0;
+  en.ai='combat'; en.aware=1; en.lastKnown={x:u.x,y:u.y}; en.lastSeen=t; en.bangT=50; S.spotted();
+  for(const o of enemies){
+    if(!o.alive||o===en||o.ai==='combat') continue;
+    if(o.squad===en.squad||dist(o,en)<220){ o.ai='hunt'; o.aware=1; o.lastKnown={x:u.x,y:u.y}; o.bangT=30; o.searchT=0; }
+  }
+  // 1 o 2 soldados (los más cercanos al enemigo) se separan para distraerlo
+  const esc=soldiers.filter(s=>s.alive&&s.role==='escort').sort((a,b)=>dist(a,en)-dist(b,en));
+  const nDecoy=esc.length>=4?2:esc.length>=2?1:0;
+  esc.slice(0,nDecoy).forEach(s=>{ s.role='decoy'; s.decoyTarget=en; popup(s.x,s.y-16,'¡POR AQUÍ!','#ff8a3a',12); });
+  announce('¡ESCOLTA DESCUBIERTA!','#ff8a3a',nDecoy===2?'Dos soldados distraen al enemigo; el resto sigue con los rehenes':
+    nDecoy===1?'Un soldado distrae al enemigo; el resto sigue con los rehenes':'El soldado protege a los rehenes disparando');
+}
+function updateDecoy(so,E,dt){
+  let tg=so.decoyTarget;
+  if(!tg||!tg.alive||dist(tg,so)>520) tg=so.decoyTarget=nearestEnemyFrom(so.x,so.y,420,false,e=>e.ai==='combat'||e.ai==='hunt');
+  if(!tg){ so.role='escort'; return; }   // ya no queda nadie a quien distraer: vuelve con los rehenes
+  // se coloca AL OTRO LADO del enemigo respecto a los rehenes, moviéndose de lado a lado
+  const hc=E.pows[0]||so, [ax,ay]=vnorm(tg.x-hc.x,tg.y-hc.y), sw=Math.sin(t*0.04+so.slot*2)*45;
+  steerTo(so,tg.x+ax*120-ay*sw,tg.y+ay*120+ax*sw,dt,1.15);
+  so.angle=Math.atan2(tg.y-so.y,tg.x-so.x);
+  so.fireCd-=dt;
+  if(so.fireCd<=0&&dist(so,tg)<240&&(tg.air||lineClear(so.x,so.y,tg.x,tg.y))){
+    fireBullet(so.x,so.y,so.angle,'p',{dmg:3,pierce:0,frag:0,speed:6.5,life:50,radius:2.5,src:so}); so.fireCd=22;
+    makeNoise(so.x,so.y,260);   // el ruido atrae a los demás hacia él
+  }
+  if(tg!==boss&&!tg.seen){ tg.ai='combat'; tg.lastKnown={x:so.x,y:so.y}; tg.lastSeen=t; }   // le persigue a él, no a los rehenes
+}
+function updateEscort(dt){
+  const E=escort; if(!E) return;
+  const before=E.pows.length;
+  E.pows=E.pows.filter(p=>p.alive&&p.escort&&pows.includes(p));
+  E.gone+=before-E.pows.length;
+  if(!E.pows.length){ endEscort(); return; }
+  const team=escortTeam();
+  if(!team.length){
+    for(const pw of E.pows){ pw.escort=false; pw.follow=false; }
+    escort=null; announce('LA ESCOLTA HA CAÍDO','#ff6b6b','Los rehenes te esperan: ve a por ellos'); return;
+  }
+  E.t+=dt;
+  if(!E.dest||E.t%90<dt) escortPickDest();
+  if(!E.dest){ endEscort(); return; }
+  let leader=team.find(s=>s.role==='escort');
+  if(!leader){ leader=team[0]; leader.role='escort'; }   // si todos distraían, uno vuelve con los rehenes
+  if(!E.detected) escortWatch(E,dt);
+  // camino que rodea la vista enemiga (si ya los han visto, el más corto)
+  E.pathT-=dt;
+  if(E.pathT<=0&&pfBudget>0){
+    pfBudget--;
+    if(!E.detected) escortDangerMap();
+    E.path=findPath(leader.x,leader.y,E.dest.x,E.dest.y,9000,E.detected?null:E.danger); E.pathI=0; E.pathT=E.detected?45:70;
+  }
+  const k=E.detected?1.05:0.55;   // en sigilo van agachados, despacio
+  if(E.path&&E.path.length){
+    let look=0;
+    while(E.pathI<E.path.length-1&&look<3){ const nx=E.path[E.pathI+1]; if(pathClear(leader.x,leader.y,nx.x,nx.y,leader.radius)) E.pathI++; else break; look++; }
+    const wp=E.path[E.pathI];
+    if(Math.hypot(wp.x-leader.x,wp.y-leader.y)<10&&E.pathI<E.path.length-1) E.pathI++;
+    accelerate(leader,wp.x-leader.x,wp.y-leader.y,dt,k);
+  } else steerTo(leader,E.dest.x,E.dest.y,dt,k);
+  const tail=E.pows[E.pows.length-1];
+  if(tail&&dist(leader,tail)>110){ leader.vx*=0.85; leader.vy*=0.85; }   // no dejar atrás a los rehenes
+  // el resto de la escolta va a los lados de los rehenes
+  const mid=E.pows[Math.floor(E.pows.length/2)]||leader, dir=Math.atan2(leader.vy,leader.vx)||0;
+  team.filter(s=>s.role==='escort'&&s!==leader).forEach((s,i)=>{
+    const side=(i%2?1:-1)*(22+8*Math.floor(i/2));
+    const fx=mid.x+Math.cos(dir+Math.PI/2)*side, fy=mid.y+Math.sin(dir+Math.PI/2)*side;
+    if(Math.hypot(fx-s.x,fy-s.y)>10) steerTo(s,fx,fy,dt,E.detected?1.1:0.7);
+  });
+  for(const s of team){
+    if(s.role==='decoy'){ updateDecoy(s,E,dt); continue; }
+    if(Math.hypot(s.vx,s.vy)>0.2) s.angle=Math.atan2(s.vy,s.vx);
+    if(!E.detected) continue;   // en sigilo no disparan: un disparo los delataría
+    const tg=nearestEnemyFrom(s.x,s.y,170,true);
+    if(tg){ s.angle=Math.atan2(tg.y-s.y,tg.x-s.x); s.fireCd-=dt;
+      if(s.fireCd<=0){ fireBullet(s.x,s.y,s.angle,'p',{dmg:3,pierce:0,frag:0,speed:6.5,life:45,radius:2.5,src:s}); s.fireCd=30; } }
+  }
 }
 
 /* ===================== ALIADO ASIGNADO ===================== */
@@ -2139,13 +2317,17 @@ function freePows(x,y,n){
   popup(x,y-22,'¡REHENES LIBERADOS! Llévalos al Orbe Vital','#ffd76e',13);
 }
 function updatePows(dt){
-  let lead=player.alive?player:null;
+  let lead=player.alive?player:null, elead=escortLeader();
+  const stealth=escort&&!escort.detected;
   for(const pw of pows){
     if(!pw.alive) continue;
+    if(pw.held){ if(pw.held.alive) continue; pw.held=null; }   // lo lleva un camaleón
     pw.wantMove=false; if(pw.flash>0) pw.flash-=dt;
     pw.wave+=0.15*dt;
     if(!pw.follow && player.alive && dist(pw,player)<70){ pw.follow=true; popup(pw.x,pw.y-16,'¡TE SIGUE!','#ffd76e',12); S.rescue(); }
-    if(pw.follow && lead){
+    if(pw.escort){   // los escoltados siguen al líder de la escolta, en fila
+      if(elead){ const d=dist(pw,elead); if(d>elead.radius+pw.radius+10) steerTo(pw,elead.x,elead.y,dt,d>120?1.3:(stealth?0.65:1)); elead=pw; }
+    } else if(pw.follow && lead){
       const d=dist(pw,lead);
       if(d>lead.radius+pw.radius+10) steerTo(pw,lead.x,lead.y,dt,d>120?1.3:1);
       lead=pw;
@@ -2155,6 +2337,7 @@ function updatePows(dt){
     const dp=pw.follow?deliveryPoints().find(d=>dist(pw,d)<75):null;
     if(dp){
       pw.alive=false; rescued++; save.rescuedTotal=(save.rescuedTotal||0)+1; score+=300; runWork+=3;
+      if(pw.escort&&escort) escort.saved++;
       popup(pw.x,pw.y-18,'+1 REHÉN A SALVO','#ffd76e',14); S.rescue();
       rings.push({x:dp.x,y:dp.y,r:10,max:70,life:20,maxLife:20,color:'#ffd76e'});
       if(dp!==orb && !helis.some(h=>h.state!=='out')) callHeli(dp.x,dp.y,'pickup',null);
@@ -2274,7 +2457,7 @@ function updateVoids(dt){
     v.trail+=Math.hypot(v.vx,v.vy)*dt;
     if(v.trail>=16){ v.trail=0; const a=rand(0,Math.PI*2), d=rand(0,v.r*0.7); addPurpleFire(v.x-v.vx*4+Math.cos(a)*d,v.y-v.vy*4+Math.sin(a)*d,rand(330,450)); }
     eraseCircle(v.x,v.y,v.r*0.95);
-    if(player.alive && !v.hit.has(player) && dist(v,player)<v.r+player.radius){ v.hit.add(player); damagePlayer(v.dmg); push(player,v.x,v.y,7); flashScreen('#b06cff',0.5); }
+    if(player.alive && !v.hit.has(player) && dist(v,player)<v.r+player.radius){ v.hit.add(player); if(v.src&&v.src.tame) damagePlayer(v.dmg); else killPlayer('¡DESINTEGRADO POR EL HOLLOW BOOM!'); push(player,v.x,v.y,7); flashScreen('#b06cff',0.5); }
     for(const u of friendlies()) if(!v.hit.has(u) && dist(v,u)<v.r+u.radius){ v.hit.add(u); hurtFriendly(u,v.dmg*1.3); }
     for(const en of enemies) if(en.alive && en!==v.src && !v.hit.has(en) && dist(v,en)<v.r+en.radius){ v.hit.add(en); damageEnemy(en,70,{purple:true}); }
     if(boss && boss.alive && boss!==v.src && !v.hit.has(boss) && dist(v,boss)<v.r+boss.radius){ v.hit.add(boss); damageBoss(60,{stunAdd:60}); }
@@ -2433,7 +2616,7 @@ function perceive(en,dt){
   let can=false;
   if(p.cloak>0) can=dd<en.radius+p.radius+12||(lit&&dd<range*0.6&&(en.air||lineClear(en.x,en.y,p.x,p.y)));   // invisible: solo te notan si los tocas (o si cae un rayo)
   else if(dd<range){
-    const facing=en.ai!=='patrol'||en.def.fov>=6 ? true : Math.abs(angDiff(en.def.tank?en.aim:en.angle,Math.atan2(dy,dx)))<en.def.fov/2;
+    const facing=en.ai!=='patrol'||en.def.fov>=6 ? true : en.eyes ? en.eyes.some(a=>Math.abs(angDiff(a,Math.atan2(dy,dx)))<en.def.fov/2) : Math.abs(angDiff(en.def.tank?en.aim:en.angle,Math.atan2(dy,dx)))<en.def.fov/2;
     can=(facing||dd<80) && (en.air||lineClear(en.x,en.y,p.x,p.y));
   }
   if(can){
@@ -2556,6 +2739,7 @@ function updateEnemy(en,dt){
     case 'search': aiSearch(en,dt); break;
     case 'combat': aiCombat(en,dt); break;
   }
+  if(d.drive) d.drive(en,dt);   // vehículos con física propia (moto): convierten la meta de la IA en manillar y gas
   const sp=Math.hypot(en.vx,en.vy);
   if(d.tank){
     if(sp>0.3 && en.ramT<=0) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),0.08*dt);
@@ -2701,11 +2885,29 @@ function meleeSwipe(en){
   for(const u of friendlies()) if(!u.air) tryHit(u,u2=>hurtFriendly(u2,en.def.dmg));
   if(world&&world.factions) for(const o of enemies) if(o.alive&&o!==en&&!o.air&&(o.def.fac||'r')!==(en.def.fac||'r')&&o.def.role!=='structure') tryHit(o,o2=>damageEnemy(o2,en.def.dmg,{src:en,infight:true}));
 }
+/* Sin línea de tiro: buscar un hueco a su distancia preferida desde el que sí se vea al objetivo,
+   repartiéndose (no dos en el mismo hueco) para no amontonarse detrás del mismo bloque */
+function flankSpot(en,tg,mn,mx,dt){
+  en.flankT=(en.flankT||0)-dt;
+  if(en.flank&&en.flankT>0&&lineClear(en.flank.x,en.flank.y,tg.x,tg.y)) return en.flank;
+  en.flankT=50;
+  const r=(mn+mx)/2, base=Math.atan2(en.y-tg.y,en.x-tg.x);
+  let best=null, bs=1e9;
+  for(let i=0;i<12;i++){
+    const a=base+(i%2?1:-1)*Math.ceil(i/2)*0.42, x=tg.x+Math.cos(a)*r, y=tg.y+Math.sin(a)*r;
+    if(SOLID[tileAt(x,y)]||!lineClear(x,y,tg.x,tg.y)) continue;
+    let s=Math.hypot(x-en.x,y-en.y);
+    for(const o of enemies) if(o!==en&&o.alive&&o.flank&&Math.hypot(o.flank.x-x,o.flank.y-y)<50) s+=200;
+    if(s<bs){ bs=s; best={x,y}; }
+  }
+  return en.flank=best;
+}
 function combatRanged(en,tg,dd,los,aimed,dt,prefer,weak){
   const mn=prefer[0], mx=prefer[1];
   en.strafeT-=dt; if(en.strafeT<=0){ en.strafe*=-1; en.strafeT=rand(60,130); }
   const scared=en.hp<en.maxHp*0.35 || (weak && dd<200);
-  if(!los||dd>mx+60) steerTo(en,tg.x,tg.y,dt,0.9);
+  if(!los&&dd<mx+140){ const f=flankSpot(en,tg,mn,mx,dt); steerTo(en,f?f.x:tg.x,f?f.y:tg.y,dt,f?0.95:0.9); }   // sin línea de tiro: flanquear
+  else if(!los||dd>mx+60) steerTo(en,tg.x,tg.y,dt,0.9);
   else {
     const [nx,ny]=vnorm(tg.x-en.x,tg.y-en.y);
     let mvx=-ny*en.strafe*0.8, mvy=nx*en.strafe*0.8;
@@ -3837,7 +4039,11 @@ function drawTurretsSoldiers(){
     ctx.fillStyle='#222'; ctx.fillRect(3,1,6,2);
     ctx.restore();
     if(so.hp<so.maxHp) hpBar(so.x,so.y-10,12,so.hp/so.maxHp,'#ff4757');
+    // marca encima: verde = escolta, naranja = distrae al enemigo
+    if(so.role==='escort'){ ctx.fillStyle='#3ee67a'; ctx.beginPath(); ctx.moveTo(so.x-3,so.y-16); ctx.lineTo(so.x+3,so.y-16); ctx.lineTo(so.x,so.y-12); ctx.closePath(); ctx.fill(); }
+    else if(so.role==='decoy'){ ctx.fillStyle='#ff8a3a'; ctx.fillRect(so.x-1,so.y-20,2,6); ctx.fillRect(so.x-1,so.y-12,2,2); }
   }
+  drawEscortRoute();
 }
 function drawDrones(){
   for(const d of drones){
@@ -3858,7 +4064,7 @@ function hpBar(x,y,w,k,col){
 function drawIndicators(){
   ctx.textAlign='center';
   for(const en of enemies){
-    if(!en.alive) continue;
+    if(!en.alive||en.hidden) continue;
     const top=en.y-en.radius-12;
     if(en.hp<en.maxHp) hpBar(en.x,en.y-en.radius-6,en.radius*2,en.hp/en.maxHp,en.hp<10?'#c77dff':'#ff4757');
     if(en.stun>0){ drawStars(en.x,top); continue; }
@@ -4009,6 +4215,40 @@ function render(){
   ctx.restore();
   drawWeather(player&&player.alive?player.x-cx:W/2, player&&player.alive?player.y-cy:H/2);
   drawScreenFx();
+  drawReticle();
+}
+/* Ruta de la escolta (puntos que avanzan) y la zona segura a la que van */
+function drawEscortRoute(){
+  const E=escort; if(!E||!E.dest) return;
+  const col=E.detected?'#ff8a3a':'#3ee67a';
+  if(E.path&&E.path.length){
+    ctx.fillStyle=col; ctx.globalAlpha=0.55;
+    for(let i=E.pathI;i<E.path.length;i+=1){ if((i+Math.floor(t/8))%3) continue; const p=E.path[i]; ctx.fillRect(p.x-1.5,p.y-1.5,3,3); }
+    ctx.globalAlpha=1;
+  }
+  ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=2; ctx.setLineDash([5,5]); ctx.lineDashOffset=-t*0.4; ctx.globalAlpha=0.8;
+  ctx.beginPath(); ctx.arc(E.dest.x,E.dest.y,30+Math.sin(t*0.1)*3,0,Math.PI*2); ctx.stroke(); ctx.restore();
+}
+/* MIRA: se dibuja en el canvas con borde oscuro para que no se pierda sobre ningún fondo.
+   Roja sobre un enemigo, dorada sobre un rehén; se cierra un poco al disparar. */
+function drawReticle(){
+  if(state!=='playing'||cine>0) return;
+  const x=Math.round(clamp(mouse.sx,2,W-2)), y=Math.round(clamp(mouse.sy,2,H-2)), wx=mouse.x, wy=mouse.y;
+  let col='#ffffff';
+  if(enemies.some(e=>e.alive&&!e.practice&&!e.hidden&&Math.hypot(e.x-wx,e.y-wy)<e.radius+8)||(boss&&boss.alive&&Math.hypot(boss.x-wx,boss.y-wy)<boss.radius+8)) col='#ff4757';
+  else if(pows.some(p=>p.alive&&Math.hypot(p.x-wx,p.y-wy)<14)) col='#ffd76e';
+  const k=[1,1.6,2.3][save.mira==null?1:save.mira];   // OPCIONES → MIRA
+  const gap=Math.round(((mouse.down||keys[' ']?5:7)+Math.sin(t*0.12)*0.6)*k), L=Math.round(6*k), b=Math.max(2,Math.round(2*k)), h=b>>1, o=Math.max(1,Math.round(k));
+  const bars=[[x-h,y-gap-L,b,L],[x-h,y+gap,b,L],[x-gap-L,y-h,L,b],[x+gap,y-h,L,b],[x-h,y-h,b,b]];
+  ctx.save();
+  // aro con borde oscuro para que se vea sobre cualquier suelo
+  ctx.lineWidth=Math.max(1,k)+2; ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(x,y,gap+L+2*k,0,Math.PI*2); ctx.stroke();
+  ctx.lineWidth=Math.max(1,k); ctx.strokeStyle=col; ctx.globalAlpha=0.7; ctx.beginPath(); ctx.arc(x,y,gap+L+2*k,0,Math.PI*2); ctx.stroke();
+  ctx.globalAlpha=1; ctx.fillStyle='rgba(0,0,0,0.9)';
+  for(const [bx,by,bw,bh] of bars) ctx.fillRect(bx-o,by-o,bw+2*o,bh+2*o);
+  ctx.fillStyle=col;
+  for(const [bx,by,bw,bh] of bars) ctx.fillRect(bx,by,bw,bh);
+  ctx.restore();
 }
 function drawScreenFx(){
   const p=player;
@@ -4022,7 +4262,8 @@ function drawScreenFx(){
   if(flashFx){ ctx.globalAlpha=clamp(flashFx.a,0,1); ctx.fillStyle=flashFx.color; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
   if(state==='playing'||state==='paused'){
     if(boss&&boss.alive) drawOffscreenArrow(boss.x,boss.y,'#ff4757','JEFE');
-    if(pows.some(pw=>pw.follow)){
+    const el=escortLeader(); if(el) drawOffscreenArrow(el.x,el.y,escort.detected?'#ff8a3a':'#3ee67a','ESCOLTA');
+    if(pows.some(pw=>pw.follow&&!pw.escort)){
       const dps=deliveryPoints(), ref=player.alive?player:dps[0];
       if(dps.length){ const d=dps.reduce((a,b)=>dist(a,ref)<dist(b,ref)?a:b); drawOffscreenArrow(d.x,d.y,'#3ee67a',d===orb?'ORBE VITAL':'HELIPUERTO'); }
     }
@@ -4076,7 +4317,7 @@ function drawMinimap(){
   for(const pw of pows) P(pw.x,pw.y,'#ffd76e',2);
   const showAll=alarmT>0||(spawned>=toKill&&enemies.length<=3);
   for(const en of enemies){
-    if(!en.alive) continue;
+    if(!en.alive||en.hidden) continue;
     if(showAll||en.revealed||(player.alive&&dist(en,player)<650)) P(en.x,en.y,en.ai==='combat'?'#ff4757':'#ff9a9a',3);
   }
   if(boss&&boss.alive) P(boss.x,boss.y,'#ff4757',7);
@@ -4154,7 +4395,7 @@ const TUT=[
   { t:'APOYO', txt:()=>'Con WORK también despliegas apoyo: E mini-dron (8 ◆), T torreta fija (12 ◆) o Q escuadra de 3 soldados que atraen el fuego enemigo (10 ◆). Prueba uno.',
     start(){ if(runWork<12) runWork=12; tut.d.n0=drones.length+turrets.length+soldiers.length; },
     check(){ return drones.length+turrets.length+soldiers.length>tut.d.n0; } },
-  { t:'HOLLOW BOOM', txt:()=>'¡Atento! Los robots con un punto morado llevan un núcleo de Abyssalita: si se quedan con menos de 10 de vida o sin su escuadra, cargan un HOLLOW BOOM que borra todo. Apártate de la franja morada… o destrúyelo antes de que dispare. Tras disparar queda agotado: remátalo.',
+  { t:'HOLLOW BOOM', txt:()=>'¡Atento! Los robots con un punto morado llevan un núcleo de Abyssalita: si se quedan con menos de 10 de vida o sin su escuadra, cargan un HOLLOW BOOM que borra todo y, si te toca, destruye tu máquina al instante (este de prácticas solo te hace daño). Apártate de la franja morada… o destrúyelo antes de que dispare. Tras disparar queda agotado: remátalo.',
     start(){
       const p=player, pos=randomWalkable(p.x,p.y-260,90)||{x:p.x,y:p.y-260};
       const en=addEnemy('gunner',pos.x,pos.y,newSquad(),true);
@@ -4366,7 +4607,7 @@ function randomBaseSpot(){
 function enterHome(){
   inHome=true; mission=null; world=null; boss=null; tut=null; cine=0; introHeli=false;
   enemies=[]; bullets=[]; lobs=[]; voids=[]; particles=[]; popups=[]; bolts=[]; rings=[]; slashes=[];
-  drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; helis=[];
+  drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; helis=[]; escort=null;
   orb=null; mate=null; alarmT=0; flashFx=null; announceMsg=null; shake=0;
   for(const k in keys) delete keys[k]; mouse.down=false; mouse.right=false;
   renderTutBox();
@@ -4899,9 +5140,11 @@ const W1_ENC=[
   [155,[['gunner',11,153],['gunner',29,153]]],
   // Sección 2: jungla
   [141,[['gunner',12,139],['gunner',28,138]]],
+  [137,[['chameleon',30,133]]],
   [134,[['spotter',20,131],['brawler',17,130],['brawler',23,130]]],
   [127,[['hawk',10,126],['hawk',30,126]]],
   [119,[['mortar',31,116],['gunner',26,117],['gunner',10,117]]],
+  [114,[['chameleon',8,110]]],
   [112,[['brawler',18,109],['brawler',21,108],['brawler',24,109]]],
   [106,[['spotter',9,104],['mortar',32,102]]],
   [101,[['hawk',12,99],['hawk',28,99],['gunner',15,98],['gunner',24,98]]],
@@ -5033,7 +5276,7 @@ function buildWorld1(){
 /* ---------- arranque de una partida en un mundo ---------- */
 function clearMissionLists(){
   enemies=[]; bullets=[]; lobs=[]; voids=[]; particles=[]; popups=[]; bolts=[]; rings=[]; slashes=[];
-  drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; helis=[];
+  drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; helis=[]; escort=null;
   squads={}; squadSeq=0; voidCharging=0; alarmT=0; endgameT=0; clearT=0; flashFx=null; announceMsg=null;
   boss=null; bossDefeated=false; bossDelay=0; toKill=0; spawned=0; killed=0; failsafe=0;
   document.getElementById('bossBarWrap').style.display='none';
@@ -6279,17 +6522,19 @@ function drawFogLayer(amt,fx,fy,tex,col){
 }
 /* Gotas, salpicaduras y ceniza viven en coordenadas del MUNDO (no de la pantalla):
    así, al caminar, las salpicaduras se quedan en el suelo donde cayeron en vez de moverse contigo. */
-function newDrop(any){ return {x:cam.x+rand(-80,W),y:cam.y+(any?rand(-20,H):rand(-40,-5)),v:rand(9,14),life:rand(10,48)}; }
+/* Cada gota sabe en qué punto del suelo caerá (gx,gy) y a qué altura va (z): se dibuja z px por encima de
+   ese punto (desplazada por el viento) y, al llegar a z=0, salpica justo ahí. */
+function newDrop(any){ const z=rand(120,480); return {gx:cam.x+rand(-40,W+40),gy:cam.y+rand(-10,H+10),z:any?rand(0,z):z,v:rand(9,14)}; }
 function drawRain(amt,st,d){
   const w=weather, N=Math.round(230*amt+st*130), wind=0.22+st*0.38, cx=Math.round(cam.x), cy=Math.round(cam.y);
   while(w.drops.length<N) w.drops.push(newDrop(true));
   if(w.drops.length>N) w.drops.length=N;
   ctx.strokeStyle='rgba(185,212,255,'+(0.5+st*0.15).toFixed(2)+')'; ctx.lineWidth=2; ctx.beginPath();
   for(const p of w.drops){
-    p.x+=p.v*wind*d; p.y+=p.v*d; p.life-=d;
-    if(p.life<=0){ if(w.splashes.length<70) w.splashes.push({x:p.x,y:p.y,r:1,a:1}); Object.assign(p,newDrop(false)); }
-    else if(p.x<cx-140||p.x>cx+W+60||p.y<cy-90||p.y>cy+H+40) Object.assign(p,newDrop(true));   // te alejaste de ella: reaparece a la vista
-    const x=p.x-cx, y=p.y-cy;
+    p.z-=p.v*d;
+    if(p.z<=0){ if(w.splashes.length<300) w.splashes.push({x:p.gx,y:p.gy,r:1,a:1}); Object.assign(p,newDrop(false)); }
+    else if(p.gx<cx-140||p.gx>cx+W+60||p.gy<cy-90||p.gy>cy+H+40) Object.assign(p,newDrop(true));   // te alejaste de ella: reaparece a la vista
+    const x=p.gx-p.z*wind-cx, y=p.gy-p.z-cy;
     ctx.moveTo(x,y); ctx.lineTo(x-p.v*wind*2.2,y-p.v*2.2);
   }
   ctx.stroke();
@@ -6966,20 +7211,6 @@ function drawBandit(en,vest,band,gunLen,extra){
   if(extra) extra();
   ctx.restore();
 }
-function drawMoto(en,col){
-  const a=en.bodyA!=null?en.bodyA:en.angle;
-  ctx.save(); ctx.translate(en.x,en.y);
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(4,6,14,6,a,0,Math.PI*2); ctx.fill();
-  ctx.rotate(a);
-  ctx.fillStyle='#111'; ctx.fillRect(-13,-2,7,4); ctx.fillRect(7,-2,7,4);
-  ctx.fillStyle='#3a3a3a'; ctx.fillRect(-7,-3,15,6);
-  ctx.fillStyle=col; ctx.fillRect(-3,-4,8,8); ctx.fillStyle=shade(col,0.3); ctx.fillRect(-3,-4,8,2);
-  ctx.fillStyle='#bbb'; ctx.fillRect(8,-6,2,12);
-  ctx.fillStyle='#1a120c'; ctx.beginPath(); ctx.arc(-4,0,5,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#c0392b'; ctx.beginPath(); ctx.arc(-4,0,4,0,Math.PI*2); ctx.fill();
-  if(Math.floor(t/3)%2) { ctx.fillStyle='#ffb347'; ctx.fillRect(-16,-1,3,2); }
-  ctx.restore();
-}
 function drawCar(en){
   const cols=['#7a3a2a','#3a5a7a','#6a6a3a','#5a5a5a'], col=cols[en.carCol||0];
   ctx.save(); ctx.translate(en.x,en.y); ctx.rotate(en.face||0);
@@ -7019,7 +7250,7 @@ Object.assign(EDEFS,{
     combat:combatMolotov,
     draw:en=>drawBandit(en,'#5a4a3a','#e67e22',3,()=>{ ctx.fillStyle='#6a8a3a'; ctx.fillRect(6,-6,4,6); ctx.fillStyle=Math.floor(t/4)%2?'#ffb347':'#ff6a1a'; ctx.fillRect(7,-9,2,3); })},
   raider:{name:'MOTO BANDIDA', role:'raider', fac:'b', hp:24, speed:3.6, accel:0.34, radius:11, mass:1.2, view:360, fov:2.6, dmg:5, score:160, work:3, color:'#c0392b', look:'raider', purple:0,
-    combat:combatRaider, draw:en=>drawMoto(en,'#c0392b')},
+    update:raiderUpdate, drive:motoDrive, combat:combatRaider, draw:en=>drawMoto(en,'#c0392b')},   // física y dibujo en p9j_moto.js
   car:{name:'COCHE ABANDONADO', role:'structure', hp:30, speed:0, radius:15, mass:99, view:0, fov:0, dmg:0, score:20, work:0, color:'#7a3a2a', look:'car', purple:0,
     update:staticUpdate, draw:drawCar, onDeath:en=>{ propBoom(en,78,34); popup(en.x,en.y-26,'¡BOOM!','#ff8c2a',16); }},
   barrel:{name:'BIDÓN', role:'structure', hp:10, speed:0, radius:10, mass:99, view:0, fov:0, dmg:0, score:10, work:0, color:'#b8321e', look:'barrel', purple:0,
@@ -7085,22 +7316,6 @@ function combatMolotov(en,tg,dd,los,aimed,dt){
       onLand:l=>{ explode(l.x1,l.y1,30,l.dmg,'e',{terrain:false}); if(world&&world.haz) tmpFire(l.x1,l.y1,1,260); noise(0.3,0.08,2000); }});
     en.fireCd=rand(150,200); S.launch();
   }
-}
-/* MOTO BANDIDA: da vueltas a tu alrededor muy rápido disparando */
-function combatRaider(en,tg,dd,los,aimed,dt){
-  if(en.orbitA==null) en.orbitA=Math.atan2(en.y-tg.y,en.x-tg.x);
-  en.orbitA+=0.022*dt*en.strafe;
-  const ox=tg.x+Math.cos(en.orbitA)*150, oy=tg.y+Math.sin(en.orbitA)*150;
-  steerTo(en,ox,oy,dt,1.1);
-  if(Math.hypot(en.vx,en.vy)>0.4) en.bodyA=Math.atan2(en.vy,en.vx);
-  if(Math.random()<0.25) particles.push({x:en.x-Math.cos(en.bodyA||0)*12,y:en.y-Math.sin(en.bodyA||0)*12,vx:0,vy:0,life:20,maxLife:20,color:era.sand||'#aaa',size:3,smoke:true});
-  en.fireCd-=dt;
-  if(en.fireCd<=0&&los&&dd<300&&canAttack(en)){
-    const a=leadAim(en,tg,4.6);
-    fireBullet(en.x,en.y,a+rand(-0.08,0.08),'e',{speed:4.6,dmg:en.def.dmg,radius:3,life:90,kind:'ebolt'});
-    en.fireCd=rand(30,50); S.eshoot();
-  }
-  if(en.stT>50&&Math.hypot(en.vx,en.vy)<0.5) en.strafe*=-1;   // se atasca: cambia de sentido
 }
 
 /* ===================== MUNDO 3: CIUDAD EN RUINAS (Oosthaven) =====================
@@ -8052,6 +8267,421 @@ Object.assign(worldInfo(5),{built:true,
   desc:'La fortaleza del líder militar enloquecido y su puerto hacia el océano: alambradas, campos de minas, focos que dan la alarma, escuderos y silos de misiles. Jefe final de la superficie: el ACORAZADO.',
   sections:['TIERRA DE NADIE','PATIO DE INSTRUCCIÓN','ARSENAL','PUERTO MILITAR · JEFE']});
 
+/* ===================== CAMALEÓN: cazador con camuflaje activo =====================
+   - Quieto se vuelve casi invisible y toma el color del suelo. Se delata al moverse, al atacar,
+     al recibir un disparo y con la lluvia (las gotas dibujan su silueta).
+   - Dos ojos que miran cada uno por su lado: no se le puede pillar por la espalda.
+   - Lengua: te atrapa y te arrastra hacia él, o le roba un rehén y huye con él. Si le haces
+     bastante daño mientras tira de ti, te suelta; si lo matas, libera al rehén.
+   Mientras está camuflado tus aliados, la mira y el minimapa no lo detectan. */
+Object.assign(EDEFS,{
+  chameleon:{name:'CAMALEÓN', role:'chameleon', hp:44, speed:1.3, accel:0.26, radius:12, mass:1.1, view:310, fov:1.7, dmg:10,
+    score:220, work:5, color:'#4f9a3a', look:'chameleon', purple:0,
+    update:chamUpdate, combat:chamCombat, draw:drawChameleon, onDeath:chamDeath}
+});
+function chamGround(x,y){
+  switch(tileAt(x,y)){
+    case SAND: return era.sand; case BUSH: return era.bush; case SOIL: return '#976546';
+    case FLOOR: case BRIDGE: return '#8a8f96'; case SCORCH: return era.scorch; default: return era.grass[1];
+  }
+}
+function chamMix(a,b,k){ const A=hexRgb(a), B=hexRgb(b); return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*k).toString(16).padStart(2,'0')).join(''); }
+function chamDmg(en){ return clamp(1-en.hp/en.maxHp,0,1); }   // 0 = intacto, 1 = casi muerto
+
+function chamUpdate(en,dt){
+  if(!en.eyes){ en.eyes=[en.angle-0.6,en.angle+0.6]; en.eyeT=[0,40]; en.eyeWant=[en.angle,en.angle]; en.camo=0.6; en.goT=0; }
+  // cada ojo elige por su cuenta hacia dónde mirar (a veces hacia atrás); en combate uno te sigue a ti
+  for(let i=0;i<2;i++){
+    en.eyeT[i]-=dt;
+    if(en.eyeT[i]<=0){ en.eyeT[i]=rand(30,110); en.eyeWant[i]=en.angle+rand(-1.6,1.6)+(Math.random()<0.25?Math.PI:0); }
+    const want=(i===0&&en.ai==='combat'&&en.seen)?Math.atan2(player.y-en.y,player.x-en.x):en.eyeWant[i];
+    en.eyes[i]=turnTo(en.eyes[i],want,0.09*dt);
+  }
+  // camuflaje: quieto sube, moverse/atacar/recibir daño lo baja de golpe.
+  // La piel verde ES el camuflaje: cuanto más herido (más esqueleto al aire), menos puede esconderse
+  const busy=en.tongue||en.carry, camoMax=1-chamDmg(en)*0.6;
+  if(Math.hypot(en.vx,en.vy)>0.35||busy||en.flash>0) en.camo=Math.max(0,en.camo-0.12*dt); else en.camo=Math.min(camoMax,en.camo+0.018*dt);
+  en.hidden=en.camo>0.7;
+  if(chamDmg(en)>0.7&&Math.random()<0.25*dt){ const a=rand(0,Math.PI*2); particles.push({x:en.x+Math.cos(a)*8,y:en.y+Math.sin(a)*5,vx:Math.cos(a)*1.5,vy:Math.sin(a)*1.5-0.5,life:12,maxLife:12,color:'#ffe066',size:2}); }   // chispas del esqueleto
+  if(en.tongue){ chamTongue(en,dt); return true; }
+  if(en.carry){ chamFlee(en,dt); return true; }
+  // fuera de combate avanza a saltos (anda y se para) para volver a camuflarse; parado sigue vigilando
+  if(en.ai!=='combat'){
+    en.goT-=dt; if(en.goT<=-90) en.goT=50;
+    if(en.goT<=0&&en.stun<=0){
+      if(en.huhT>0) en.huhT-=dt; if(en.bangT>0) en.bangT-=dt; if(en.atkCd>0) en.atkCd-=dt;
+      perceive(en,dt);
+      if(en.ai==='combat') return false;
+      en.vx*=0.8; en.vy*=0.8; moveUnit(en,dt);
+      return true;
+    }
+  }
+  return false;
+}
+function chamCombat(en,tg,dd,los,aimed,dt){
+  // si tiene un rehén a tiro, prefiere robarlo
+  const pw=pows.find(p=>p.alive&&!p.held&&dist(p,en)<210&&lineClear(en.x,en.y,p.x,p.y));
+  const target=pw||tg.u||tg, d=Math.hypot(target.x-en.x,target.y-en.y);
+  en.angle=turnTo(en.angle,Math.atan2(target.y-en.y,target.x-en.x),0.12*dt);
+  // AYUDA A SUS ALIADOS. Explorador: mientras te ve, les pasa tu posición en silencio (sin alarma;
+  // solo un leve pulso verde lo delata) y vienen a por ti, los morteros incluidos.
+  const allies=enemies.filter(o=>o.alive&&o!==en&&o.id!=='chameleon'&&o.def.role!=='structure'&&o.def.role!=='dummy'&&
+    (o.def.fac||'r')===(en.def.fac||'r')&&dist(o,player)<500);
+  en.markCd=(en.markCd||0)-dt;
+  if(en.seen&&allies.length&&en.markCd<=0){
+    en.markCd=150;
+    for(const o of allies) if(o.ai!=='combat'){ o.ai='hunt'; o.aware=1; o.searchT=0; o.lastKnown={x:player.x+rand(-30,30),y:player.y+rand(-30,30)}; }
+    rings.push({x:en.x,y:en.y,r:6,max:40,life:24,maxLife:24,color:'#7fdc5a'});
+  }
+  // Emboscada: con aliados cerca espera camuflado a que estés peleando con ellos y entonces te atrapa
+  // (quieto y expuesto a su fuego). Si te acercas mucho o tarda demasiado, ataca igual.
+  const engaged=allies.some(o=>o.ai==='combat'&&o.seen);
+  if(!pw&&allies.length&&!engaged&&d>110&&(en.waitT=(en.waitT||0)+dt)<480){ en.vx*=0.85; en.vy*=0.85; return; }
+  if(d<200&&(pw||los)&&en.atkCd<=0&&canAttack(en)){
+    en.waitT=0;
+    en.tongue={phase:'wind',t:0,a:Math.atan2(target.y-en.y,target.x-en.x),len:0,victim:null,want:target,hp0:en.hp};
+    en.vx*=0.3; en.vy*=0.3; S.huh(); return;
+  }
+  en.goT-=dt; if(en.goT<=-70) en.goT=45;   // se acerca a saltos
+  if(en.goT>0&&d>150) steerTo(en,target.x,target.y,dt,1.1); else { en.vx*=0.85; en.vy*=0.85; }
+}
+function chamTongue(en,dt){
+  const T=en.tongue;
+  if(en.atkCd>0) en.atkCd-=dt;
+  if(en.stun>0){ en.stun-=dt; en.tongue=null; moveUnit(en,dt); return; }   // aturdido (Tesla): suelta lo que tenga
+  en.vx*=0.8; en.vy*=0.8; T.t+=dt;
+  const mx=en.x+Math.cos(T.a)*en.radius, my=en.y+Math.sin(T.a)*en.radius;   // boca
+  if(T.phase==='wind'){   // abre la boca y apunta (la línea rosa te avisa)
+    if(T.want&&T.want.alive!==false) T.a=turnTo(T.a,Math.atan2(T.want.y-en.y,T.want.x-en.x),0.08*dt);
+    en.angle=T.a;
+    if(T.t>=24){ T.phase='out'; T.t=0; S.slash(); }
+  } else if(T.phase==='out'){
+    T.len+=15*dt;
+    const tx=mx+Math.cos(T.a)*T.len, ty=my+Math.sin(T.a)*T.len;
+    if(player.alive&&player.invuln<=0&&Math.hypot(player.x-tx,player.y-ty)<player.radius+6){
+      T.victim=player; T.phase='pull'; damagePlayer(en.def.dmg); popup(player.x,player.y-26,'¡ATRAPADO!','#9fe86a',13);
+    } else {
+      const pw=pows.find(p=>p.alive&&!p.held&&Math.hypot(p.x-tx,p.y-ty)<p.radius+6);
+      if(pw){ T.victim=pw; T.phase='pull'; pw.follow=false; pw.escort=false; popup(pw.x,pw.y-18,'¡SE LLEVA A UN REHÉN!','#ff6b6b',13); }
+    }
+    if(T.phase==='out'&&(T.len>=220||BLOCKSHOT[tileAt(tx,ty)])) T.phase='back';
+  } else if(T.phase==='pull'){
+    const v=T.victim;
+    if(!v||!v.alive||(v===player&&en.hp<T.hp0-12)){   // si le haces bastante daño mientras tira de ti, te suelta
+      if(v===player&&player.alive) popup(player.x,player.y-26,'¡TE SUELTA!','#ffd76e',12);
+      T.phase='back';
+    } else {
+      T.len=Math.max(0,T.len-7*dt);
+      v.x=mx+Math.cos(T.a)*T.len; v.y=my+Math.sin(T.a)*T.len; v.vx=v.vy=0; unstick(v);
+      if(T.len<=en.radius+(v.radius||6)){
+        if(v===player){ push(player,en.x,en.y,6); en.tongue=null; en.atkCd=150; }
+        else { v.held=en; en.carry=v; en.tongue=null; en.atkCd=120; }
+      }
+    }
+  } else { T.len-=20*dt; if(T.len<=0){ en.tongue=null; en.atkCd=Math.max(en.atkCd,110); } }
+  moveUnit(en,dt);
+}
+/* Con un rehén en la boca huye lejos de ti (más despacio) y ya no puede camuflarse */
+function chamFlee(en,dt){
+  const pw=en.carry;
+  if(en.atkCd>0) en.atkCd-=dt;
+  if(!pw||!pw.alive){ en.carry=null; moveUnit(en,dt); return; }
+  if(en.stun>0) en.stun-=dt;
+  else if(player.alive&&dist(en,player)<520){
+    const away=Math.atan2(en.y-player.y,en.x-player.x);
+    steerTo(en,en.x+Math.cos(away)*160,en.y+Math.sin(away)*160,dt,0.8);
+    if(Math.hypot(en.vx,en.vy)>0.3) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),0.15*dt);
+  } else { en.vx*=0.85; en.vy*=0.85; }
+  moveUnit(en,dt);
+  pw.x=en.x+Math.cos(en.angle)*(en.radius+4); pw.y=en.y+Math.sin(en.angle)*(en.radius+4); pw.vx=pw.vy=0;
+}
+function chamDeath(en){
+  if(en.carry){ en.carry.held=null; popup(en.carry.x,en.carry.y-18,'¡REHÉN LIBERADO!','#ffd76e',13); en.carry=null; }
+}
+function drawChameleon(en){
+  const camo=en.camo||0, rain=Math.min(1,wAmt('rain')+wAmt('storm')), k=chamDmg(en), gnd=chamGround(en.x,en.y);
+  let alpha=1-camo*0.88;
+  if(en.hidden&&rain>0) alpha=Math.max(alpha,0.32*rain);   // las gotas dibujan su silueta
+  // la piel se va volviendo gris con el daño y se camufla con el suelo
+  const skin=chamMix(chamMix(en.def.color,'#7d848c',k*0.7),gnd,camo), skinD=chamMix(chamMix('#2d5e22','#4a4f57',k*0.7),gnd,camo*0.8);
+  // lengua y su aviso (se dibujan sin transparencia: siempre se ven)
+  const T=en.tongue;
+  if(T){
+    const mx=en.x+Math.cos(T.a)*en.radius, my=en.y+Math.sin(T.a)*en.radius;
+    if(T.phase==='wind'){
+      ctx.save(); ctx.globalAlpha=0.35+0.4*(T.t/24); ctx.strokeStyle='#ff6fa5'; ctx.setLineDash([4,4]); ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx+Math.cos(T.a)*220,my+Math.sin(T.a)*220); ctx.stroke(); ctx.restore();
+    } else if(T.len>0){
+      const tx=mx+Math.cos(T.a)*T.len, ty=my+Math.sin(T.a)*T.len;
+      ctx.strokeStyle='#e0507f'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(tx,ty); ctx.stroke();
+      ctx.fillStyle='#b8305e'; ctx.beginPath(); ctx.arc(tx,ty,4,0,Math.PI*2); ctx.fill();
+    }
+  }
+  // ENDOESQUELETO (robot gris debajo de la piel): se ve donde la piel se ha caído
+  const metalA=Math.max(alpha,Math.min(1,k*1.4)*0.9);   // el metal no se camufla
+  ctx.save(); ctx.translate(en.x,en.y); ctx.rotate(en.angle); ctx.globalAlpha=metalA;
+  ctx.strokeStyle='#5a6068'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(-10,0); ctx.quadraticCurveTo(-18,0,-18,6);
+  ctx.arc(-15,6,3,Math.PI,Math.PI*2.6); ctx.stroke();
+  ctx.fillStyle='#9aa0a8'; for(const [x,y] of [[-14,1],[-18,5],[-15,9]]) ctx.fillRect(x,y,1,1);   // remaches de la cola
+  ctx.fillStyle='#4a4f57'; for(const [x,y] of [[6,-9],[6,9],[-5,-9],[-5,9]]) ctx.fillRect(x-2,y-1,4,2);
+  ctx.fillStyle='#2e3238'; ctx.beginPath(); ctx.ellipse(0,0,12,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7d848c'; for(const x of [-7,-3,1,5]) ctx.fillRect(x,-6,1,12);   // costillas
+  ctx.fillStyle='#b4bac2'; ctx.fillRect(-10,-1,19,2);                          // columna
+  ctx.fillStyle=Math.floor(t/10)%2?'#ff3b3b':'#9a1c1c'; ctx.fillRect(-2,2,2,2);  // núcleo hackeado
+  ctx.fillStyle='#5a6068'; ctx.beginPath(); ctx.moveTo(18,0); ctx.lineTo(9,-6); ctx.lineTo(5,-3); ctx.lineTo(5,3); ctx.lineTo(9,6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#3a3f46'; ctx.fillRect(13,-1,5,1);                            // mandíbula
+  ctx.restore();
+  // PIEL VERDE a parches: cada franja se cae a partir de cierto daño (la última aguanta hasta casi morir)
+  const STRIPS=[[-12,-8,0.2],[-8,-4,0.55],[-4,0,0.35],[0,4,0.75],[4,8,0.45],[8,12,0.9]];
+  ctx.save(); ctx.globalAlpha=alpha; ctx.translate(en.x,en.y); ctx.rotate(en.angle);
+  if(k<0.35){   // cola
+    ctx.strokeStyle=skinD; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(-10,0); ctx.quadraticCurveTo(-18,0,-18,6);
+    ctx.arc(-15,6,3,Math.PI,Math.PI*2.6); ctx.stroke();
+  }
+  if(k<0.5){   // patas con dedos en pinza
+    ctx.fillStyle=skinD;
+    for(const [x,y] of [[6,-9],[6,9],[-5,-9],[-5,9]]){ ctx.fillRect(x-2,y-1,4,2); ctx.fillRect(x-2,y+(y<0?-2:1),2,2); ctx.fillRect(x+1,y+(y<0?-2:1),2,2); }
+  }
+  ctx.save(); ctx.beginPath(); ctx.ellipse(0,0,12,7,0,0,Math.PI*2); ctx.clip();
+  for(let i=0;i<STRIPS.length;i++){
+    const [x0,x1,th]=STRIPS[i]; if(k>=th) continue;
+    ctx.fillStyle=skin; ctx.fillRect(x0,-8,x1-x0,16);
+    ctx.fillStyle=skinD; ctx.fillRect(x0+1,-1,2,2);                             // cresta dorsal
+    ctx.fillStyle='rgba(255,255,255,.15)'; ctx.fillRect(x0,-5,x1-x0,2);
+    // borde rasgado donde la franja vecina ya se ha caído
+    ctx.fillStyle='#1c1f24';
+    if(i>0&&k>=STRIPS[i-1][2]) for(let y=-6;y<=6;y+=3) ctx.fillRect(x0,y,1,2);
+    if(i<STRIPS.length-1&&k>=STRIPS[i+1][2]) for(let y=-5;y<=6;y+=3) ctx.fillRect(x1-1,y,1,2);
+  }
+  ctx.restore();
+  const headSkin=k<0.65;
+  if(headSkin){   // cabeza con casco
+    ctx.fillStyle=skin; ctx.beginPath(); ctx.moveTo(18,0); ctx.lineTo(9,-6); ctx.lineTo(5,-3); ctx.lineTo(5,3); ctx.lineTo(9,6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=skinD; ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(4,-4); ctx.lineTo(3,4); ctx.closePath(); ctx.fill();
+  }
+  // dos ojos que miran cada uno por su lado (sin piel: lentes rojas de robot)
+  for(let i=0;i<2;i++){
+    const ey=i?5:-5, rel=(en.eyes?en.eyes[i]:en.angle)-en.angle;
+    ctx.globalAlpha=headSkin?alpha:Math.max(alpha,0.9);
+    ctx.fillStyle=headSkin?skin:'#3a3f46'; ctx.beginPath(); ctx.arc(11,ey,3,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=headSkin?'#ffe066':'#ff3b3b'; ctx.fillRect(11+Math.round(Math.cos(rel)*1.5)-1,ey+Math.round(Math.sin(rel)*1.5)-1,2,2);
+  }
+  ctx.globalAlpha=alpha;
+  if(T&&T.phase==='wind'){ ctx.fillStyle='#ff6fa5'; ctx.fillRect(16,-1,3,2); }   // boca abierta
+  ctx.restore();
+  // camuflado: un leve brillo que recorre su contorno (si te fijas, lo ves)
+  if(en.hidden){
+    ctx.fillStyle='rgba(255,255,255,'+(0.12+0.18*rain).toFixed(2)+')';
+    for(let k=0;k<3;k++){ const a=t*0.05+k*2.1; ctx.fillRect(en.x+Math.cos(a)*12-1,en.y+Math.sin(a)*7-1,2,2); }
+  }
+}
+/* ===================== MOTO BANDIDA: física de moto de verdad =====================
+   Unidades: píxeles y fotogramas. La moto es un «modelo de bicicleta»: dos ruedas separadas L px.
+   · No gira sobre sí misma: con el manillar a tope traza un círculo de radio R = L / tan(manillar).
+   · Para girar deprisa hay que TUMBARSE: tan(inclinación) = v²·curvatura / g. Tumbarse tarda un poco.
+   · El neumático tiene un límite (círculo de fricción): girar + frenar/acelerar ≤ μ·g. Si se pasa,
+     la rueda trasera se va y la moto DERRAPA (y deja marcas en el suelo).
+   · El motor empuja con potencia fija (fuerza = P / v) contra el aire (fuerza = c·v²): por eso arranca
+     fuerte, hasta levantar la rueda delantera, y luego le cuesta llegar a su velocidad punta.
+   · El piloto sigue su meta con «pure pursuit» (como los coches autónomos): curvatura = 2·sen(α)/distancia,
+     y frena ANTES de las curvas porque en una curva de curvatura κ solo se puede ir a v ≤ √(μg/κ).
+   La IA de siempre decide adónde ir (steerTo → accelerate guarda la meta en goX/goY); aquí se decide cómo. */
+// cd: el aire frena 0.12 a la velocidad del nitro, por debajo del agarre (0.16); si no, la rueda no podría empujar más
+const MOTO={L:33, steerMax:0.6, grip:0.16, slideGrip:0.11, trac:0.2, brake:0.16, cd:0.12/(4.68*4.68), roll:0.004, leanRate:0.06, pivot:0.045};
+
+function raiderUpdate(en,dt){
+  if(en.lean==null){ en.bodyA=en.angle; en.lean=0; en.steer=0; en.friction=1; en.skids=[]; }   // el rozamiento lo pone motoDrive
+  en.speedMax=en.def.speed; en.drvV=null; en.drvSlide=false;   // el nitro y el derrape solo duran lo que pida combatRaider
+  en._vx=en.vx; en._vy=en.vy;
+  if(en.stun>0){ const k=Math.pow(0.93,dt); en.vx*=k; en.vy*=k; en.lean*=0.9; }   // estrellada: se arrastra hasta parar
+  // estelas de luz de las dos ruedas (se guardan siempre, también patrullando)
+  const c=Math.cos(en.bodyA), s=Math.sin(en.bodyA);
+  en.trailT=(en.trailT||0)-dt;
+  if(en.trailT<=0){ en.trailT=2; (en.trail||(en.trail=[])).push({f:[en.x+c*17,en.y+s*17],r:[en.x-c*16,en.y-s*16]}); if(en.trail.length>22) en.trail.shift(); }
+  for(const k of en.skids) k.l-=dt;
+  while(en.skids.length&&en.skids[0].l<=0) en.skids.shift();
+  return false;
+}
+
+function motoDrive(en,dt){
+  const M=MOTO, kGeo=Math.tan(M.steerMax)/M.L;
+  en.vx=en._vx; en.vy=en._vy;   // la IA genérica empuja la velocidad como si volara: se deshace, la moto obedece a la física
+  let th=en.bodyA, fx=Math.cos(th), fy=Math.sin(th);
+  const u=en.vx*fx+en.vy*fy;
+  if((en._u||0)-u>2.2&&en.stun<=0){   // frenazo en seco contra un muro: se estrella
+    en.stun=40; popup(en.x,en.y-20,'¡CRASH!','#ff3df0',12); spawnDebris(en.x,en.y,6,'#b8672e'); S.stomp(); shake=Math.max(shake,3);
+  }
+  en._u=u;
+  const want=en.wantMove&&en.stun<=0;
+  let kT=0, vT=0, alpha=0, pivot=false;
+  if(want){
+    const gx=en.goX, gy=en.goY, gd=Math.hypot(gx,gy)||1, s=Math.sign(angDiff(th,Math.atan2(gy,gx)))||1;
+    alpha=angDiff(th,Math.atan2(gy,gx));
+    vT=en.drvV!=null?en.drvV:en.speedMax*(en.goK==null?1:en.goK);
+    // meta dentro del círculo de giro mínimo: girando no se llega nunca → para, pie al suelo, la encara y sale
+    const R=1/kGeo, cx=en.x-fy*R*s, cy=en.y+fx*R*s;
+    if(Math.hypot(en.x+gx-cx,en.y+gy-cy)<R*0.95){ vT=Math.abs(alpha)>0.4?0:Math.min(vT,0.8); pivot=true; }
+    // pure pursuit
+    const Ld=clamp(Math.min(gd,30+Math.abs(u)*14),20,120);
+    const kCmd=Math.abs(alpha)>Math.PI/2?s*kGeo:clamp(2*Math.sin(alpha)/Ld,-kGeo,kGeo);
+    vT=Math.min(vT,Math.sqrt(M.grip*0.85/Math.max(Math.abs(kCmd),1e-4)));   // frena antes de la curva
+    const kGrip=M.grip*0.95/Math.max(u*u,0.01);
+    kT=en.drvSlide?kCmd:clamp(kCmd,-kGrip,kGrip);   // sin derrape a propósito no se pasa del agarre: abre la curva
+    // atascada contra algo: marcha atrás empujando con los pies
+    en.mStuck=Math.abs(u)<0.4&&vT>0.8?(en.mStuck||0)+dt:0;
+    if(en.mStuck>45){ en.backT=40; en.mStuck=0; }
+    // mira la carretera: si hay un muro más cerca de lo que tarda en frenar (v² = 2·a·d), frena ya
+    for(let d=12;d<=u*u/(2*M.brake)+24;d+=8){
+      if(SOLID[tileAtC(Math.floor((en.x+fx*d)/TILE),Math.floor((en.y+fy*d)/TILE))]){ vT=Math.min(vT,Math.sqrt(2*M.brake*0.7*Math.max(0,d-14))); break; }
+    }
+  }
+  if(en.backT>0){ en.backT-=dt; vT=-0.8; kT=-(Math.sign(alpha)||1)*kGeo; }
+  // inclinación con inercia (g = agarre: 45° justo en el límite) y curvatura real:
+  // despacio manda el manillar, deprisa manda la inclinación
+  en.lean+=clamp(Math.atan(u*u*kT/M.grip)-en.lean,-M.leanRate*dt,M.leanRate*dt);
+  const w=clamp((Math.abs(u)-0.6)/1.0,0,1);
+  const k=clamp(lerp(kT,M.grip*Math.tan(en.lean)/Math.max(u*u,0.01),w),-kGeo,kGeo);
+  en.steer=Math.atan(k*M.L);
+  // giro: modelo de bicicleta + rueda trasera cruzada (derrape) + pies en el suelo (muy despacio)
+  let yaw=u*k;
+  if(en.drvSlide&&want) yaw+=Math.sign(alpha)*0.07;
+  if(want&&(pivot||Math.abs(u)<1)) yaw+=clamp(alpha,-M.pivot,M.pivot)*(1-Math.min(1,Math.abs(u)));
+  th+=yaw*dt; th=Math.atan2(Math.sin(th),Math.cos(th)); en.bodyA=th; fx=Math.cos(th); fy=Math.sin(th);
+  // neumáticos (círculo de fricción): primero el agarre lateral para seguir la trazada; lo que sobra, para acelerar o frenar
+  const nx=-fy, ny=fx, uf=en.vx*fx+en.vy*fy, wl=en.vx*nx+en.vy*ny;
+  const G=(en.sliding?M.slideGrip:M.grip)*(en.drvSlide?0.7:1);
+  const lat=clamp(-wl/dt,-G,G);
+  en.sliding=Math.abs(wl+lat*dt)>0.25;
+  const longMax=Math.sqrt(Math.max(0,G*G-lat*lat)), drag=M.cd*uf*Math.abs(uf)+M.roll*Math.sign(uf);
+  let along;
+  if(vT<0) along=clamp((vT-uf)*0.3,-0.05,0.05);   // marcha atrás: a pie, sin motor
+  else along=clamp(drag+(vT-uf)*0.8,-M.brake,Math.min(M.trac,M.cd*Math.pow(en.speedMax,3)/Math.max(Math.abs(uf),0.3)));
+  along=clamp(along,-longMax,longMax);
+  en.vx+=(fx*(along-drag)+nx*lat)*dt; en.vy+=(fy*(along-drag)+ny*lat)*dt;
+  en.wheelie=lerp(en.wheelie||0,along>0.15&&uf<2.2?1:0,0.15);   // arranque fuerte: levanta la rueda de delante
+  // marcas de derrape / frenazo de la rueda trasera, y polvo
+  const rx=en.x-fx*16, ry=en.y-fy*16, marking=(en.sliding||along<-0.12)&&Math.hypot(en.vx,en.vy)>1;
+  if(marking&&en.skidP){ en.skids.push({x0:en.skidP[0],y0:en.skidP[1],x1:rx,y1:ry,l:300}); if(en.skids.length>90) en.skids.shift(); }
+  en.skidP=marking?[rx,ry]:null;
+  if(en.sliding&&Math.random()<0.6*dt) particles.push({x:rx+rand(-4,4),y:ry+rand(-4,4),vx:rand(-0.6,0.6),vy:rand(-0.6,0.6),life:26,maxLife:26,color:era.sand||'#aaa',size:4,smoke:true});
+}
+
+/* Ataque en PASADAS: elige una línea que te pasa rozando por el lado que menos le cuesta girar, mete nitro,
+   te tira un cóctel molotov cuando estás a su costado (apuntando a donde vas a estar), te embiste si te
+   pones delante, frena lo justo para la curva (v² = v₀² + 2·a·d) y da la vuelta derrapando como en flat-track. */
+function combatRaider(en,tg,dd,los,aimed,dt){
+  if(dd>420||(!los&&!en.pass)){ en.pass=null; steerTo(en,tg.x,tg.y,dt,1); return; }
+  const ang=Math.atan2(tg.y-en.y,tg.x-en.x);
+  if(!en.pass&&dd<120){ steerTo(en,en.x+Math.cos(en.bodyA)*160,en.y+Math.sin(en.bodyA)*160,dt,1); en.fireCd-=dt; return; }   // muy cerca para girar: toma carrerilla
+  if(!en.pass){
+    const off=rand(45,65); let best=null;
+    for(const side of [-1,1]){
+      const px=tg.x+Math.cos(ang+Math.PI/2)*off*side, py=tg.y+Math.sin(ang+Math.PI/2)*off*side;
+      const a=Math.abs(angDiff(en.bodyA,Math.atan2(py-en.y,px-en.x)));
+      if(!best||a<best.a) best={px,py,a};
+    }
+    let ex=best.px+Math.cos(ang)*220, ey=best.py+Math.sin(ang)*220;   // la recta de salida se acorta si atraviesa un muro
+    while(Math.hypot(ex-best.px,ey-best.py)>60&&!pathClear(best.px,best.py,ex,ey,en.radius)){ ex-=Math.cos(ang)*20; ey-=Math.sin(ang)*20; }
+    en.pass={phase:best.a>1.6?'turn':'line',px:best.px,py:best.py,ex,ey,thrown:false,rammed:false,t:0};   // si la entrada le queda detrás, primero da la vuelta
+  }
+  const P=en.pass; P.t+=dt;
+  if(P.phase==='line'){
+    en.speedMax=en.def.speed*1.3;   // nitro
+    const pastMid=((P.px-en.x)*(P.ex-P.px)+(P.py-en.y)*(P.ey-P.py))<0;
+    steerTo(en,pastMid?P.ex:P.px,pastMid?P.ey:P.py,dt,1);
+    if(pastMid) en.drvV=Math.sqrt(3.2*3.2+2*MOTO.brake*0.7*Math.hypot(P.ex-en.x,P.ey-en.y));   // punto de frenada
+    if(Math.random()<0.4) particles.push({x:en.x-Math.cos(en.bodyA)*21,y:en.y-Math.sin(en.bodyA)*21,vx:0,vy:0,life:18,maxLife:18,color:'#ff9a3a',size:2});
+    // te tira el cóctel molotov cuando le quedas al costado
+    if(!P.thrown&&dd<140&&canAttack(en)&&(Math.abs(angDiff(en.bodyA,ang))>0.9||dd<70)){
+      P.thrown=true;
+      const dur=24, x1=tg.x+(tg.vx||0)*dur+rand(-8,8), y1=tg.y+(tg.vy||0)*dur+rand(-8,8);
+      addLob({x0:en.x,y0:en.y,x1,y1,dur,h:40,owner:'e',kind:'molotov',dmg:10,splash:30,marker:true,
+        draw:(x,y,l)=>{ ctx.save(); ctx.translate(x,y); ctx.rotate(l.k*10); ctx.fillStyle='#6a8a3a'; ctx.fillRect(-2,-4,4,8); ctx.fillStyle='#ffb347'; ctx.fillRect(-1,-7,2,3); ctx.restore(); },
+        onLand:l=>{ explode(l.x1,l.y1,30,l.dmg,'e',{terrain:false}); if(world&&world.haz) tmpFire(l.x1,l.y1,1,260); noise(0.3,0.08,2000); }});
+      S.launch();
+    }
+    // si te pones delante, te embiste
+    if(!P.rammed&&player.alive&&dist(en,player)<en.radius+player.radius+3){ P.rammed=true; damagePlayer(8); push(player,en.x,en.y,7); shake=Math.max(shake,6); S.stomp(); }
+    if(Math.hypot(P.ex-en.x,P.ey-en.y)<40||P.t>200) en.pass=null;
+  } else {   // la vuelta: derrape hasta encarar la entrada de la pasada
+    steerTo(en,P.px,P.py,dt,1);
+    en.drvV=2.6;
+    const a2=Math.abs(angDiff(en.bodyA,Math.atan2(P.py-en.y,P.px-en.x)));
+    en.drvSlide=a2>0.8&&Math.hypot(en.vx,en.vy)>1.6;
+    if(a2<0.5||P.t>150){ P.phase='line'; P.t=0; }
+  }
+  // pistola durante la pasada
+  en.fireCd-=dt;
+  if(en.fireCd<=0&&los&&dd<300&&canAttack(en)){
+    const a=leadAim(en,tg,4.6);
+    fireBullet(en.x,en.y,a+rand(-0.1,0.1),'e',{speed:4.6,dmg:en.def.dmg,radius:3,life:90,kind:'ebolt'});
+    en.fireCd=rand(40,65); S.eshoot();
+  }
+}
+
+/* Dibujo (de la imagen del usuario): chatarra oxidada con pinchos, dos «ojos» rosas en el carenado,
+   rueda delantera de neón cian y trasera de neón rosa que dejan estelas de luz. Se ve tumbarse en las
+   curvas, girar el manillar y la rueda de delante, levantar la rueda al arrancar y las marcas de derrape. */
+function drawMoto(en,col){
+  const a=en.bodyA!=null?en.bodyA:en.angle, dark=Math.min(1,wAmt('rain')+wAmt('storm')+wAmt('fog')*0.7);
+  const lean=en.lean||0, lo=Math.sin(lean)*4, st=en.steer||0, lift=(en.wheelie||0)*3;
+  if(en.skids&&en.skids.length){
+    ctx.lineWidth=2;
+    for(const k of en.skids){ ctx.strokeStyle='rgba(25,18,12,'+(0.45*Math.min(1,k.l/120)).toFixed(2)+')'; ctx.beginPath(); ctx.moveTo(k.x0,k.y0); ctx.lineTo(k.x1,k.y1); ctx.stroke(); }
+  }
+  // estelas de neón (más intensas con mal tiempo o niebla)
+  if(en.trail&&en.trail.length>1){
+    for(const [key,colr] of [['f','#3ee6e6'],['r','#ff3df0']]){
+      for(let i=1;i<en.trail.length;i++){
+        const p0=en.trail[i-1][key], p1=en.trail[i][key], k=i/en.trail.length;
+        ctx.globalAlpha=k*(0.35+0.4*dark); ctx.strokeStyle=colr; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+  ctx.save(); ctx.translate(en.x,en.y);
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(4-Math.sin(a)*lo,6+Math.cos(a)*lo,20,6,a,0,Math.PI*2); ctx.fill();
+  ctx.rotate(a);
+  const fx=-lift*Math.sin(a), fy=-lift*Math.cos(a);   // «arriba» de la pantalla visto desde el sistema girado de la moto
+  // luz de los faros (cono rosa tenue hacia donde apunta la rueda)
+  ctx.save(); ctx.translate(fx,fy); ctx.rotate(st*0.5);
+  const g=ctx.createLinearGradient(22,0,76,0); g.addColorStop(0,'rgba(255,61,240,'+(0.18+0.2*dark).toFixed(2)+')'); g.addColorStop(1,'rgba(255,61,240,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(22,-2); ctx.lineTo(76,-14); ctx.lineTo(76,14); ctx.lineTo(22,2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  const wheel=(neon)=>{
+    ctx.fillStyle='#141210'; ctx.fillRect(-5,-3,10,6);
+    ctx.fillStyle='#3a332c'; for(let k=-4;k<=3;k+=2) ctx.fillRect(k+(Math.floor(t/2)%2),-3,1,6);   // taco del neumático girando
+    ctx.fillStyle=neon; ctx.fillRect(-4,-1,8,2); ctx.globalAlpha=0.35; ctx.fillRect(-6,-4,12,8); ctx.globalAlpha=1;
+  };
+  ctx.save(); ctx.translate(-16,0); wheel('#ff3df0'); ctx.restore();                               // trasera rosa
+  ctx.save(); ctx.translate(17+fx,fy); ctx.rotate(st); wheel('#3ee6e6'); ctx.restore();            // delantera cian, gira con el manillar
+  // al tumbarse, la moto vista desde arriba se estrecha
+  ctx.save(); ctx.scale(1,1-0.3*Math.abs(Math.sin(lean)));
+  ctx.fillStyle='#4a2a14'; ctx.fillRect(-8,-4,17,8);
+  ctx.fillStyle='#7a4a24'; ctx.fillRect(-7,-3,15,6);
+  ctx.fillStyle='#b8672e'; ctx.fillRect(-6,-3,6,1); ctx.fillRect(2,2,4,1);
+  ctx.fillStyle='#5a5f66'; ctx.beginPath(); ctx.arc(0,0,2.6,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#2a2d33'; ctx.fillRect(-1,-1,2,2);
+  ctx.fillStyle='#6a6a6a'; ctx.fillRect(-12,4,9,2); ctx.fillRect(-12,-6,9,2);                 // escapes a los lados
+  ctx.fillStyle=Math.floor(t/4)%2?'#ff3df0':'#b02aa8'; ctx.fillRect(-2,4,3,2);                  // brillo rosa del motor
+  ctx.fillStyle='#232a33'; ctx.fillRect(-9,-2,6,4); ctx.fillStyle='#2f3a46'; ctx.fillRect(-10,-5,3,3); ctx.fillRect(-10,2,3,3);   // asiento y alforjas
+  // carenado con pinchos y dos «ojos» rosas (sube con el caballito)
+  ctx.save(); ctx.translate(fx,fy);
+  ctx.fillStyle='#5a3418'; ctx.beginPath(); ctx.moveTo(6,-5); ctx.lineTo(13,-3); ctx.lineTo(14,0); ctx.lineTo(13,3); ctx.lineTo(6,5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#8a5a2e'; for(const [x,y,dx,dy] of [[12,-3,3,-4],[12,3,3,4],[7,-5,1,-5],[7,5,1,5]]){ ctx.beginPath(); ctx.moveTo(x,y-1); ctx.lineTo(x+dx,y+dy); ctx.lineTo(x,y+1); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle='#ff3df0'; ctx.fillRect(11,-3,2,2); ctx.fillRect(11,1,2,2);
+  ctx.fillStyle='#ffd0fa'; ctx.fillRect(12,-3,1,1); ctx.fillRect(12,1,1,1);
+  ctx.save(); ctx.translate(8,0); ctx.rotate(st); ctx.fillStyle='#9aa0a8'; ctx.fillRect(0,-7,1,14); ctx.restore();   // manillar
+  ctx.restore();
+  ctx.restore();
+  // bandido encima: se echa hacia dentro de la curva (pañuelo del color de su banda)
+  ctx.save(); ctx.translate(0,lo);
+  ctx.fillStyle='#4a3a2a'; ctx.fillRect(-6,-4,6,8); ctx.fillStyle=col; ctx.fillRect(-3,-3,4,6);
+  ctx.fillStyle='#d8b48a'; ctx.fillRect(-2,-1,3,2); ctx.fillStyle='#2a1a10'; ctx.fillRect(-4,-1,2,2);
+  ctx.restore();
+  ctx.restore();
+}
+
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
    - «PULSA CUALQUIER TECLA» como en Jackal y Metal Slug (y sirve para activar el sonido del navegador).
@@ -8079,6 +8709,7 @@ function menuBuildItems(){
   if(menuView==='options') return [
     {id:'opt_sound',label:'SONIDO',val:save.sound?'SÍ':'NO',sub:'Activa o silencia todos los efectos'},
     {id:'opt_vol',label:'VOLUMEN',bar:vol,sub:'← → para subir o bajar'},
+    {id:'opt_mira',label:'MIRA',val:['NORMAL','GRANDE','ENORME'][save.mira],sub:'Tamaño del puntero al apuntar'},
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
     {id:'back',label:'← VOLVER'}];
@@ -8088,7 +8719,7 @@ function menuBuildItems(){
   if(p) L.push({id:'new',label:'NUEVA PARTIDA',sub:'Borra la partida y empieza de cero'});
   L.push({id:'story',label:'HISTORIA',sub:'La Abyssalita, la guerra y Béntica Fantasma'});
   L.push({id:'controls',label:'CONTROLES',sub:'Teclado y ratón'});
-  L.push({id:'options',label:'OPCIONES',sub:'Sonido y pantalla'});
+  L.push({id:'options',label:'OPCIONES',sub:'Sonido, pantalla y mira'});
   return L;
 }
 /* El cursor es tu propia máquina, dibujada con los mismos sprites del juego */
@@ -8107,7 +8738,7 @@ function menuCardHtml(){
     return '<div class="mCardHead">EN COMBATE</div>'+
       K(['W','A','S','D'],'mover')+K(['RATÓN'],'apuntar (la torreta gira 360°)')+K(['CLIC IZQ','ESPACIO'],'disparar')+
       K(['CLIC DER','SHIFT'],'ataque en arco: pasa por encima de los muros')+K(['F'],'camuflaje')+K(['R'],'evolucionar aliado ◆20')+
-      K(['E'],'mini-dron ◆8')+K(['T'],'torreta ◆12')+K(['Q'],'escuadra ◆10')+K(['X'],'pedir el Orbe Vital (en los mundos)')+K(['P','ESC'],'pausa')+
+      K(['E'],'mini-dron ◆8')+K(['T'],'torreta ◆12')+K(['Q'],'escuadra ◆10')+K(['G'],'la escuadra escolta a los rehenes')+K(['X'],'pedir el Orbe Vital (en los mundos)')+K(['P','ESC'],'pausa')+
       '<div class="mCardHead" style="margin-top:1cqw">EN LA BASE Y EN EL MAPA</div>'+
       K(['W','A','S','D'],'caminar · SHIFT correr')+K(['E'],'usar edificios y el huerto')+K(['← →'],'elegir destino · INTRO despegar');
   }
@@ -8175,6 +8806,7 @@ function menuActivate(){
     case 'back': { const from=menuView; S.pickup(); menuView='main'; menuItems=menuBuildItems(); menuIdx=Math.max(0,menuItems.findIndex(x=>x.id===(from==='confirm'?'new':from))); renderMainMenu(); break; }
     case 'opt_sound': save.sound=!save.sound; saveSave(); updateSoundBtn(); S.pickup(); renderMainMenu(); break;
     case 'opt_vol': menuOption(1,true); break;
+    case 'opt_mira': save.mira=(save.mira+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_shake': save.shake=save.shake===false; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_full':
       try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }catch(e){}
@@ -8189,10 +8821,11 @@ function menuOption(dir,wrap){
     let v=Math.round(((save.vol==null?1:save.vol)+dir*0.1)*10)/10;
     if(wrap&&v>1) v=0;
     save.vol=clamp(v,0,1); saveSave(); renderMainMenu(); S.pickup();
-  } else if(it.id==='opt_sound'||it.id==='opt_shake'||it.id==='opt_full') menuActivate();
+  } else if(it.id==='opt_mira'){ save.mira=(save.mira+dir+3)%3; saveSave(); renderMainMenu(); S.pickup(); }
+  else if(it.id==='opt_sound'||it.id==='opt_shake'||it.id==='opt_full') menuActivate();
 }
 function newGame(){
-  const keep={sound:save.sound,vol:save.vol,shake:save.shake};
+  const keep={sound:save.sound,vol:save.vol,shake:save.shake,mira:save.mira};
   try{ localStorage.removeItem(SAVE_KEY); localStorage.removeItem(OLD_SAVE_KEY); }catch(e){}
   save=loadSave(); Object.assign(save,keep); saveSave();
   inHome=false; opsSel=null; opsReveal=null; opsAnim=null; menuCurFor='';
@@ -8636,7 +9269,7 @@ function startStage(){
   document.getElementById('eraTag').textContent=era.label;
   document.body.className='era-'+era.id;
   enemies=[]; bullets=[]; lobs=[]; voids=[]; particles=[]; popups=[]; bolts=[]; rings=[]; slashes=[];
-  drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[];
+  drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; escort=null;
   squads={}; squadSeq=0; voidCharging=0; alarmT=0; endgameT=0; clearT=0; flashFx=null;
   boss=null; bossDefeated=false; bossDelay=0;
   document.getElementById('bossBarWrap').style.display='none';
@@ -8803,8 +9436,8 @@ function updateHUD(){
   setText('hiScoreV',Math.max(save.bestScore,score));
   setText('livesV2',Math.max(0,lives));
   setText('allyV',drones.length); setText('turV',turrets.length); setText('solV',soldiers.length);
-  const following=pows.filter(pw=>pw.follow).length;
-  setText('powV',rescued+(following?(' · +'+following+' siguiéndote'):''));
+  const following=pows.filter(pw=>pw.follow&&!pw.escort).length, escorted=pows.filter(pw=>pw.escort).length;
+  setText('powV',rescued+(following?(' · +'+following+' siguiéndote'):'')+(escorted?(' · +'+escorted+' con la escolta'):''));
   setText('wlV',weaponLvl);
   setText('comboV',combo>1?('COMBO x'+combo):'');
   setStyle('hpBar','width',clamp(p.hp/p.maxHp*100,0,100).toFixed(1)+'%');
@@ -8854,6 +9487,7 @@ function updateHUD(){
   abil('abE',!alive?'off':runWork>=DRONE_COST?'ready':'',0);
   abil('abT',!alive?'off':runWork>=TURRET_COST&&turrets.length<TURRET_MAX?'ready':'',0);
   abil('abQ',!alive?'off':runWork>=SQUAD_COST?'ready':'',0);
+  abil('abK',escort?'active':(!alive||!escortAvailable())?'off':'ready',0);
   if(hudTick%5===0) drawMinimap();
   if(tut&&hudTick%6===0) setText('tutProg',tutProgress());
 }
@@ -8930,6 +9564,8 @@ function loop(now){
     if(state==='playing'||state==='home'||state==='homeui'||state==='menu') updateWeather(dt);
     if((state==='menu')!==menuFlag){ menuFlag=state==='menu'; gameWrapEl.classList.toggle('inMenu',menuFlag); }
     render();
+    const noCur=state==='playing'&&cine<=0;   // mientras juegas, la mira del canvas sustituye al cursor
+    if(noCur!==cv._noCur){ cv._noCur=noCur; cv.classList.toggle('noCur',noCur); }
   }catch(err){ console.error('[ISLEFORGE]',err); }
   requestAnimationFrame(loop);
 }
@@ -8965,6 +9601,7 @@ window.addEventListener('keydown',e=>{
   if(k==='t') deployTurret();
   if(k==='q') deploySquad();
   if(k==='x') callOrbHere();
+  if(k==='g') startEscort();
 });
 window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
 window.addEventListener('blur',()=>{ for(const k in keys) delete keys[k]; mouse.down=false; mouse.right=false; });
