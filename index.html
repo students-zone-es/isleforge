@@ -474,7 +474,8 @@ function normalizeSave(s){
   s.minerals=Object.assign({},s.minerals||{});
   if(s.vol==null) s.vol=1;
   if(s.shake==null) s.shake=true;
-  if(s.mira==null) s.mira=1;   // tamaño de la mira: 0 normal, 1 grande, 2 enorme
+  if(s.mira==null) s.mira=1;
+  if(s.miraEst==null) s.miraEst=0;   // color de la mira: 0 adaptativa, 1 clara, 2 oscura   // tamaño de la mira: 0 normal, 1 grande, 2 enorme
   return s;
 }
 function loadSave(){
@@ -485,7 +486,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, minerals:p.minerals });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -1660,11 +1661,13 @@ function respawnPlayer(){
 let shotFac='r', shotSrc=null;   // bando de quien dispara ahora: 'r' robots, 'b' bandidos (Mundos 3-4: se pelean entre ellos)
 function fireBullet(x,y,a,owner,o){
   o=o||{};
-  const sp=o.speed||7;
+  const sp=o.speed||7, src=o.src||(owner==='e'?shotSrc:null);
+  if(src&&Math.hypot(x-src.x,y-src.y)<(src.radius||8)+8){ const gs=gunSide(src); x+=Math.cos(a+Math.PI/2)*gs; y+=Math.sin(a+Math.PI/2)*gs; }   // sale del arma, no del centro
+  if(!(src&&src.def&&src.def.role==='sniper')) addMuzzle(x,y,a,owner,src,o);   // los francotiradores llevan silenciador: sin fogonazo
   bullets.push({x,y,ox:x,oy:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,owner,dmg:o.dmg||5,radius:o.radius||3,life:o.life||90,
     pierce:o.pierce!=null?o.pierce:(owner==='p'?player.pierce:0),
     frag:o.frag!=null?o.frag:(owner==='p'?player.fragment:0),
-    splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src:o.src||(owner==='e'?shotSrc:null), hitList:null,
+    splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src, hitList:null,
     fac:owner==='e'?(o.fac||shotFac):null});
 }
 function updateBullets(dt){
@@ -3392,6 +3395,12 @@ const MAP_MORTAR=[
 ".kmmkkkkkmmk..",
 "kmmk.....kmmk.",
 ".kk.......kk.."];
+/* A qué lado del cuerpo lleva el arma cada uno (px; + = mano derecha), para que la bala y el fogonazo salgan de ahí */
+function gunSide(u){
+  if(u.kind==='soldier') return 2;
+  const lk=u.def&&u.def.look, sc=(u.radius||8)*2/12;
+  return lk==='gunner'||lk==='shieldbot'?-3.5*sc:lk==='spotter'?4*sc:lk==='bandit'?3.5:0;
+}
 function robotSprite(look,color){
   const base={k:'#140808',m:'#4a4e55',V:VISOR,W:'#c9ccd2',b:'#1a1a1a'};
   switch(look){
@@ -3600,6 +3609,11 @@ function drawEnemy(en){
     if(d.look==='brawler' && (en.windup>0)){ ang+=Math.sin(t*1.2)*0.15; }
     blit(spr,rx,ry,ang,sc);
     if(d.look==='spotter'){
+      ctx.save(); ctx.translate(rx,ry); ctx.rotate(ang);   // minicañón en el costado derecho (de ahí salen sus balas)
+      ctx.fillStyle='#140808'; ctx.fillRect(2*sc,2.6*sc,8*sc,2.8*sc);
+      ctx.fillStyle='#4a4e55'; ctx.fillRect(2.5*sc,3.1*sc,7*sc,1.8*sc); ctx.fillStyle='#8a9098'; ctx.fillRect(2.5*sc,3.1*sc,7*sc,0.6*sc);
+      ctx.fillStyle=VISOR; ctx.fillRect(9*sc,3.1*sc,1*sc,1.8*sc);
+      ctx.restore();
       ctx.save(); ctx.translate(en.x,en.y); ctx.rotate(en.dish);
       ctx.fillStyle='#e8e8e8'; ctx.fillRect(-1.5,-9,3,18); ctx.fillStyle=VISOR; ctx.fillRect(-1.5,-9,3,3);
       ctx.restore();
@@ -4006,16 +4020,76 @@ function drawLobs(){
     }
   }
 }
+/* Balas de la hoja del usuario balas-normales.jpg, encogidas con tools/extraer_balas.py (miran a la derecha y se
+   giran según vuelan): oro = tu ametralladora, pesada = cañón, azul = aliados, roja = enemigos */
+const BULLET_SPR={
+  oro:{"pal":["#ffe8af","#bb8134","#c4a654","#efbe55","#965f31"],"rows":["012220.","2133332","4411111","044443."]},
+  pesada:{"pal":["#7b181c","#b5a8ab","#f3eeef","#d6564a","#b62523"],"rows":[".......000...","121111133340.","1111111333333","1221111443330","1..1111444440",".......00000.","...1111000..."]},
+  roja:{"pal":["#c33642","#cb4f55","#f2aead","#9e222f","#f86d75"],"rows":[".....00011112",".331114444422","..44433301114"]},
+  azul:{"pal":["#4282da","#2d62b9","#68beea","#314e91","#e7fefe"],"rows":["....000010102","3110022222242","..00111111102"]}};
+const bulletCv={};
+function bulletSprite(n){
+  if(bulletCv[n]) return bulletCv[n];
+  const s=BULLET_SPR[n], c=document.createElement('canvas'), g=c.getContext('2d');
+  c.width=s.rows[0].length; c.height=s.rows.length;
+  s.rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++) if(r[x]!=='.'){ g.fillStyle=s.pal[parseInt(r[x],36)]; g.fillRect(x,y,1,1); } });
+  return bulletCv[n]=c;
+}
 function drawBullets(){
   for(const b of bullets){
-    let col;
-    if(b.owner==='p') col=b.kind==='shell'?'#ffd76e':'#ffffff';
-    else col=b.kind==='shell'?'#ff8a3a':'#ff5a6a';
-    const q=b.kind==='shell'?7:b.radius>=3.5?5:4;
-    ctx.fillStyle=col;
-    ctx.fillRect(Math.round(b.x-q/2),Math.round(b.y-q/2),q,q);
-    ctx.globalAlpha=0.35; ctx.fillRect(Math.round(b.x-b.vx*0.8-q/4),Math.round(b.y-b.vy*0.8-q/4),q/2,q/2); ctx.globalAlpha=1;
+    if(b.owner==='e'&&b.kind==='shell'){   // cañonazo enemigo: la hoja no trae uno que no se confunda con el tuyo
+      ctx.fillStyle='#ff8a3a'; ctx.fillRect(Math.round(b.x-3.5),Math.round(b.y-3.5),7,7);
+      ctx.globalAlpha=0.35; ctx.fillRect(Math.round(b.x-b.vx*0.8-2),Math.round(b.y-b.vy*0.8-2),3,3); ctx.globalAlpha=1;
+      continue;
+    }
+    const n=b.owner==='p'?(b.kind==='shell'?'pesada':b.src?'azul':'oro'):'roja', c=bulletSprite(n);
+    ctx.save(); ctx.translate(Math.round(b.x),Math.round(b.y)); ctx.rotate(Math.atan2(b.vy,b.vx));
+    if(b.owner==='e'&&b.radius>=4.5) ctx.scale(2,2);   // las balas gordas de los jefes, al doble
+    if(n==='oro'||n==='pesada'){   // estela clara detrás de tus balas: el dorado se perdía sobre la arena
+      const L=Math.min(14,Math.hypot(b.vx,b.vy)*1.5), hh=n==='pesada'?3:2;
+      ctx.globalCompositeOperation='lighter'; ctx.fillStyle='rgba(255,226,140,0.5)'; ctx.fillRect(-(c.width>>1)-L,-(hh>>1),L+2,hh);
+      ctx.globalCompositeOperation='source-over';
+    }
+    ctx.drawImage(c,-(c.width>>1),-(c.height>>1));
+    ctx.restore();
   }
+}
+/* FOGONAZOS: cada disparo (menos los de francotirador, con silenciador) suelta un destello en la boca del arma y una
+   pequeña luz que ilumina alrededor; se pintan encima de la oscuridad del clima, así de noche o con tormenta se notan más.
+   Robots: destello rojizo (armas de energía). Tú, tus aliados y los bandidos: amarillo de pólvora. */
+const muzzles=[], muzzleLightCv={};
+function addMuzzle(x,y,a,owner,src,o){
+  const r=src&&src.radius||8;
+  if(src&&Math.hypot(x-src.x,y-src.y)<r){ x+=Math.cos(a)*(r+3); y+=Math.sin(a)*(r+3); }   // los que disparan desde dentro del cuerpo: a la boca del arma (sin perder el lado)
+  if(muzzles.length>80) muzzles.shift();
+  muzzles.push({x,y,a,t0:t,big:o.kind==='shell'||(o.radius||3)>=4.5,red:owner==='e'&&!(src&&src.def&&src.def.fac==='b'),w:rand(0.7,1.2)});
+}
+function muzzleLight(red){
+  if(muzzleLightCv[red]) return muzzleLightCv[red];
+  const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'), gr=g.createRadialGradient(32,32,0,32,32,32);
+  gr.addColorStop(0,red?'rgba(255,170,150,1)':'rgba(255,236,190,1)'); gr.addColorStop(0.35,red?'rgba(255,90,60,0.45)':'rgba(255,190,110,0.45)'); gr.addColorStop(1,'rgba(255,120,60,0)');
+  g.fillStyle=gr; g.fillRect(0,0,64,64);
+  return muzzleLightCv[red]=c;
+}
+function drawMuzzles(cx,cy){
+  for(let i=muzzles.length-1;i>=0;i--) if(t-muzzles[i].t0>6||t<muzzles[i].t0) muzzles.splice(i,1);
+  if(!muzzles.length) return;
+  const dark=clamp(wAmt('rain')*0.5+wAmt('storm')+wAmt('fog')*0.4+wAmt('smoke')*0.5+wAmt('ash')*0.4+wAmt('sand')*0.3,0,1);
+  ctx.save(); ctx.translate(-cx,-cy); ctx.globalCompositeOperation='lighter';
+  for(const m of muzzles){
+    const age=t-m.t0, f=1-age/6, R=(m.big?62:36)*(0.8+0.2*f);
+    ctx.globalAlpha=(0.14+0.36*dark)*f; ctx.drawImage(muzzleLight(m.red),m.x-R,m.y-R,R*2,R*2);   // mini-iluminación
+    if(age>=3) continue;
+    const k=1-age/3, s=m.big?1.7:1;   // destello: cono hacia delante, chispas a los lados y núcleo blanco
+    ctx.globalAlpha=1; ctx.save(); ctx.translate(Math.round(m.x),Math.round(m.y)); ctx.rotate(m.a); ctx.scale(s,s);
+    ctx.fillStyle=m.red?'#ff5a3a':'#ff9a2a';
+    ctx.beginPath(); ctx.moveTo(-1,-3*k-0.5); ctx.lineTo((8*k+2)*m.w,0); ctx.lineTo(-1,3*k+0.5); ctx.closePath(); ctx.fill();
+    ctx.fillRect(1,-Math.round(4*k)-1,2,1); ctx.fillRect(1,Math.round(4*k),2,1);
+    ctx.fillStyle=m.red?'#ffb09a':'#ffe08a'; ctx.beginPath(); ctx.moveTo(0,-1.5*k-0.5); ctx.lineTo((5*k+1)*m.w,0); ctx.lineTo(0,1.5*k+0.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#fffbe8'; ctx.fillRect(-1,-1,3,2);
+    ctx.restore();
+  }
+  ctx.restore();
 }
 function drawTurretsSoldiers(){
   for(const tu of turrets){
@@ -4214,6 +4288,7 @@ function render(){
   drawPopups();
   ctx.restore();
   drawWeather(player&&player.alive?player.x-cx:W/2, player&&player.alive?player.y-cy:H/2);
+  drawMuzzles(cx,cy);
   drawScreenFx();
   drawReticle();
 }
@@ -4231,20 +4306,31 @@ function drawEscortRoute(){
 }
 /* MIRA: se dibuja en el canvas con borde oscuro para que no se pierda sobre ningún fondo.
    Roja sobre un enemigo, dorada sobre un rehén; se cierra un poco al disparar. */
+let retLum=0.3, retDark=false, retN=0;
 function drawReticle(){
   if(state!=='playing'||cine>0) return;
   const x=Math.round(clamp(mouse.sx,2,W-2)), y=Math.round(clamp(mouse.sy,2,H-2)), wx=mouse.x, wy=mouse.y;
-  let col='#ffffff';
-  if(enemies.some(e=>e.alive&&!e.practice&&!e.hidden&&Math.hypot(e.x-wx,e.y-wy)<e.radius+8)||(boss&&boss.alive&&Math.hypot(boss.x-wx,boss.y-wy)<boss.radius+8)) col='#ff4757';
-  else if(pows.some(p=>p.alive&&Math.hypot(p.x-wx,p.y-wy)<14)) col='#ffd76e';
+  // OPCIONES → COLOR MIRA. Adaptativa: mira lo claro que es el fondo bajo el puntero (cada 4 fotogramas) y cambia de diseño
+  if(!save.miraEst){
+    if(retN++%4===0){ try{
+      const kk=cv.width/W, d=mainCtx.getImageData(Math.max(0,Math.round((x-14)*kk)),Math.max(0,Math.round((y-14)*kk)),Math.round(28*kk),Math.round(28*kk)).data;
+      let sum=0, n=0; for(let i=0;i<d.length;i+=16){ sum+=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; n++; }
+      if(n) retLum=lerp(retLum,sum/n/255,0.5);
+    }catch(e){} }
+    retDark=retLum>0.44?true:retLum<0.39?false:retDark;   // por encima de ~0.45 de brillo se lee mejor oscura; con margen para que no parpadee
+  } else retDark=save.miraEst===2;
+  const enemyOn=enemies.some(e=>e.alive&&!e.practice&&!e.hidden&&Math.hypot(e.x-wx,e.y-wy)<e.radius+8)||(boss&&boss.alive&&Math.hypot(boss.x-wx,boss.y-wy)<boss.radius+8);
+  const powOn=!enemyOn&&pows.some(p=>p.alive&&Math.hypot(p.x-wx,p.y-wy)<14);
+  // diseño claro (fondos oscuros): barras blancas con borde negro · diseño oscuro (niebla, arena): barras negras, borde blanco y aro neón
+  const col=enemyOn?(retDark?'#d4142a':'#ff4757'):powOn?(retDark?'#a8780a':'#ffd76e'):(retDark?'#10131c':'#ffffff');
+  const edge=retDark?'#ffffff':'rgba(0,0,0,0.9)', ringIn=retDark?VISOR:col;
   const k=[1,1.6,2.3][save.mira==null?1:save.mira];   // OPCIONES → MIRA
   const gap=Math.round(((mouse.down||keys[' ']?5:7)+Math.sin(t*0.12)*0.6)*k), L=Math.round(6*k), b=Math.max(2,Math.round(2*k)), h=b>>1, o=Math.max(1,Math.round(k));
   const bars=[[x-h,y-gap-L,b,L],[x-h,y+gap,b,L],[x-gap-L,y-h,L,b],[x+gap,y-h,L,b],[x-h,y-h,b,b]];
   ctx.save();
-  // aro con borde oscuro para que se vea sobre cualquier suelo
-  ctx.lineWidth=Math.max(1,k)+2; ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(x,y,gap+L+2*k,0,Math.PI*2); ctx.stroke();
-  ctx.lineWidth=Math.max(1,k); ctx.strokeStyle=col; ctx.globalAlpha=0.7; ctx.beginPath(); ctx.arc(x,y,gap+L+2*k,0,Math.PI*2); ctx.stroke();
-  ctx.globalAlpha=1; ctx.fillStyle='rgba(0,0,0,0.9)';
+  ctx.lineWidth=Math.max(1,k)+2; ctx.strokeStyle=retDark?'rgba(10,12,20,0.85)':'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(x,y,gap+L+2*k,0,Math.PI*2); ctx.stroke();
+  ctx.lineWidth=Math.max(1,k); ctx.strokeStyle=ringIn; ctx.globalAlpha=retDark?1:0.7; ctx.beginPath(); ctx.arc(x,y,gap+L+2*k,0,Math.PI*2); ctx.stroke();
+  ctx.globalAlpha=1; ctx.fillStyle=edge;
   for(const [bx,by,bw,bh] of bars) ctx.fillRect(bx-o,by-o,bw+2*o,bh+2*o);
   ctx.fillStyle=col;
   for(const [bx,by,bw,bh] of bars) ctx.fillRect(bx,by,bw,bh);
@@ -8710,6 +8796,7 @@ function menuBuildItems(){
     {id:'opt_sound',label:'SONIDO',val:save.sound?'SÍ':'NO',sub:'Activa o silencia todos los efectos'},
     {id:'opt_vol',label:'VOLUMEN',bar:vol,sub:'← → para subir o bajar'},
     {id:'opt_mira',label:'MIRA',val:['NORMAL','GRANDE','ENORME'][save.mira],sub:'Tamaño del puntero al apuntar'},
+    {id:'opt_miraEst',label:'COLOR MIRA',val:['ADAPTATIVA','CLARA','OSCURA'][save.miraEst],sub:'Adaptativa: cambia sola para verse sobre niebla, arena o suelo oscuro'},
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
     {id:'back',label:'← VOLVER'}];
@@ -8806,6 +8893,7 @@ function menuActivate(){
     case 'back': { const from=menuView; S.pickup(); menuView='main'; menuItems=menuBuildItems(); menuIdx=Math.max(0,menuItems.findIndex(x=>x.id===(from==='confirm'?'new':from))); renderMainMenu(); break; }
     case 'opt_sound': save.sound=!save.sound; saveSave(); updateSoundBtn(); S.pickup(); renderMainMenu(); break;
     case 'opt_vol': menuOption(1,true); break;
+    case 'opt_miraEst': save.miraEst=(save.miraEst+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_mira': save.mira=(save.mira+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_shake': save.shake=save.shake===false; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_full':
@@ -8821,11 +8909,11 @@ function menuOption(dir,wrap){
     let v=Math.round(((save.vol==null?1:save.vol)+dir*0.1)*10)/10;
     if(wrap&&v>1) v=0;
     save.vol=clamp(v,0,1); saveSave(); renderMainMenu(); S.pickup();
-  } else if(it.id==='opt_mira'){ save.mira=(save.mira+dir+3)%3; saveSave(); renderMainMenu(); S.pickup(); }
+  } else if(it.id==='opt_mira'||it.id==='opt_miraEst'){ const f=it.id==='opt_mira'?'mira':'miraEst'; save[f]=(save[f]+dir+3)%3; saveSave(); renderMainMenu(); S.pickup(); }
   else if(it.id==='opt_sound'||it.id==='opt_shake'||it.id==='opt_full') menuActivate();
 }
 function newGame(){
-  const keep={sound:save.sound,vol:save.vol,shake:save.shake,mira:save.mira};
+  const keep={sound:save.sound,vol:save.vol,shake:save.shake,mira:save.mira,miraEst:save.miraEst};
   try{ localStorage.removeItem(SAVE_KEY); localStorage.removeItem(OLD_SAVE_KEY); }catch(e){}
   save=loadSave(); Object.assign(save,keep); saveSave();
   inHome=false; opsSel=null; opsReveal=null; opsAnim=null; menuCurFor='';
