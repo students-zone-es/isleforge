@@ -2596,6 +2596,7 @@ function makeEnemy(id,x,y,sid){
     carrier:wave>=2&&Math.random()<(def.purple||0)*(world?0.5:1),vacio:null,vacioUsed:false,
     alarmCd:0,glitch:0,ramT:0,ramA:0,ramHits:null,crushCd:0,walk:0,tread:0,orbitA:null,bombCd:rand(200,320),dish:0,recoil:0};
   en.aim=en.angle;
+  if(def.look==='tank'){ en.speedMax*=0.6; en.accel*=0.55; }   // tanque de verdad: lento y pesado (al embestir no: va a 5,4)
   return en;
 }
 function addEnemy(id,x,y,sid,noCount){
@@ -2806,7 +2807,7 @@ function updateEnemy(en,dt){
   if(d.drive) d.drive(en,dt);   // vehículos con física propia (moto): convierten la meta de la IA en manillar y gas
   const sp=Math.hypot(en.vx,en.vy);
   if(d.tank){
-    if(sp>0.3 && en.ramT<=0) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),0.08*dt);
+    if(sp>0.3 && en.ramT<=0) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),(d.look==='tank'?0.045:0.08)*dt);   // el casco gira despacio
     const fx=Math.cos(en.angle), fy=Math.sin(en.angle), along=en.vx*fx+en.vy*fy;
     if(en.ramT<=0){ en.vx=lerp(en.vx,fx*along,0.15); en.vy=lerp(en.vy,fy*along,0.15); }
     en.tread+=along*dt*0.5;
@@ -2885,6 +2886,13 @@ function aiCombat(en,dt){
   if(en.tame){   // enemigo de prácticas del tutorial: se aparta pero no ataca
     if(dd<220){ const [nx,ny]=vnorm(en.x-tg.x,en.y-tg.y); accelerate(en,nx,ny,dt,0.6); } else { en.vx*=0.9; en.vy*=0.9; }
     return;
+  }
+  // TANQUES: con poca vida embisten a la desesperada (golpe masivo que te lanza por los aires)
+  if(d.look==='tank'){
+    if(updateRam(en,tg,dt)) return;
+    if(en.hp<en.maxHp*0.4&&tg.u===player&&los&&dd>60&&dd<360&&en.atkCd<=0&&canAttack(en)&&pathClear(en.x,en.y,tg.x,tg.y,en.radius*0.8)){
+      startRam(en,40); popup(en.x,en.y-30,'¡EMBESTIDA DESESPERADA!','#ff4757',13); return;
+    }
   }
   switch(d.role){
     case 'melee': combatMelee(en,tg,dd,los,dt); break;
@@ -3125,8 +3133,9 @@ function updateRam(en,tg,dt){
       if(en.ramHits.includes(u)) continue;
       if(dist(en,u)<en.radius+u.radius+4){
         en.ramHits.push(u);
-        if(u===player) damagePlayer(en.def.dmg); else hurtFriendly(u,en.def.dmg);
-        push(u,en.x,en.y,8); shake=Math.max(shake,7); spawnDebris(u.x,u.y,6,'#ffd76e');
+        if(u===player){ damagePlayer(Math.max(45,en.def.dmg*2.5)); launchPlayer(en.x,en.y,13); popup(player.x,player.y-34,'¡ARROLLADO!','#ff4757',15); }
+        else { hurtFriendly(u,Math.max(40,en.def.dmg*2)); push(u,en.x,en.y,8); }
+        shake=Math.max(shake,12); spawnDebris(u.x,u.y,10,'#ffd76e'); S.stomp();
       }
     }
     if(en.ramT<=0) en.atkCd=160;
@@ -3142,8 +3151,7 @@ function updateRam(en,tg,dt){
   return false;
 }
 function combatRam(en,tg,dd,los,aimed,dt){
-  if(updateRam(en,tg,dt)) return;
-  if(los && dd<340 && dd>60 && en.atkCd<=0 && canAttack(en) && pathClear(en.x,en.y,tg.x,tg.y,en.radius*0.8)){ startRam(en,40); return; }
+  if(updateRam(en,tg,dt)) return;   // (solo embiste con poca vida: lo decide aiCombat)
   steerTo(en,tg.x,tg.y,dt,0.9);
   en.fireCd-=dt;
   if(los && aimed && en.fireCd<=0 && dd<300 && canAttack(en)){
@@ -3153,8 +3161,7 @@ function combatRam(en,tg,dd,los,aimed,dt){
 }
 function combatSiege(en,tg,dd,los,aimed,dt){
   if(updateRam(en,tg,dt)) return;
-  // Si te acercas demasiado, te embiste; si no, se queda a distancia disparando
-  if(dd<140 && los && en.atkCd<=0 && canAttack(en)){ startRam(en,24); return; }
+  // se queda a distancia disparando (solo embiste con poca vida: lo decide aiCombat)
   const [mn,mx]=en.def.prefer;
   if(!los||dd>mx+40) steerTo(en,tg.x,tg.y,dt,0.85);
   else if(dd<mn){ const [nx,ny]=vnorm(en.x-tg.x,en.y-tg.y); accelerate(en,nx,ny,dt,0.8); }
@@ -4231,7 +4238,7 @@ function drawEnemyLamps(cx,cy){
   const L=lampSprite(); ctx.save(); ctx.translate(-cx,-cy); ctx.globalCompositeOperation='lighter';
   for(const en of enemies){
     const d=en.def;
-    if(!en.alive||en.hidden||d.air||d.role==='structure'||d.role==='spawner'||d.role==='dummy'||d.role==='turret'||d.role==='sniper') continue;
+    if(!en.alive||en.hidden||d.air||d.tank||d.role==='structure'||d.role==='spawner'||d.role==='dummy'||d.role==='turret'||d.role==='sniper') continue;
     if(en.x<cx-200||en.x>cx+W+200||en.y<cy-200||en.y>cy+H+200) continue;
     const a=(d.tank||en.ai==='combat')&&en.aim!=null?en.aim:en.angle, ox=en.x+Math.cos(a)*en.radius*0.6, oy=en.y+Math.sin(a)*en.radius*0.6;
     ctx.globalAlpha=Math.min(1,(0.14+0.28*dk)*(en.ai==='combat'?1.15:1));
