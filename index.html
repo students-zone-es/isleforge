@@ -1630,6 +1630,14 @@ function activateCloak(){
 /* Los de cuerpo a cuerpo ven venir las balas de frente: a veces las ESQUIVAN (paso lateral) o les hacen PARRY (la
    devuelven hacia ti, más floja). Los obuses de cañón no se pueden desviar. Tras una, tardan un poco en poder otra. */
 function meleeEvade(en,b){
+  // ESCUDO HUMANO: lo que le llega de frente al mecánico se lo come el rehén
+  if(en.shieldPow&&en.shieldPow.alive&&Math.abs(angDiff(en.angle,Math.atan2(b.oy-en.y,b.ox-en.x)))<1.1) return 'shield';
+  // MECÁNICO: esquiva como un mosquito, venga la bala de donde venga
+  if(en.def.role==='mechanic'){
+    if((en.evadeT||0)>t||en.stun>0||Math.random()>=0.45) return false;
+    en.evadeT=t+14; const pa=Math.atan2(b.vy,b.vx)+Math.PI/2*(Math.random()<0.5?-1:1); en.vx+=Math.cos(pa)*6; en.vy+=Math.sin(pa)*6;
+    popup(en.x,en.y-22,'ESQUIVA','#cfd6df',10); return 'dodge';
+  }
   if(en.def.role!=='melee'||en.ai!=='combat'||en.stun>0||(en.evadeT||0)>t) return false;
   const from=Math.atan2(b.oy-en.y,b.ox-en.x); if(Math.abs(angDiff(en.angle,from))>1.2) return false;
   const r=Math.random();
@@ -1731,6 +1739,7 @@ function updateBullets(dt){
             const ev=meleeEvade(en,b);
             if(ev==='dodge'){ (b.hitList||(b.hitList=[])).push(en); continue; }
             if(ev==='parry') break;   // la bala ahora es suya y vuelve hacia ti
+            if(ev==='shield'){ const pw=en.shieldPow; hurtFriendly(pw,b.dmg); if(pw.alive&&(en.shieldT||0)<t){ en.shieldT=t+40; popup(pw.x,pw.y-18,'¡CUIDADO, EL REHÉN!','#ff6b6b',11); } dead=true; break; }
             damageEnemy(en,b.dmg,{src:b.src||player, bx:b.ox, by:b.oy, frag:b.frag});
             if(b.splash){ explode(b.x,b.y,b.splash,b.dmg*0.5,'p',{exclude:en,stunMul:b.stunMul}); dead=true; break; }
             if(b.pierce>0){ b.pierce--; (b.hitList||(b.hitList=[])).push(en); } else { dead=true; break; }
@@ -1753,7 +1762,7 @@ function updateBullets(dt){
         }
         if(!dead){
           const u=hitFriendly(b.x,b.y,b.radius);
-          if(u){ hurtFriendly(u,b.dmg);
+          if(u&&!(u.held&&u.held===b.src)){ hurtFriendly(u,b.dmg);   // (el mecánico no le da a su propio rehén-escudo)
             if(b.pierce>0){ b.pierce--; b.x+=b.vx*2; b.y+=b.vy*2; }   // bala perforante: atraviesa al soldado
             else { dead=true; if(b.splash) explode(b.x,b.y,b.splash,0,'e',{}); } }
         }
@@ -2775,7 +2784,7 @@ function updateEnemy(en,dt){
   if(en.flash>0) en.flash-=dt;
   shotFac=d.fac||'r'; shotSrc=en;
   // AUTORREPARACIÓN de las máquinas robot (drones, mechas y tanques): 4 s sin recibir daño y se van reparando
-  if(d.repair==null) d.repair=!d.fac&&(!!d.air||!!d.tank||['gunner','brawler','spotter','mortar','shieldbot'].includes(d.look));
+  if(d.repair==null) d.repair=(!d.fac||d.fac==='r')&&d.role!=='mechanic'&&(!!d.air||!!d.tank||['gunner','brawler','spotter','mortar','shieldbot','minidroid'].includes(d.look));
   if(d.repair&&en.hp<en.maxHp&&t-(en.hurtT||-1e9)>240){
     en.hp=Math.min(en.maxHp,en.hp+en.maxHp*0.0006*dt);
     if(Math.random()<0.08*dt) particles.push({x:en.x+rand(-en.radius,en.radius),y:en.y+rand(-en.radius,en.radius),vx:0,vy:-0.6,life:22,maxLife:22,color:'#3ee67a',size:2});
@@ -2936,14 +2945,18 @@ function turretAI(en,dt){
    de cerca, tras un aviso) golpea el suelo: onda de área con poco daño y, si te pilla DE LLENO, el 75% de tu vida y te
    aturde. Con más nivel (mundo, veces que te venció, refuerzos) la zona crece y el golpe de lleno llega al 95%. */
 function meleeLvl(en){ return (world?world.id:1)+(en.vengeLvl||0)*2+(en.reinf&&world?Math.floor((world.reinfLvl||0)/2):0); }
-function crushZone(en){ const L=meleeLvl(en); return {L,R:80+10*(L-1),inner:26+2*(L-1)}; }
+function crushZone(en){ const L=meleeLvl(en); return en.def.crushMini?{L,R:50,inner:18}:{L,R:80+10*(L-1),inner:26+2*(L-1)}; }
+/* MINI-APLASTAMIENTO (mini-androide): el daño y el aturdimiento dependen de tu vehículo
+   (el Jackal, ligero, vuelca y queda aturdido más rato pero apenas se daña; el tanque, pesado, casi ni se inmuta) */
+const MINI_CRUSH={mech:[0.05,50],tank:[0.03,15],jeep:[0.02,70]};
 function crushBlow(en){
   const {L,R,inner}=crushZone(en), x=en.cx, y=en.cy, p=player;
   shake=Math.max(shake,14); S.stomp(); spawnDebris(x,y,16,'#bbb');
   rings.push({x,y,r:inner,max:R,life:22,maxLife:22,color:'#ff6b3a'});
   if(p.alive){
-    const d=Math.hypot(p.x-x,p.y-y);
-    if(d<inner+p.radius){ damagePlayer(p.maxHp*Math.min(0.95,0.75+0.05*(L-1))); stunPlayer(70+10*(L-1)); popup(p.x,p.y-36,'¡APLASTAMIENTO!','#ff4757',16); }
+    const d=Math.hypot(p.x-x,p.y-y), mc=en.def.crushMini&&(MINI_CRUSH[p.ch.id]||MINI_CRUSH.mech);
+    if(mc){ if(d<inner+p.radius){ damagePlayer(p.maxHp*mc[0]/(p.ch.hurt||1)); stunPlayer(mc[1]); popup(p.x,p.y-36,'¡MINI-APLASTAMIENTO!','#ff8a3a',13); } else if(d<R+p.radius) push(p,x,y,4); }
+    else if(d<inner+p.radius){ damagePlayer(p.maxHp*Math.min(0.95,0.75+0.05*(L-1))); stunPlayer(70+10*(L-1)); popup(p.x,p.y-36,'¡APLASTAMIENTO!','#ff4757',16); }
     else if(d<R+p.radius){ damagePlayer(p.maxHp*Math.min(0.3,0.1+0.03*(L-1))); push(p,x,y,7); }
   }
   for(const u of friendlies()) if(!u.air&&Math.hypot(u.x-x,u.y-y)<R+u.radius){ hurtFriendly(u,20); push(u,x,y,6); }
@@ -2954,22 +2967,23 @@ function meleeCrush(en,tg,dd,los,dt){   // devuelve true mientras salta o prepar
   if(en.crushCd>0) en.crushCd-=dt;
   if(en.crushWind>0){   // agachado antes de saltar, o con el puño en alto antes del golpe de cerca
     en.crushWind-=dt; en.vx*=0.6; en.vy*=0.6; en.angle=turnTo(en.angle,Math.atan2(en.cy-en.y,en.cx-en.x),0.2*dt);
-    if(en.crushWind<=0){ if(en.leaping){ en.leapT=36; en.sx=en.x; en.sy=en.y; S.rev(); } else { crushBlow(en); en.crushCd=200; en.atkCd=60; } }
+    if(en.crushWind<=0){ if(en.leaping){ en.leapDur=en.def.crushMini?22:36; en.leapT=en.leapDur; en.sx=en.x; en.sy=en.y; S.rev(); } else { crushBlow(en); en.crushCd=200; en.atkCd=60; } }
     return true;
   }
   if(en.leapT>0){
-    en.leapT-=dt; const k=1-Math.max(0,en.leapT)/36;
-    en.x=lerp(en.sx,en.cx,k); en.y=lerp(en.sy,en.cy,k); en.leapZ=Math.sin(k*Math.PI)*60; en.vx=en.vy=0;
+    en.leapT-=dt; const k=1-Math.max(0,en.leapT)/(en.leapDur||36);
+    en.x=lerp(en.sx,en.cx,k); en.y=lerp(en.sy,en.cy,k); en.leapZ=Math.sin(k*Math.PI)*(en.def.crushMini?36:60); en.vx=en.vy=0;
     if(en.leapT<=0){ en.leapZ=0; en.leaping=false; unstick(en); crushBlow(en); en.leapCd=320; en.crushCd=Math.max(en.crushCd||0,120); en.atkCd=50; }
     return true;
   }
   if(tg.u!==player||!player.alive||!canAttack(en)) return false;
-  if(dd>200&&dd<480&&los&&(en.leapCd||0)<=0){   // estás lejos: salta hacia donde vas a estar
+  const mini=en.def.crushMini;
+  if(dd>(mini?110:200)&&dd<(mini?300:480)&&los&&(en.leapCd||0)<=0){   // estás lejos: salta hacia donde vas a estar
     let cx=player.x+(player.vx||0)*18, cy=player.y+(player.vy||0)*18;
     const c=Math.floor(cx/TILE), r=Math.floor(cy/TILE);
     if(SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,4); if(!nb) return false; cx=nb[0]*TILE+15; cy=nb[1]*TILE+15; }
     if(!pathClear(en.x,en.y,cx,cy,en.radius*0.6)){ en.leapCd=60; return false; }
-    en.cx=cx; en.cy=cy; en.leaping=true; en.crushWind=26; popup(en.x,en.y-28,'¡SALTA!','#ff8a3a',12);
+    en.cx=cx; en.cy=cy; en.leaping=true; en.crushWind=mini?16:26; popup(en.x,en.y-28,'¡SALTA!','#ff8a3a',12);
     return true;
   }
   if(dd<70&&los&&(en.crushCd||0)<=0&&en.windup<=0&&en.lunge<=0&&Math.random()<0.02*dt){   // de cerca: golpe al suelo con aviso
@@ -5650,6 +5664,7 @@ function spawnEncounter(e){
     if(EDEFS[id].role==='turret'){ en.static=true; en.ai='patrol'; en.aim=Math.PI/2; }
     if(o&&o.hunt&&player.alive){ en.ai='hunt'; en.lastKnown={x:player.x,y:player.y}; en.spawnGrace=40; }
   }
+  squadInject(e,sid);   // mini-androides y mecánicos de maniobras (p9l_squad.js)
   // CAMALEÓN en todos los mundos: a veces acompaña a los Trituradores (cuerpo a cuerpo) para ayudarles (máx. 3 por mundo;
   // el Mundo 1 ya trae los suyos)
   const brawl=e.units.find(u=>EDEFS[u[0]]&&EDEFS[u[0]].role==='melee');
@@ -9188,6 +9203,106 @@ function drawBossExtra(){
     ctx.beginPath(); ctx.moveTo(L.x,L.y); ctx.lineTo(L.x+Math.cos(L.a)*560,L.y+Math.sin(L.a)*560); ctx.stroke();
   }
   ctx.restore();
+}
+/* ===================== ESCUADRA DE MANIOBRAS: mini-androides y mecánicos =====================
+   · MINI-ANDROIDE: robot pequeño y rapidísimo que va a por ti en zigzag. Pegado a ti suelta una TRIPLE PATADA (la tercera
+     te empuja) y, de un poco más lejos, salta con un MINI-APLASTAMIENTO cuyo daño y aturdimiento dependen de tu vehículo.
+   · MECÁNICO DE MANIOBRAS: soldado humano nervioso como un mosquito (zigzag y esquiva casi la mitad de tus balas). Agarra a
+     un rehén y lo usa de ESCUDO (lo que le dispares de frente le da al rehén: flanquéalo) o corre a REPARAR las máquinas
+     dañadas (drones, mechas y tanques), mucho más rápido que su autorreparación.
+   Se añaden solos a los grupos de enemigos de todos los mundos (squadInject, desde spawnEncounter). */
+Object.assign(EDEFS,{
+  minidroid:{name:'MINI-ANDROIDE', role:'minidroid', hp:12, speed:4.4, accel:0.7, radius:8, mass:0.6, view:360, fov:2.8, dmg:4, score:140, work:3,
+    color:'#5a6a7a', look:'minidroid', purple:0, crushMini:true, combat:minidroidCombat, draw:drawMinidroid},
+  mechanic:{name:'MECÁNICO DE MANIOBRAS', role:'mechanic', fac:'r', hp:18, speed:3.9, accel:0.7, radius:9, mass:0.8, view:380, fov:2.6, dmg:5, score:180, work:4,
+    color:'#e07a2a', look:'mechanic', purple:0, update:mechanicUpdate, combat:mechanicCombat, onDeath:mechanicDeath,
+    draw:en=>drawBandit(en,'#e07a2a','#2a5a7a',10,()=>{ ctx.fillStyle='#9aa0a8'; ctx.fillRect(-7,4,6,2); ctx.fillRect(-8,3,2,4); })},   // llave inglesa a la espalda
+});
+function squadInject(e,sid){
+  if(!world) return;
+  const units=e.units.filter(u=>EDEFS[u[0]]); if(!units.length) return;
+  const base=units[0];
+  const place=(id,dc,dr)=>{ const c=base[1]+dc, r=base[2]+dr, nb=SOLID[tileAtC(c,r)]?nearestWalkable(c,r,5):[c,r];
+    if(nb){ const en=addEnemy(id,nb[0]*TILE+TILE/2,nb[1]*TILE+TILE/2,sid,true); en.home={x:en.x,y:en.y}; en.patrolR=90; } };
+  if(units.length>=3&&(world.minis||0)<6&&Math.random()<0.35){ world.minis=(world.minis||0)+2; place('minidroid',-1,1); place('minidroid',1,1); }
+  if(units.some(u=>EDEFS[u[0]].tank||EDEFS[u[0]].air)&&(world.mechs||0)<3&&Math.random()<0.5){ world.mechs=(world.mechs||0)+1; place('mechanic',0,2); }
+}
+
+/* ---------- MINI-ANDROIDE ---------- */
+function minidroidCombat(en,tg,dd,los,aimed,dt){
+  if(meleeCrush(en,tg,dd,los,dt)) return;   // salto + mini-aplastamiento (p5_ai.js)
+  if(en.kickCd>0) en.kickCd-=dt;
+  if(en.kickN>0){   // TRIPLE PATADA
+    en.kickT-=dt; en.vx*=0.6; en.vy*=0.6; en.angle=turnTo(en.angle,Math.atan2(tg.y-en.y,tg.x-en.x),0.3*dt);
+    if(en.kickT<=0){
+      const n=4-en.kickN; en.kickN--; en.kickT=9; S.slash();
+      slashFx(en.x,en.y,en.angle,en.radius+12,n===3?'#ff3df0':'#cfd6df');
+      if(player.alive&&dist(en,player)<en.radius+player.radius+16){
+        damagePlayer(en.def.dmg*(n===3?1.5:1)); push(player,en.x,en.y,n===3?8:3);
+        if(n===3){ popup(player.x,player.y-32,'¡TRIPLE PATADA!','#ff3df0',13); shake=Math.max(shake,6); }
+      }
+    }
+    return;
+  }
+  if(tg.u===player&&dd<en.radius+player.radius+12&&(en.kickCd||0)<=0&&canAttack(en)){ en.kickN=3; en.kickT=6; en.kickCd=120; return; }
+  const zig=Math.sin(t*0.3+en.x*0.05)*0.8, [nx,ny]=vnorm(tg.x-en.x,tg.y-en.y);   // carrera en zigzag
+  if(los) accelerate(en,nx-ny*zig,ny+nx*zig,dt,1); else steerTo(en,tg.x,tg.y,dt,1);
+  en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),0.3*dt);
+}
+function drawMinidroid(en){
+  const z=en.leapZ||0, a=en.angle;
+  if(z>0){ ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(en.x,en.y+4,6,3,0,0,Math.PI*2); ctx.fill(); }
+  drawFeet(en.x,en.y,a,en.walk||0,0.7,3,'#1e1a1a');
+  ctx.save(); ctx.translate(en.x,en.y-z); ctx.rotate(a);
+  if(en.kickN>0&&en.kickT<5){ ctx.fillStyle='#3a3f46'; ctx.fillRect(4,1,8,3); ctx.fillStyle='#ff3df0'; ctx.fillRect(11,1,2,3); }   // la pierna que patea
+  ctx.fillStyle='#140808'; ctx.fillRect(-6,-5,12,10);
+  ctx.fillStyle='#5a6a7a'; ctx.fillRect(-5,-4,10,8); ctx.fillStyle='#8a9aa8'; ctx.fillRect(-5,-4,10,2);
+  ctx.fillStyle='#2a2f36'; ctx.fillRect(-4,-7,3,2); ctx.fillRect(-4,5,3,2);
+  ctx.fillStyle=VISOR; ctx.fillRect(2,-2,3,4);
+  ctx.restore();
+}
+
+/* ---------- MECÁNICO DE MANIOBRAS ---------- */
+function mechanicUpdate(en,dt){   // el rehén va delante, pegado a él
+  const pw=en.shieldPow;
+  if(pw){ if(!pw.alive){ en.shieldPow=null; } else { pw.x=en.x+Math.cos(en.angle)*15; pw.y=en.y+Math.sin(en.angle)*15; pw.vx=pw.vy=0; } }
+  return false;
+}
+function mechanicDeath(en){ if(en.shieldPow){ en.shieldPow.held=null; popup(en.shieldPow.x,en.shieldPow.y-18,'¡REHÉN LIBERADO!','#ffd76e',13); en.shieldPow=null; } }
+function mechShoot(en,tg,dd,los,dt){
+  en.fireCd-=dt;
+  if(los&&en.fireCd<=0&&dd<320&&canAttack(en)){
+    const a=leadAim(en,tg,5);
+    fireBullet(en.x+Math.cos(a)*(en.radius+4),en.y+Math.sin(a)*(en.radius+4),a+rand(-0.08,0.08),'e',{speed:5,dmg:en.def.dmg,radius:3,life:90,kind:'ebolt'});
+    en.fireCd=rand(28,45); S.eshoot();
+  }
+}
+function mechanicCombat(en,tg,dd,los,aimed,dt){
+  en.angle=turnTo(en.angle,Math.atan2(tg.y-en.y,tg.x-en.x),0.25*dt);
+  if(!en.shieldPow){   // coge a un rehén cercano (también de los que te siguen) para usarlo de escudo
+    const pw=pows.find(p=>p.alive&&!p.held&&dist(p,en)<230);
+    if(pw){
+      if(dist(pw,en)<16){ en.shieldPow=pw; pw.held=en; pw.follow=false; pw.escort=false; popup(pw.x,pw.y-18,'¡USA A UN REHÉN DE ESCUDO!','#ff6b6b',13); }
+      else { steerTo(en,pw.x,pw.y,dt,1.1); return; }
+    }
+  }
+  if(!en.shieldPow){   // repara a la máquina aliada dañada más cercana
+    const m=enemies.filter(o=>o.alive&&o!==en&&o.def.repair&&o.hp<o.maxHp*0.9&&dist(o,en)<320).sort((a,b)=>dist(a,en)-dist(b,en))[0];
+    if(m){
+      if(dist(m,en)>m.radius+en.radius+8) steerTo(en,m.x,m.y,dt,1);
+      else {
+        en.vx*=0.7; en.vy*=0.7; m.hp=Math.min(m.maxHp,m.hp+m.maxHp*0.004*dt);
+        if(Math.random()<0.3*dt) particles.push({x:m.x+rand(-m.radius,m.radius),y:m.y+rand(-m.radius,m.radius),vx:0,vy:-0.8,life:18,maxLife:18,color:pick(['#ffd76e','#3ee67a']),size:2});
+        if((en.repairT=(en.repairT||0)+dt)>70){ en.repairT=0; popup(m.x,m.y-22,'🔧 REPARANDO','#3ee67a',10); }
+      }
+      mechShoot(en,tg,dd,los,dt); return;
+    }
+  }
+  // maniobras de mosquito: zigzag nervioso alrededor de su distancia preferida
+  en.jitT=(en.jitT||0)-dt; if(en.jitT<=0){ en.jitT=rand(8,18); en.jitA=rand(-1,1); }
+  const to=Math.atan2(tg.y-en.y,tg.x-en.x), side=to+Math.PI/2*(en.jitA<0?-1:1), pref=dd<150?-1:dd>260?1:0;
+  accelerate(en,Math.cos(side)+Math.cos(to)*pref,Math.sin(side)+Math.sin(to)*pref,dt,1);
+  mechShoot(en,tg,dd,los,dt);
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
