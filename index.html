@@ -1660,7 +1660,7 @@ function onPlayerDeath(){
   else {
     respawnTimer=150; popup(p.x,p.y-30,'MÁQUINA DESTRUIDA','#ff4757',18);
     if(world){   // en la campaña el helicóptero trae el Orbe Vital a la pantalla actual
-      const s=worldDropSpot(); world.pendingOrb=s;
+      const s=worldDeathRespawn(); world.pendingOrb=s;   // si caíste retrocediendo, al frente (p9_campaign.js)
       callHeli(s.x,s.y,'orb',()=>{ orb={x:s.x,y:s.y,r:14,pulse:24}; if(world) world.pendingOrb=null; });
     }
   }
@@ -1675,6 +1675,7 @@ function respawnPlayer(){
   orb.pulse=24; S.respawn();
   rings.push({x:orb.x,y:orb.y,r:10,max:120,life:40,maxLife:40,color:'#3ee67a'});
   popup(orb.x,orb.y-56,'◈ MÁQUINA REARMADA','#3ee67a',16);
+  if(world) worldPursuersArrive();
 }
 
 /* ===================== BALAS ===================== */
@@ -4331,6 +4332,9 @@ function render(){
   drawDeposits();
   drawTurretsSoldiers();
   for(const en of enemies) if(en.alive&&!en.air) drawEnemy(en);
+  for(const en of enemies) if(en.alive&&en.vengeLvl&&!en.hidden){   // te vencieron: una marca roja por cada vez
+    ctx.fillStyle='#ff4757'; for(let i=0;i<Math.min(3,en.vengeLvl);i++){ const x=en.x-(Math.min(3,en.vengeLvl)-1)*4+i*8, y=en.y-en.radius-14; ctx.beginPath(); ctx.moveTo(x-3,y); ctx.lineTo(x,y+3); ctx.lineTo(x+3,y); ctx.lineTo(x+3,y+2); ctx.lineTo(x,y+5); ctx.lineTo(x-3,y+2); ctx.closePath(); ctx.fill(); }
+  }
   if(mate&&mate.alive&&!mate.air) drawMate(mate);
   drawPlayer();
   drawBoss();
@@ -5508,8 +5512,8 @@ function spawnEncounter(e){
     if(o&&o.hunt&&player.alive){ en.ai='hunt'; en.lastKnown={x:player.x,y:player.y}; en.spawnGrace=40; }
   }
 }
-function worldDropSpot(){
-  const c=Math.floor((cam.x+W/2)/TILE), r=Math.floor((cam.y+H-120)/TILE);
+function worldDropSpot(px,py){
+  const c=Math.floor((px!=null?px:cam.x+W/2)/TILE), r=Math.floor((py!=null?py:cam.y+H-120)/TILE);
   let nb=[c,r];
   const bad=(cc,rr)=>{ const v=tileAtC(cc,rr); return SOLID[v]||v===BRIDGE||v===MOLTEN||v===BELT||v===FIRE||v===QSAND||v===WIRE; };
   if(bad(c,r)){
@@ -5643,6 +5647,33 @@ function callReinforcements(){
   alarmT=Math.max(alarmT,160); S.alarm();
   popup(p.x,p.y-40,'¡REFUERZOS ENEMIGOS! · NIVEL '+L,'#ff8a3a',16);
   if(L===1||L%3===0) announce('REFUERZOS · NIVEL '+L,'#ff8a3a',L>=3?'Ahora llegan tropas más duras… y algunas traen Hollow Boom':'Cuanto más retrocedas, más fuertes llegarán');
+}
+/* Si caes mientras retrocedías (o acorralado por los refuerzos), reapareces en lo más lejos que habías llegado; los que
+   te derrotaron se hacen más fuertes (+25% vida, se reparan, +20% daño, acumulable) y te siguen hasta allí. */
+function worldDeathRespawn(){
+  const w=world, p=player;
+  const hunters=enemies.filter(e=>e.alive&&!e.static&&!['structure','spawner','turret','dummy'].includes(e.def.role)&&(e.reinf||(e.ai==='combat'&&dist(e,p)<450)));
+  if(!(w.retreating||hunters.some(e=>e.reinf))||w.front==null) return worldDropSpot();
+  const g=w.gates.find(g=>!g.open), minY=g?(g.row+3)*TILE:60;
+  for(const e of hunters){
+    e.vengeLvl=(e.vengeLvl||0)+1; e.maxHp=Math.round(e.maxHp*1.25); e.hp=e.maxHp;
+    if(e.def.dmg!=null){ e.def=Object.create(e.def); e.def.dmg=Math.round(e.def.dmg*1.2); }
+  }
+  w.pursuers=hunters;
+  announce('¡CAÍSTE RETROCEDIENDO!','#ff8a3a','Reapareces en tu posición más avanzada… y los que te vencieron vienen detrás, más fuertes');
+  return worldDropSpot(p.x,Math.max(minY,w.front+60));
+}
+/* Al reaparecer, los que te vencieron llegan por detrás (justo fuera de la pantalla) y van a por ti */
+function worldPursuersArrive(){
+  const w=world; if(!w||!w.pursuers) return;
+  const list=w.pursuers.filter(e=>e.alive); w.pursuers=null; if(!list.length) return;
+  list.forEach((e,i)=>{
+    const x=clamp(player.x+(i-(list.length-1)/2)*60+rand(-20,20),40,WW-40), y=Math.min(WH-40,player.y+H/2+50+rand(0,40));   // justo bajo el borde de la pantalla (la cámara se centra en ti)
+    let c=Math.floor(x/TILE), r=Math.floor(y/TILE);
+    if(!e.def.air&&SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,6); if(nb){ c=nb[0]; r=nb[1]; } }
+    e.x=c*TILE+TILE/2; e.y=r*TILE+TILE/2; e.vx=e.vy=0; e.path=null; e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=60;
+  });
+  popup(player.x,player.y-60,'¡TE HAN SEGUIDO! · '+list.length+' MÁS FUERTES','#ff8a3a',15); alarmT=Math.max(alarmT,120); S.alarm();
 }
 function finishWorld(){
   const first=world.firstClear;
