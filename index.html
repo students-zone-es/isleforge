@@ -1496,6 +1496,8 @@ function updatePlayer(dt){
   if(keys.s||keys.arrowdown) iy+=1;
   if(keys.a||keys.arrowleft) ix-=1;
   if(keys.d||keys.arrowright) ix+=1;
+  const flying=p.launchT>0;   // lanzado por un golpe: no controlas la máquina hasta aterrizar
+  if(flying){ p.launchT-=dt; ix=iy=0; }
   const aimWant=Math.atan2(mouse.y-p.y,mouse.x-p.x);
   if(p.ch.id==='tank'){
     // Casco con dirección propia (marcha atrás si pides ir hacia atrás) y torreta 360° independiente
@@ -1509,7 +1511,7 @@ function updatePlayer(dt){
       limitSpeed(p,p.speedMax*(dir<0?0.7:1));
     }
     const fx=Math.cos(p.body), fy=Math.sin(p.body), along=p.vx*fx+p.vy*fy;
-    p.vx=lerp(p.vx,fx*along,0.25); p.vy=lerp(p.vy,fy*along,0.25);
+    if(!flying){ p.vx=lerp(p.vx,fx*along,0.25); p.vy=lerp(p.vy,fy*along,0.25); }
     p.tread+=along*dt*0.5;
     p.aim=turnTo(p.aim,aimWant,0.13*dt);
   } else if(p.ch.id==='jeep'){
@@ -1523,7 +1525,13 @@ function updatePlayer(dt){
     p.aim=aimWant; p.body=turnTo(p.body,aimWant,0.25*dt);
     p.walk+=Math.hypot(p.vx,p.vy)*dt*0.13;
   }
-  moveUnit(p,dt);
+  const f0=p.friction; if(flying) p.friction=0.93;   // por los aires frena menos
+  const hit=moveUnit(p,dt); p.friction=f0;
+  if(flying&&hit&&hit.impact>2.5){   // te estrellas: la madera se rompe sin dañarte, el agua no hace daño, lo demás duele
+    p.launchT=0;
+    if(hit.tv===TREE||hit.tv===CAGE) destroyTile(hit.c,hit.r,false);
+    else if(hit.tv!==WATER){ damagePlayer(4+hit.impact*2.2); shake=Math.max(shake,12); spawnDebris(p.x,p.y,10,'#cfd6df'); popup(p.x,p.y-30,'¡CONTRA EL MURO!','#ff8a8a',14); S.stomp(); }
+  }
   // Aplastar robots pequeños con el tanque
   if(p.ch.id==='tank' && Math.hypot(p.vx,p.vy)>1.2){
     for(const en of enemies){
@@ -1612,9 +1620,16 @@ function activateCloak(){
     if(en.ai==='combat'){ en.ai='hunt'; en.lastKnown={x:p.x,y:p.y}; en.huhT=60; en.searchT=0; }
   }
 }
+/* Te lanza por los aires (golpes muy fuertes de los jefes); las máquinas pesadas vuelan menos */
+function launchPlayer(x,y,force,ang){
+  const p=player; if(!p.alive) return;
+  const a=ang!=null?ang:Math.atan2(p.y-y,p.x-x), v=force/Math.sqrt(p.mass||1)*1.1;
+  p.vx=Math.cos(a)*v; p.vy=Math.sin(a)*v; p.launchT=24;
+}
 function damagePlayer(amount){
   const p=player;
   if(!p.alive||p.invuln>0||cine>0||god) return;
+  amount*=bossDmgK;   // los golpes del jefe crecen con tu equipo
   amount*=p.ch.hurt||1;   // blindaje del vehículo (el Jackal es el más frágil)
   if(p.shield>0){ p.shield-=amount; if(p.shield<0){ p.hp+=p.shield; p.shield=0; } }
   else p.hp-=amount;
@@ -1664,7 +1679,7 @@ function fireBullet(x,y,a,owner,o){
   const sp=o.speed||7, src=o.src||(owner==='e'?shotSrc:null);
   if(src&&Math.hypot(x-src.x,y-src.y)<(src.radius||8)+8){ const gs=gunSide(src); x+=Math.cos(a+Math.PI/2)*gs; y+=Math.sin(a+Math.PI/2)*gs; }   // sale del arma, no del centro
   if(!(src&&src.def&&src.def.role==='sniper')) addMuzzle(x,y,a,owner,src,o);   // los francotiradores llevan silenciador: sin fogonazo
-  bullets.push({x,y,ox:x,oy:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,owner,dmg:o.dmg||5,radius:o.radius||3,life:o.life||90,
+  bullets.push({x,y,ox:x,oy:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,owner,dmg:(o.dmg||5)*(owner==='e'?bossDmgK:1),radius:o.radius||3,life:o.life||90,
     pierce:o.pierce!=null?o.pierce:(owner==='p'?player.pierce:0),
     frag:o.frag!=null?o.frag:(owner==='p'?player.fragment:0),
     splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src, hitList:null,
@@ -1726,7 +1741,7 @@ function updateBullets(dt){
 }
 
 /* ===================== PROYECTILES EN ARCO (aéreos) ===================== */
-function addLob(o){ o.k=0; lobs.push(o); return o; }
+function addLob(o){ o.k=0; if(o.dmg&&o.owner==='e') o.dmg*=bossDmgK; lobs.push(o); return o; }
 function lobPos(l){ const k=Math.min(1,l.k); return {x:lerp(l.x0,l.x1,k), y:lerp(l.y0,l.y1,k), z:l.h*4*k*(1-k)}; }
 function updateLobs(dt){
   for(let i=lobs.length-1;i>=0;i--){
@@ -3084,7 +3099,7 @@ function stunBoss(dur,label){
   rings.push({x:b.x,y:b.y,r:20,max:90,life:24,maxLife:24,color:'#f5c518'});
 }
 function damageBoss(dmg,o){
-  const b=boss; if(!b||!b.alive||b.state==='intro') return;
+  const b=boss; if(!b||!b.alive||b.state==='intro'||b.invuln) return;   // invuln: mientras se transforma
   const mul=(b.state==='stun'?1.5:1)*(b.dmgMul!=null?b.dmgMul:1);   // dmgMul: blindaje de algunos jefes
   b.hp-=dmg*mul; b.flash=4; S.hit();
   if(b.state!=='stun'){
@@ -3154,6 +3169,7 @@ function bossPatternFire(b,toA){
 }
 function updateBoss(dt){
   const b=boss; if(!b||!b.alive) return;
+  if(b.dmgK==null) bossInit(b);   // se adapta a tu equipo (p9k_bosses.js)
   if(b.flash>0) b.flash-=dt;
   shotFac=b.fac||'r'; shotSrc=null;
   if(b.purpleCd>0) b.purpleCd-=dt;
@@ -3181,7 +3197,8 @@ function updateBoss(dt){
     announce('⚠ HOLLOW BOOM','#c77dff','¡Apártate de la franja morada o aturde al coloso!');
   }
   const speedK=b.phase2?1.35:1;
-  if(b.kind==='crane'&&craneStates(b,dt,tgt,dd,toA,p)){ /* estados propios de la grúa */ }
+  if(bossExtra(b,dt,tgt,dd,toA,p)){ /* ataques nuevos de todos los jefes (p9k_bosses.js) */ }
+  else if(b.kind==='crane'&&craneStates(b,dt,tgt,dd,toA,p)){ /* estados propios de la grúa */ }
   else if(b.states&&b.states(b,dt,tgt,dd,toA,p)){ /* jefes de los Mundos 3-5 */ }
   else switch(b.state){
     case 'walk': {
@@ -4274,6 +4291,7 @@ function render(){
   if(mate&&mate.alive&&!mate.air) drawMate(mate);
   drawPlayer();
   drawBoss();
+  drawBossExtra();
   drawPresses();
   drawTrees(cx,cy);
   drawWorldTop(cx,cy);
@@ -7569,8 +7587,10 @@ function spiderStates(b,dt,tgt,dd,toA,p){
       const victims=[]; if(p.alive) victims.push(p); for(const u of friendlies()) if(!u.air) victims.push(u);
       for(const u of victims){
         if(b.ballHits.includes(u)||Math.hypot(u.x-bl.x,u.y-bl.y)>22+u.radius) continue;
-        b.ballHits.push(u); if(u===p) damagePlayer(26); else hurtFriendly(u,26);
-        const ta=b.ballA+b.ballDir*Math.PI/2; u.vx+=Math.cos(ta)*10; u.vy+=Math.sin(ta)*10; shake=Math.max(shake,10); S.stomp();
+        b.ballHits.push(u); const ta=b.ballA+b.ballDir*Math.PI/2;
+        if(u===p){ damagePlayer(26); launchPlayer(0,0,14,ta); }   // te lanza: si te estrellas contra un muro duele más
+        else { hurtFriendly(u,26); u.vx+=Math.cos(ta)*10; u.vy+=Math.sin(ta)*10; }
+        shake=Math.max(shake,10); S.stomp();
       }
       for(const en of enemies) if(en.alive&&!en.air&&en.def.role!=='structure'&&Math.hypot(en.x-bl.x,en.y-bl.y)<22+en.radius) damageEnemy(en,40,{});
       const c=Math.floor(bl.x/TILE), r=Math.floor(bl.y/TILE), v=tileAtC(c,r);
@@ -8774,6 +8794,118 @@ function drawMoto(en,col){
   ctx.restore();
   ctx.restore();
 }
+/* ===================== JEFES: más duros con tu equipo y ataques nuevos (inspirados en Terraria) =====================
+   · Al aparecer, el jefe mira tus mejoras del taller y gana vida (hasta x2,2), daño (+60%), velocidad y ritmo.
+   · Ataques nuevos para TODOS los jefes, elegidos según la distancia, sin repetir el anterior y apuntando adonde VAS a estar:
+       EMBESTIDAS EN CADENA (Ojo de Cthulhu / Abeja Reina): una línea roja marca la carrera y embiste 3 veces (4 en fase 2).
+       LANZAS ETÉREAS (Emperatriz de la Luz): líneas de colores te rodean y, tras avisar, disparan hacia ti.
+       DANZA PRISMÁTICA (Emperatriz): anillos de balas que giran en espiral.
+       ESBIRROS (Ojo de Cthulhu): drones que te persiguen.
+   · TRANSFORMACIÓN al bajar de la mitad de vida: gira, no recibe daño un momento, suelta una onda que te lanza y sigue
+     con un aura roja, más agresivo. */
+let bossDmgK=1;   // multiplicador de daño mientras actúa el jefe (lo leen damagePlayer, fireBullet y addLob)
+function bossGear(){ let n=0, m=0; for(const d of SHOP_DEFS){ n+=Math.min(d.max,save.up[d.id]||0); m+=d.max; } return m?n/m:0; }
+function bossInit(b){
+  const g=bossGear(); b.gear=g; b.gearMsg=true;
+  b.hp=b.maxHp=Math.round(b.maxHp*(1+1.2*g)); b.dmgK=1+0.6*g; b.aggr=1+0.5*g; b.speedMax*=1+0.2*g;
+  b.xCd=200; b.xLast=''; b.lances=null;
+}
+function bossPick(b,dd){
+  const far=dd>260, minions=enemies.filter(e=>e.alive&&e.summon).length;
+  const opts=[['xDashWind',(far?3:2)+(b.phase2?1:0)],['xLances',far?3:1],['xSun',far?1:3],['xSummon',minions<3?(b.phase2?2:1):0]];
+  let tot=0; for(const o of opts){ if(o[0]===b.xLast) o[1]=0; tot+=o[1]; }
+  let r=Math.random()*tot; for(const [s,w] of opts) if((r-=w)<0) return s;
+  return 'xLances';
+}
+/* Devuelve true si el estado es uno de los ataques nuevos (o si acaba de empezar uno) */
+function bossExtra(b,dt,tgt,dd,toA,p){
+  if(b.gearMsg&&b.state!=='intro'){ b.gearMsg=false; if(b.gear>0.03) popup(b.x,b.y-84,'SE ADAPTA A TU EQUIPO · +'+Math.round(b.gear*120)+'% VIDA','#ff8a8a',14); }
+  if(b.state==='walk'&&b.phase2&&!b.transformed){ b.transformed=true; setBossState('xTransform'); }
+  if(b.state==='walk'&&p.alive&&voidCharging===0){
+    b.xCd-=dt*b.aggr*(b.phase2?1.3:1);
+    if(b.xCd<=0){ setBossState(bossPick(b,dd)); b.xLast=b.state; b.xCd=rand(280,400); b.xDashes=b.phase2?4:3; b.xW=0; }
+  }
+  const aggr=b.aggr*(b.phase2?1.25:1);
+  switch(b.state){
+    case 'xTransform':
+      b.vx*=0.85; b.vy*=0.85; b.angle+=0.35*dt; b.aim=b.angle; b.invuln=true;
+      if(Math.random()<0.8){ const a=rand(0,Math.PI*2); particles.push({x:b.x+Math.cos(a)*b.radius,y:b.y+Math.sin(a)*b.radius,vx:Math.cos(a)*2,vy:Math.sin(a)*2,life:22,maxLife:22,color:pick(['#ff4757','#ff8a3a','#ffd76e']),size:4}); }
+      if(b.st>=36&&!b.fired){
+        b.fired=true; shake=Math.max(shake,20); S.boom(); flashScreen('#ff4757',0.35);
+        rings.push({x:b.x,y:b.y,r:20,max:240,life:28,maxLife:28,color:'#ff4757'});
+        popup(b.x,b.y-84,'¡SE TRANSFORMA!','#ff4757',20);
+        if(p.alive&&dist(p,b)<240){ damagePlayer(10); launchPlayer(b.x,b.y,12); }
+      }
+      if(b.st>=70){ b.invuln=false; setBossState('walk'); }
+      return true;
+    case 'xDashWind': {   // apunta adonde vas a estar y deja de corregir justo antes de salir
+      b.vx*=0.85; b.vy*=0.85;
+      const W=(b.phase2?20:30)/Math.sqrt(aggr);
+      if(b.st<W-8||b.tx==null){ const lead=Math.min(40,dd/9); b.tx=tgt.x+(p.vx||0)*lead; b.ty=tgt.y+(p.vy||0)*lead; }
+      const a=Math.atan2(b.ty-b.y,b.tx-b.x); b.angle=turnTo(b.angle,a,0.2*dt); b.aim=b.angle; b.xLine={a,k:Math.min(1,b.st/W)};
+      if(b.st>=W){ b.xA=a; b.xSp=(b.phase2?11:9)*Math.min(1.25,Math.sqrt(aggr)); b.xHit=false; b.px=b.x; b.py=b.y; b.xLine=null; b.tx=null; setBossState('xDash'); S.rev(); }
+      return true; }
+    case 'xDash': {
+      b.vx=Math.cos(b.xA)*b.xSp; b.vy=Math.sin(b.xA)*b.xSp; b.angle=b.xA;
+      if(Math.random()<0.7) particles.push({x:b.x-Math.cos(b.xA)*b.radius,y:b.y-Math.sin(b.xA)*b.radius,vx:0,vy:0,life:18,maxLife:18,color:'#ff6b3a',size:5,smoke:true});
+      if(!b.xHit&&p.alive&&dist(p,b)<b.radius+p.radius+4){ b.xHit=true; damagePlayer(24); launchPlayer(b.x,b.y,11); shake=Math.max(shake,10); S.stomp(); }
+      for(const u of friendlies()) if(!u.air&&dist(u,b)<b.radius+u.radius+4){ hurtFriendly(u,16); push(u,b.x,b.y,8); }
+      const blocked=b.st>4&&Math.hypot(b.x-b.px,b.y-b.py)<b.xSp*0.3*dt;   // se ha estrellado contra algo
+      b.px=b.x; b.py=b.y;
+      if(b.st>=26||blocked){
+        b.vx*=0.3; b.vy*=0.3; if(blocked){ shake=Math.max(shake,8); S.stomp(); }
+        if(--b.xDashes>0) setBossState('xDashWind'); else { setBossState('walk'); b.atkCd=Math.max(b.atkCd,60); }
+      }
+      return true; }
+    case 'xLances': {
+      b.vx*=0.9; b.vy*=0.9;
+      if(!b.fired){
+        b.fired=true; b.lances=[];
+        const n=b.phase2?10:7, tx=tgt.x+(p.vx||0)*26, ty=tgt.y+(p.vy||0)*26;
+        for(let i=0;i<n;i++){ const a=i/n*Math.PI*2+rand(-0.2,0.2), R=rand(220,300); b.lances.push({x:tx+Math.cos(a)*R,y:ty+Math.sin(a)*R,a:a+Math.PI,t:-i*4,hue:i/n,f:false}); }
+        S.purpleCharge();
+      }
+      for(const L of b.lances){ L.t+=dt*Math.sqrt(aggr); if(L.t>=44&&!L.f){ L.f=true; fireBullet(L.x,L.y,L.a,'e',{speed:12,dmg:12,radius:3.5,life:60,kind:'ebolt'}); S.eshoot(); } }
+      if(b.lances.every(L=>L.f)&&b.st>30){ b.lances=null; setBossState('walk'); }
+      return true; }
+    case 'xSun': {
+      b.vx*=0.88; b.vy*=0.88; b.spin+=0.2*dt;
+      const waves=b.phase2?6:4, n=b.phase2?18:14;
+      if(b.xW<waves&&b.st>=10+b.xW*12/Math.sqrt(aggr)){
+        for(let i=0;i<n;i++){ const a=i/n*Math.PI*2+b.xW*0.21; fireBullet(b.x+Math.cos(a)*b.radius,b.y+Math.sin(a)*b.radius,a,'e',{speed:3.2,dmg:8,radius:4,life:150,kind:'ebolt'}); }
+        b.xW++; S.eshoot();
+      }
+      if(b.xW>=waves&&b.st>10+waves*12+20) setBossState('walk');
+      return true; }
+    case 'xSummon':
+      b.vx*=0.9; b.vy*=0.9;
+      if(b.st>=20&&!b.fired){
+        b.fired=true;
+        for(let i=0;i<3;i++){ const a=rand(0,Math.PI*2), en=addEnemy('hawk',b.x+Math.cos(a)*70,b.y+Math.sin(a)*70,newSquad(),true);
+          en.ai='combat'; en.aware=1; en.lastKnown={x:p.x,y:p.y}; en.spawnGrace=15; en.summon=true; }
+        popup(b.x,b.y-84,'¡ESBIRROS!','#ff8a8a',15); S.launch();
+      }
+      if(b.st>=40) setBossState('walk');
+      return true;
+  }
+  return false;
+}
+/* Avisos de los ataques nuevos: línea de la embestida, lanzas de colores y el aura roja de la fase 2 */
+function drawBossExtra(){
+  const b=boss; if(!b||!b.alive) return;
+  ctx.save();
+  if(b.phase2){ ctx.strokeStyle='rgba(255,71,87,'+(0.35+0.25*Math.sin(t*0.3)).toFixed(2)+')'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(b.x,b.y-(b.z||0),b.radius+8+Math.sin(t*0.2)*3,0,Math.PI*2); ctx.stroke(); }
+  if(b.state==='xDashWind'&&b.xLine){
+    const L=b.xLine; ctx.strokeStyle='rgba(255,71,87,'+(0.3+0.6*L.k).toFixed(2)+')'; ctx.lineWidth=2+L.k*4; ctx.setLineDash([12,8]); ctx.lineDashOffset=-t*2;
+    ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x+Math.cos(L.a)*520,b.y+Math.sin(L.a)*520); ctx.stroke(); ctx.setLineDash([]);
+  }
+  if(b.lances) for(const L of b.lances){
+    if(L.f||L.t<0) continue;
+    const k=Math.min(1,L.t/44); ctx.strokeStyle='hsla('+Math.round((L.hue*360+t*4)%360)+',100%,70%,'+(0.25+0.6*k).toFixed(2)+')'; ctx.lineWidth=1+k*2;
+    ctx.beginPath(); ctx.moveTo(L.x,L.y); ctx.lineTo(L.x+Math.cos(L.a)*560,L.y+Math.sin(L.a)*560); ctx.stroke();
+  }
+  ctx.restore();
+}
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -9684,7 +9816,7 @@ function step(dt){
   updateEnemies(dt);
   if(world) updateWorld(dt);
   updateHelis(dt);
-  if(boss) updateBoss(dt);
+  if(boss){ bossDmgK=boss.dmgK||1; updateBoss(dt); bossDmgK=1; }
   else if(bossStage&&!bossDefeated&&bossDelay>0){ bossDelay-=dt; if(bossDelay<=0) spawnBoss(); }
   updateMate(dt);
   updateDrones(dt);
