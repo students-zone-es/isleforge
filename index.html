@@ -8961,6 +8961,47 @@ function menuKey(k){
    si la pantalla es más alta, hay más cielo y más mar (OY baja la isla hasta el horizonte).
    Todo lo de la isla se dibuja en «coordenadas de diseño» (300x200, horizonte en 128). */
 function menuHex(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+/* Fase de la luna de HOY (0 nueva · 0,25 cuarto creciente · 0,5 llena · 0,75 cuarto menguante), con el mes lunar de
+   29,53 días contado desde una luna nueva conocida (6-ene-2000 18:14 UTC). menuMoonOverride la fija para probar. */
+let menuMoonOverride=null;
+function menuMoonPhase(){ if(menuMoonOverride!=null) return menuMoonOverride; const p=((Date.now()/86400000+2440587.5-2451550.26)/29.530588853)%1; return p<0?p+1:p; }
+/* LUNA detallada: mares oscuros donde están en la luna de verdad, cráteres con relieve (borde con luz y sombra que se
+   marca más cerca de la línea de sombra), rayos de Tycho, bordes algo más oscuros y la cara oscura apenas visible
+   (luz que rebota en la Tierra). La fase sale de iluminar una esfera: creciente por la derecha, menguante por la izquierda. */
+const MOON_MARIA=[[-0.45,0.05,0.32,0.55],[-0.25,-0.38,0.27,0.22],[0.22,-0.32,0.17,0.15],[0.33,-0.02,0.2,0.17],[0.68,-0.22,0.11,0.1],
+  [0.55,0.22,0.14,0.13],[-0.15,0.42,0.17,0.13],[0.38,0.32,0.09,0.08]];   // Tormentas, Lluvias, Serenidad, Tranquilidad, Crisis, Fecundidad, Nubes, Néctar
+// [x, y, radio px, brillo]: Tycho, Copérnico, Aristarco, Platón, Langreno, Teófilo, Grimaldi
+const MOON_CRATERS=[[-0.12,0.7,1.6,1.25],[-0.3,-0.02,1.8,1.1],[-0.7,-0.25,1,1.3],[-0.08,-0.78,1.3,0.7],[0.78,0.18,1.3,1],[0.3,0.22,1.4,1],[-0.88,0.08,1.2,0.75]];
+const MOON_TONES=['#3e3a2e','#5c5745','#7d7660','#9e967c','#bdb597','#dad3b6','#efe9d2','#fbf7e6'];
+function menuDrawMoon(g,MX,MY,MR,phase){
+  const a=phase*Math.PI*2, Lx=Math.sin(a), Lz=-Math.cos(a);
+  for(let y=-MR;y<=MR;y++) for(let x=-MR;x<=MR;x++){
+    const d=Math.hypot(x,y); if(d>MR+0.3) continue;
+    const u=x/MR, v=y/MR, z=Math.sqrt(Math.max(0,1-u*u-v*v));
+    let alb=1, mare=0;
+    for(const [cx,cy,rx,ry] of MOON_MARIA) mare=Math.max(mare,1-((u-cx)/rx)**2-((v-cy)/ry)**2);
+    const mm=mare+(opsHash(x,y,61)-0.5)*0.18;                             // mares: núcleo oscuro y borde de transición
+    if(mm>0.35) alb=0.6; else if(mm>0.1) alb=0.76;
+    alb*=0.97+opsHash(x,y,62)*0.05;                                        // textura del suelo
+    const ndl=u*Lx+z*Lz;
+    let rel=0;
+    for(const [cx,cy,cr,cb] of MOON_CRATERS){                              // cráteres: fondo, borde con luz y sombra
+      const dx=x-cx*MR, dy=y-cy*MR, dd=Math.hypot(dx,dy);
+      if(dd<cr-0.6){ if(cb<1) alb*=cb; else rel+=(cb-1)*0.8; }             // fondo: oscuro (Platón) o claro (Tycho, Copérnico)
+      else if(dd<cr+0.5) rel+=(dx*Lx>0?0.22:-0.3)*(1-Math.min(1,Math.abs(ndl)*1.6));
+    }
+    const tx=x+0.12*MR, ty=y-0.7*MR;                                      // rayos de Tycho (se ven sobre todo en luna llena)
+    if(Math.hypot(tx,ty)>2&&Math.hypot(tx,ty)<MR*0.9){ const an=Math.atan2(ty,tx); if(Math.abs(Math.sin(an*5+0.6))>0.97) rel+=0.12*Math.max(0,-Lz); }
+    const dith=(BAYER4[((y+64)&3)*4+((x+64)&3)]/16-0.5)*0.07;
+    if(ndl>0){
+      const I=Math.min(1,ndl*1.4+0.12)*(0.84+0.16*z);
+      const k=clamp(I*alb+rel+dith,0,1); g.fillStyle=MOON_TONES[Math.round(k*(MOON_TONES.length-1))];
+    } else g.fillStyle=alb<0.8?'#15131f':'#1b1828';                       // cara oscura (luz de la Tierra)
+    if(d>MR-0.7&&ndl<=0.05) g.fillStyle='#2c2940';                        // contorno tenue del disco
+    g.fillRect(MX+x,MY+y,1,1);
+  }
+  return (1-Math.cos(a))/2;   // fracción iluminada
+}
 function menuBuildScene(){
   const SW=Math.round(W/3), SH=Math.round(H/3), H0=128;
   const HOR=Math.round(H0+(SH-200)*0.55), OX=Math.round((SW-300)/2), OY=HOR-H0, RX=SW-300, FX=SW/300;
@@ -8976,14 +9017,10 @@ function menuBuildScene(){
     D[o]=c[0]; D[o+1]=c[1]; D[o+2]=c[2]; D[o+3]=255;
   }
   g.putImageData(img,0,0);
-  // Luna con cráteres (luz desde la izquierda), anclada a la derecha
-  const MX=256+RX, MY=27, MR=15;
-  for(let y=-MR;y<=MR;y++) for(let x=-MR;x<=MR;x++){
-    const d=Math.hypot(x,y); if(d>MR) continue;
-    const lit=(-x*0.6-y*0.4)/MR+0.4+(BAYER4[((y+64)&3)*4+((x+64)&3)]/16-0.5)*0.35;
-    g.fillStyle=d>MR-1?'#bfb69a':lit>0.25?'#efe9d2':lit>-0.25?'#d8d0b4':'#b5ac90'; g.fillRect(MX+x,MY+y,1,1);
-  }
-  g.fillStyle='#b9b095'; [[-6,-5,3],[4,3,4],[-3,7,2],[7,-7,2],[-9,3,2]].forEach(([x,y,r])=>{ for(let j=-r;j<=r;j++) for(let i=-r;i<=r;i++) if(i*i+j*j<=r*r) g.fillRect(MX+x+i,MY+y+j,1,1); });
+  // Luna detallada con la fase de hoy, anclada a la derecha, con un halo que depende de cuánta luna hay
+  const MX=256+RX, MY=27, MR=15, moonLit=menuDrawMoon(g,MX,MY,MR,menuMoonPhase());
+  const mh=g.createRadialGradient(MX,MY,MR,MX,MY,MR*2.2); mh.addColorStop(0,'rgba(230,226,200,'+(0.16*moonLit).toFixed(3)+')'); mh.addColorStop(1,'rgba(230,226,200,0)');
+  g.save(); g.globalCompositeOperation='lighter'; g.fillStyle=mh; g.fillRect(MX-MR*2.2,MY-MR*2.2,MR*4.4,MR*4.4); g.restore();
   // islas lejanas en el horizonte (repartidas por todo el ancho)
   const isle=(x0,x1,hgt,col,top,seed)=>{ x0=Math.round(x0*FX); x1=Math.round(x1*FX); for(let x=x0;x<=x1;x++){ const u=(x-x0)/(x1-x0), h=Math.round(Math.sin(u*Math.PI)*hgt*(0.75+0.25*Math.sin(x*0.37+seed))+Math.sin(x*1.3+seed)*0.8);
     if(h<=0) continue; g.fillStyle=col; g.fillRect(x,HOR-h,1,h); g.fillStyle=top; g.fillRect(x,HOR-h,1,1); } };
@@ -9025,7 +9062,7 @@ function menuBuildScene(){
   const silR=mkCanvas(300,H0), rq=silR.getContext('2d'); rq.drawImage(sil,0,0);   // reflejo: la torre de colores no debe pintar manchas en el agua
   rq.globalCompositeOperation='source-atop'; rq.fillStyle='rgba(10,8,22,0.7)'; rq.fillRect(0,0,300,H0);
   const lit=menuBuildLit(sil,H0);
-  menuScene={silR,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
+  menuScene={moonLit,silR,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
     stars:Array.from({length:Math.round(90*FX)},(_,i)=>[(opsHash(i,1,5)*SW)|0,(opsHash(i,2,5)*(HOR-32))|0,opsHash(i,3,5)*6.28,opsHash(i,4,5)]),
     wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
     smoke:[], lastPuff:-1, embers:[], bubbles:[]};
@@ -9195,7 +9232,7 @@ function drawMenuScene(){
     g.globalAlpha=clamp((dm-30)/30,0.25,1)*(far?0.75:0.9);
     g.fillStyle=far?'#3a2048':'#2c1a3e'; g.fillRect(x,y,wd,3); g.fillRect(x+4,y-2,wd-10,2); g.fillRect(x+10,y-3,Math.round(wd*0.4),1);
     g.fillStyle=far?'#c45a50':'#8a3c5a'; g.fillRect(x+2,y+3,wd-4,1);
-    if(dm<48){ g.fillStyle='#e8e0cc'; g.fillRect(x+4,y-2,wd-10,1); }
+    if(dm<48&&M.moonLit>0.25){ g.fillStyle='#e8e0cc'; g.fillRect(x+4,y-2,wd-10,1); }
   }
   g.globalAlpha=1;
   g.drawImage(M.sil,OX,OY);   // la isla queda delante de las nubes bajas
@@ -9258,8 +9295,10 @@ function drawMenuScene(){
       g.fillRect(Math.round(i*gap+h*gap+Math.sin(ts*(0.9+chop*2)+ph)*(2+chop*2)),y,len+Math.round(h*2),1);
     }
   }
-  for(let y=HOR+2;y<SH;y+=2){ const w=2+(y-HOR)*0.12, j=Math.sin(ts*2.4+y*0.9)*3;
+  g.globalAlpha=Math.pow(M.moonLit,0.7);   // en luna nueva no hay reflejo
+  for(let y=HOR+2;y<SH&&M.moonLit>0.03;y+=2){ const w=(2+(y-HOR)*0.12)*(0.4+0.6*M.moonLit), j=Math.sin(ts*2.4+y*0.9)*3;
     if(Math.sin(ts*3+y*1.7)>-0.4){ g.fillStyle=(y-HOR)<20?'#f2e6c0':'#b9ab8a'; g.fillRect(Math.round(256+RX-w/2+j),y,Math.max(1,Math.round(w*(0.5+0.5*Math.sin(y+ts)))),1); } }
+  g.globalAlpha=1;
   g.translate(OX,OY);
   // reflejo de la linterna: como el de la luna, crestas que se encienden y se mecen con la ola (más anchas hacia ti),
   // más vivas alrededor del punto espejo y más fuertes cuando el haz te apunta
