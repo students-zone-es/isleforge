@@ -1706,7 +1706,7 @@ function fireBullet(x,y,a,owner,o){
   bullets.push({x,y,ox:x,oy:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,owner,dmg:(o.dmg||5)*(owner==='e'?bossDmgK:1),radius:o.radius||3,life:o.life||90,
     pierce:o.pierce!=null?o.pierce:(owner==='p'?player.pierce:0),
     frag:o.frag!=null?o.frag:(owner==='p'?player.fragment:0),
-    splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src, hitList:null, sp:o.shieldPierce||0,
+    splash:o.splash||0, kind:o.kind||'mg', air:!!o.air, stunMul:o.stunMul||0.5, grazed:false, src, hitList:null, sp:o.shieldPierce||0, stunP:o.stunP||0,
     fac:owner==='e'?(o.fac||shotFac):null});
 }
 function updateBullets(dt){
@@ -1747,6 +1747,7 @@ function updateBullets(dt){
           if(!b.grazed && d2<(player.radius+11)**2 && d2>player.radius**2){ b.grazed=true; score+=2; S.graze(); }
           if(d2<(b.radius+player.radius)**2){
             damagePlayer(b.dmg,b.sp); dead=true;
+            if(b.stunP){ stunPlayer(b.stunP); popup(player.x,player.y-34,'¡ELECTROCUTADO!','#7fe8ff',13); }
             if(b.splash) explode(b.x,b.y,b.splash,0,'e',{});
           }
         }
@@ -2669,11 +2670,13 @@ function perceive(en,dt){
   const lit=weather.flash>0.35;                                      // un rayo lo ilumina todo un instante
   if(tileAt(p.x,p.y)===BUSH&&!lit) range*=0.45;
   let can=false;
-  if(p.cloak>0) can=dd<en.radius+p.radius+12||(lit&&dd<range*0.6&&(en.air||lineClear(en.x,en.y,p.x,p.y)));   // invisible: solo te notan si los tocas (o si cae un rayo)
+  if(p.cloak>0&&en.def.role!=='chameleon') can=dd<en.radius+p.radius+12||(lit&&dd<range*0.6&&(en.air||lineClear(en.x,en.y,p.x,p.y)));   // invisible: solo te notan si los tocas (o si cae un rayo)
   else if(dd<range){
     const facing=en.ai!=='patrol'||en.def.fov>=6 ? true : en.eyes ? en.eyes.some(a=>Math.abs(angDiff(a,Math.atan2(dy,dx)))<en.def.fov/2) : Math.abs(angDiff(en.def.tank?en.aim:en.angle,Math.atan2(dy,dx)))<en.def.fov/2;
     can=(facing||dd<80) && (en.air||lineClear(en.x,en.y,p.x,p.y));
+    if(can&&p.cloak>0&&!en.seenCloak){ en.seenCloak=true; popup(en.x,en.y-30,'¡EL CAMALEÓN TE VE!','#9fe86a',13); }   // el único que ve a través del camuflaje
   }
+  if(p.cloak<=0) en.seenCloak=false;
   if(can){
     en.seen=true;
     if(en.ai==='combat'){ en.lastKnown={x:p.x,y:p.y}; en.lastSeen=t; }
@@ -4138,6 +4141,14 @@ function bulletSprite(n){
 }
 function drawBullets(){
   for(const b of bullets){
+    if(b.kind==='tesla'){   // bola eléctrica del camaleón: núcleo blanco, halo cian y chispas que saltan
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      ctx.fillStyle='rgba(90,220,255,0.35)'; ctx.beginPath(); ctx.arc(b.x,b.y,b.radius+5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#bff6ff'; ctx.beginPath(); ctx.arc(b.x,b.y,b.radius-1,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#7fe8ff'; ctx.lineWidth=1.5; ctx.beginPath();
+      for(let i=0;i<3;i++){ const a=rand(0,Math.PI*2), r1=b.radius+rand(3,8); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x+Math.cos(a+0.4)*r1*0.5,b.y+Math.sin(a+0.4)*r1*0.5); ctx.lineTo(b.x+Math.cos(a)*r1,b.y+Math.sin(a)*r1); }
+      ctx.stroke(); ctx.restore(); continue;
+    }
     if(b.owner==='e'&&b.kind==='shell'){   // cañonazo enemigo: la hoja no trae uno que no se confunda con el tuyo
       ctx.fillStyle='#ff8a3a'; ctx.fillRect(Math.round(b.x-3.5),Math.round(b.y-3.5),7,7);
       ctx.globalAlpha=0.35; ctx.fillRect(Math.round(b.x-b.vx*0.8-2),Math.round(b.y-b.vy*0.8-2),3,3); ctx.globalAlpha=1;
@@ -8628,6 +8639,19 @@ function chamCombat(en,tg,dd,los,aimed,dt){
   }
   // Emboscada: con aliados cerca espera camuflado a que estés peleando con ellos y entonces te atrapa
   // (quieto y expuesto a su fuego). Si te acercas mucho o tarda demasiado, ataca igual.
+  // TE ESCAPAS (te alejas de él): con aliados cerca de ti te atrapa con la lengua para lanzarte hacia ellos; si no hay
+  // nadie cerca, te suelta una BOLA ELÉCTRICA (mini-Tesla) que te aturde
+  en.teslaCd=(en.teslaCd||0)-dt;
+  const p=player, pd=dist(en,p)||1, away=p.alive&&(p.vx*(p.x-en.x)+p.vy*(p.y-en.y))/pd>1.2;
+  if(!pw&&away&&en.seen&&canAttack(en)&&los){
+    const near=enemies.some(o=>o.alive&&o!==en&&o.def.role!=='chameleon'&&chamCanThrowTo(o,en)&&dist(o,p)<320);
+    if(near&&d<200&&en.atkCd<=0){ en.waitT=0; en.tongue={phase:'wind',t:0,a:Math.atan2(p.y-en.y,p.x-en.x),len:0,victim:null,want:p,hp0:en.hp}; en.vx*=0.3; en.vy*=0.3; S.huh(); return; }
+    if(!near&&d<340&&en.teslaCd<=0){
+      en.teslaCd=240; const a=leadAim(en,{x:p.x,y:p.y,u:p},4.5);
+      fireBullet(en.x+Math.cos(a)*(en.radius+6),en.y+Math.sin(a)*(en.radius+6),a,'e',{speed:4.5,dmg:6,radius:6,life:120,kind:'tesla',stunP:60});
+      popup(en.x,en.y-28,'¡DESCARGA!','#7fe8ff',12); S.eshoot(); return;
+    }
+  }
   const engaged=allies.some(o=>o.ai==='combat'&&o.seen);
   if(!pw&&allies.length&&!engaged&&d>110&&(en.waitT=(en.waitT||0)+dt)<480){ en.vx*=0.85; en.vy*=0.85; return; }
   if(d<200&&(pw||los)&&en.atkCd<=0&&canAttack(en)){
@@ -8638,6 +8662,8 @@ function chamCombat(en,tg,dd,los,aimed,dt){
   en.goT-=dt; if(en.goT<=-70) en.goT=45;   // se acerca a saltos
   if(en.goT>0&&d>150) steerTo(en,target.x,target.y,dt,1.1); else { en.vx*=0.85; en.vy*=0.85; }
 }
+/* ¿Es un aliado al que puede lanzarte? (de su bando y que pelee: no estructuras, torretas ni maniquís) */
+function chamCanThrowTo(o,en){ return (o.def.fac||'r')===(en.def.fac||'r')&&!o.static&&!['structure','spawner','turret','dummy'].includes(o.def.role); }
 function chamTongue(en,dt){
   const T=en.tongue;
   if(en.atkCd>0) en.atkCd-=dt;
@@ -8654,9 +8680,10 @@ function chamTongue(en,dt){
     if(player.alive&&player.invuln<=0&&Math.hypot(player.x-tx,player.y-ty)<player.radius+6){
       T.victim=player; T.phase='pull'; damagePlayer(en.def.dmg); popup(player.x,player.y-26,'¡ATRAPADO!','#9fe86a',13);
       // ayuda al cuerpo a cuerpo: si hay un Triturador cerca, te lanza hacia él y le deja el golpe preparado
-      const ally=enemies.filter(o=>o.alive&&o.def.role==='melee'&&dist(o,player)<300).sort((a,b)=>dist(a,player)-dist(b,player))[0];
+      const ally=enemies.filter(o=>o.alive&&o!==en&&o.def.role!=='chameleon'&&chamCanThrowTo(o,en)&&dist(o,player)<320)
+        .sort((a,b)=>(a.def.role==='melee'?0:400)+dist(a,player)-((b.def.role==='melee'?0:400)+dist(b,player)))[0];   // prefiere a los Trituradores
       if(ally){ const dd=dist(ally,player), a=Math.atan2(ally.y-player.y,ally.x-player.x);
-        launchPlayer(0,0,clamp(dd/14*Math.sqrt(player.mass||1)/1.1,6,14),a);
+        launchPlayer(0,0,clamp(dd/14*Math.sqrt(player.mass||1)/1.1,6,19),a);
         ally.ai='combat'; ally.aware=1; ally.lastKnown={x:player.x,y:player.y}; ally.atkCd=0; ally.hookCd=0;
         popup(player.x,player.y-40,'¡TE LANZA A SU ALIADO!','#9fe86a',13); T.victim=null; T.phase='back'; }
     } else {
