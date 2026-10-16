@@ -9002,19 +9002,26 @@ function menuBuildScene(){
   for(let i=0;i<15;i++) b.fillRect(123+Math.round(i*0.15),120-i*2,1,2);                   // grúa
   b.fillRect(121,119,5,3); b.fillRect(123,90,22,1); b.fillRect(143,91,1,6);
   // faro: torre que se estrecha hacia arriba, con franjas, balcón con barandilla, linterna de cristal y cúpula
-  for(let y=95;y<=121;y++){ const hw=2+Math.round((y-95)/26*2.2), band=Math.floor((y-95)/4)%2;
-    b.fillStyle=band?'#271630':SIL; b.fillRect(186-hw,y,hw*2+1,1); b.fillStyle='#3a2238'; b.fillRect(186-hw,y,1,1); }
-  b.fillStyle=SIL; b.fillRect(181,119,11,3);                                             // roca de la base
-  b.fillRect(182,94,9,1); for(let x=182;x<=190;x+=2) b.fillRect(x,93,1,1);               // balcón y barandilla
-  b.fillRect(184,89,1,4); b.fillRect(188,89,1,4);                                        // marco de la linterna
-  b.fillRect(184,88,5,1); b.fillRect(185,87,3,1); b.fillRect(186,85,1,2);                 // cúpula y pararrayos
+  // franjas rojas y blancas apagadas por el anochecer; cada fila con volumen de cilindro (oscuro a la izquierda,
+  // claro a la derecha, donde le da lo que queda de luz) y la última columna con el borde iluminado
+  const TOWER={r:['#22101c','#3a1626','#552232'],w:['#221e30','#38304a','#524664']};
+  for(let y=96;y<=121;y++){ const hw=3+Math.round((y-96)/25*2), pal=Math.floor((y-96)/4)%2?TOWER.w:TOWER.r;
+    for(let x=186-hw;x<=186+hw;x++){ const u=(x-(186-hw))/(hw*2); b.fillStyle=pal[u<0.35?0:u<0.75?1:2]; b.fillRect(x,y,1,1); }
+    b.fillStyle='#6a4a62'; b.fillRect(186+hw,y,1,1); }
+  b.fillStyle='#120c1c'; b.fillRect(185,117,2,4);                                        // puerta (las ventanas están en M.wins)
+  b.fillStyle=SIL; b.fillRect(180,120,13,2);                                             // roca de la base
+  b.fillRect(181,95,11,1); for(let x=181;x<=191;x+=2) b.fillRect(x,93,1,2);               // balcón y barandilla
+  b.fillRect(183,88,1,5); b.fillRect(189,88,1,5);                                        // marco de la linterna
+  b.fillRect(183,87,7,1); b.fillRect(184,86,5,1); b.fillRect(185,85,3,1); b.fillRect(186,82,1,3);   // cúpula y pararrayos
   b.fillRect(96,124,14,1); b.fillRect(98,125,1,3); b.fillRect(103,125,1,3); b.fillRect(108,125,1,3);  // muelle
   b.fillStyle=RIM; b.fillRect(140,92,1,28); b.fillRect(112,108,1,12); b.fillRect(184,96,1,24); b.fillRect(96,124,14,1);
   g.drawImage(sil,OX,OY);
   // máscara que tapa los haces del faro: los edificios sí, pero no el propio faro ni el suelo (para que el haz llegue al mar)
   const bmask=mkCanvas(300,H0), mq=bmask.getContext('2d'); mq.drawImage(sil,0,0); mq.clearRect(178,80,16,48); mq.clearRect(0,119,300,10);
+  const silR=mkCanvas(300,H0), rq=silR.getContext('2d'); rq.drawImage(sil,0,0);   // reflejo: la torre de colores no debe pintar manchas en el agua
+  rq.globalCompositeOperation='source-atop'; rq.fillStyle='rgba(10,8,22,0.7)'; rq.fillRect(0,0,300,H0);
   const lit=menuBuildLit(sil,H0);
-  menuScene={c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),beamR:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
+  menuScene={silR,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),beamR:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
     stars:Array.from({length:Math.round(90*FX)},(_,i)=>[(opsHash(i,1,5)*SW)|0,(opsHash(i,2,5)*(HOR-32))|0,opsHash(i,3,5)*6.28,opsHash(i,4,5)]),
     wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
     smoke:[], lastPuff:-1, embers:[], bubbles:[]};
@@ -9093,7 +9100,7 @@ function menuIslandLights(M,ts,beams,LX,LY,flash,H0){
   q.fillStyle=Math.floor(ts*1.2)%2?'#ff3b3b':'#4a1218'; q.fillRect(150,76,1,1);   // luz de aviso de la chimenea
   const rw=Math.round(Math.abs(Math.cos(ts*1.6))*5)+1; q.fillStyle='#120c1c'; q.fillRect(164-rw,98,rw*2,3);   // radar girando
   q.fillStyle=Math.floor(ts*1.5)%2?'#ff4757':'#5a1a24'; q.fillRect(163,96,2,2);
-  q.fillStyle='rgba(255,226,160,'+(0.55+flash*0.45).toFixed(2)+')'; q.fillRect(185,89,3,4);   // lámpara del faro
+  q.fillStyle='rgba(255,226,160,'+(0.55+flash*0.45).toFixed(2)+')'; q.fillRect(184,88,5,5);   // lámpara del faro
 }
 function menuShipWake(g,sxr,sy,ts,SW){
   const wl=sy+8, fr=Math.floor(ts*6);
@@ -9164,7 +9171,7 @@ function drawMenuScene(){
   g.save(); g.translate(OX,OY);
   for(let j=0;j<40;j++){
     const wob=Math.round(Math.sin(ts*2.2+j*0.9)*(0.4+j*0.05)), fade=1-j/48;
-    g.globalAlpha=0.5; g.drawImage(M.sil,90,H0-1-j,120,1,90+wob,H0+j,120,1);
+    g.globalAlpha=0.5; g.drawImage(M.silR,90,H0-1-j,120,1,90+wob,H0+j,120,1);
     g.globalAlpha=0.5*fade; g.drawImage(M.islL,90,H0-1-j,120,1,90+wob,H0+j,120,1);
   }
   g.globalAlpha=1;
@@ -9230,10 +9237,16 @@ function drawMenuScene(){
   M.bubbles=M.bubbles.filter(p=>(p.life-=0.01)>0&&p.y>HOR+3);
   for(const p of M.bubbles){ p.y-=0.35; p.x+=Math.sin(ts*3+p.y)*0.2; g.fillStyle='rgba(224,184,255,'+(p.life*0.8).toFixed(2)+')'; g.fillRect(Math.round(p.x),Math.round(p.y),1,1); }
   // olas y reflejo de la luna
-  for(let y=HOR+3,r=0;y<SH;y+=4,r++){
-    const sp=0.15+r*0.06, gap=18+r*3, off=(ts*12*sp+r*7)%gap, len=2+(r>>1);
-    g.fillStyle=r<5?'#3a2f62':'#27315e';
-    for(let x=-gap+off;x<SW;x+=gap) g.fillRect(Math.round(x),y,len,1);
+  // olas: cada cresta aparece y se apaga en su sitio balanceándose un poco (no una cinta que se desliza);
+  // cerca del horizonte son finas y apretadas y hacia ti más largas y separadas (perspectiva)
+  for(let y=HOR+2,r=0;y<SH;y+=2+(r>>2),r++){
+    const gap=9+r*2, len=1+(r>>2);
+    for(let i=-1;i*gap<SW+gap;i++){
+      const h=opsHash(i,r,21), ph=h*6.283, k=Math.sin(ts*(0.7+h*0.9)+ph);
+      if(k<0.15) continue;
+      g.fillStyle=r<5?'rgba(84,66,128,'+(k*0.85).toFixed(2)+')':'rgba(56,66,124,'+(k*0.8).toFixed(2)+')';
+      g.fillRect(Math.round(i*gap+h*gap+Math.sin(ts*0.9+ph)*2),y,len+Math.round(h*2),1);
+    }
   }
   for(let y=HOR+2;y<SH;y+=2){ const w=2+(y-HOR)*0.12, j=Math.sin(ts*2.4+y*0.9)*3;
     if(Math.sin(ts*3+y*1.7)>-0.4){ g.fillStyle=(y-HOR)<20?'#f2e6c0':'#b9ab8a'; g.fillRect(Math.round(256+RX-w/2+j),y,Math.max(1,Math.round(w*(0.5+0.5*Math.sin(y+ts)))),1); } }
@@ -9245,15 +9258,38 @@ function drawMenuScene(){
     if(bm.wet<0.01) continue;
     spots.push({x:bm.ex,y:bm.ey,rx:bm.rx,ry:bm.ry,a:(0.3+zf*0.3)*bm.wet});
     const gr=g.createRadialGradient(bm.ex,bm.ey,0,bm.ex,bm.ey,bm.rx);
-    gr.addColorStop(0,'rgba(255,244,200,'+((0.3+zf*0.3)*bm.wet).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
+    gr.addColorStop(0,'rgba(255,244,200,'+((0.18+zf*0.2)*bm.wet).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
     g.save(); g.globalCompositeOperation='lighter'; g.translate(bm.ex,bm.ey); g.scale(1,bm.ry/bm.rx); g.translate(-bm.ex,-bm.ey);
     g.fillStyle=gr; g.beginPath(); g.arc(bm.ex,bm.ey,bm.rx,0,6.283); g.fill(); g.restore();
     const fr=Math.floor(ts*8);
+    // el haz va iluminando las crestas de las olas por donde pasa sobre el agua (más fuerte cerca del final)
+    g.save(); g.globalCompositeOperation='lighter';
+    const ddx=bm.ex-LX, ddy=bm.ey-LY;
+    for(let y=H0+1;y<=bm.ey+bm.ry&&ddy>0;y++){
+      const u=(y-LY)/ddy, cx=LX+ddx*Math.min(u,1), hw=Math.max(1.5,bm.w*Math.min(u,1)*1.4);
+      for(let n=0;n<Math.ceil(hw/2.5);n++){
+        if(opsHash(y,n,fr+40)>0.6) continue;
+        const o=(opsHash(y,n+3,fr+40)*2-1), al=bm.wet*(0.25+0.45*zf)*(1-Math.abs(o))*(0.35+0.65*Math.min(u,1));
+        if(al<0.04) continue;
+        g.fillStyle='rgba(255,236,190,'+Math.min(1,al).toFixed(2)+')'; g.fillRect(Math.round(cx+o*hw),y,1+Math.round(opsHash(y,n+6,fr+40)*2),1);
+      }
+    }
+    g.restore();
     for(let i=0;i<12;i++){ const u=opsHash(i,fr,3)*2-1, v=opsHash(i,fr,4)*2-1; if(u*u+v*v>1||opsHash(i,fr,5)>bm.wet) continue;
       g.fillStyle=i%3?'#fff8dc':'#ffffff'; g.fillRect(Math.round(bm.ex+u*bm.rx*0.85),Math.round(bm.ey+v*bm.ry),2,1); }
   }
   // reflejo de la lámpara en el agua
-  g.fillStyle='rgba(255,236,170,'+(0.22+flash*0.5).toFixed(2)+')'; g.fillRect(LX-1+Math.round(Math.sin(ts*2.2)),2*H0-LY,3,1); g.fillRect(LX+Math.round(Math.sin(ts*2.2+1)),2*H0-LY+2,2,1);
+  // reflejo de la linterna: como el de la luna, crestas que se encienden y se mecen con la ola (más anchas hacia ti),
+  // más vivas alrededor del punto espejo y más fuertes cuando el haz te apunta
+  g.save(); g.globalCompositeOperation='lighter';
+  const face=clamp(0.3+Math.max(0,zMax)*0.45+flash*0.5,0,1), mir=H0-LY, dMax=SH-OY-H0;
+  for(let d=2;d<dMax;d+=2){
+    if(Math.sin(ts*2.6+d*1.3)<-0.2) continue;
+    const w=1+d*0.06, j=Math.sin(ts*2.1+d*0.8)*(0.6+d*0.03), peak=0.35+0.65*Math.exp(-(((d-mir)/26)**2));
+    const al=face*peak*(1-d/dMax)*0.8*(0.6+0.4*Math.sin(ts*3.3+d*2.1)); if(al<0.03) continue;
+    g.fillStyle='rgba(255,226,160,'+al.toFixed(2)+')'; g.fillRect(Math.round(LX-w/2+j),H0+d,Math.max(1,Math.round(w)),1);
+  }
+  g.restore();
   g.restore();
   // haces del faro (luz que se suma): se preparan aquí y su parte en el aire se refleja en el mar
   const bc=M.beamC.getContext('2d'); bc.clearRect(0,0,SW,SH);
@@ -9267,6 +9303,17 @@ function drawMenuScene(){
     gr.addColorStop(0,'rgba(255,244,200,'+a0.toFixed(2)+')'); gr.addColorStop(0.7,'rgba(255,244,200,'+(a0*0.3).toFixed(2)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
     const quad=q=>{ q.beginPath(); q.moveTo(LX+dx/L*st+nx,LY+dy/L*st+ny); q.lineTo(bm.ex+nx*w,bm.ey+ny*w); q.lineTo(bm.ex-nx*w,bm.ey-ny*w); q.lineTo(LX+dx/L*st-nx,LY+dy/L*st-ny); q.closePath(); q.fill(); };
     bc.fillStyle=gr; quad(bc);
+    // núcleo del haz: más estrecho y brillante (la luz se concentra en el centro y se difumina hacia los bordes)
+    const wc=w*0.35, gc=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
+    gc.addColorStop(0,'rgba(255,250,225,'+(a0*0.9).toFixed(2)+')'); gc.addColorStop(0.5,'rgba(255,250,225,'+(a0*0.25).toFixed(2)+')'); gc.addColorStop(1,'rgba(255,250,225,0)');
+    bc.fillStyle=gc; bc.beginPath(); bc.moveTo(LX+dx/L*st,LY+dy/L*st); bc.lineTo(bm.ex+nx*wc,bm.ey+ny*wc); bc.lineTo(bm.ex-nx*wc,bm.ey-ny*wc); bc.closePath(); bc.fill();
+    // motas de polvo y humedad que solo se ven dentro de la luz
+    for(const m of M.motes){
+      const u=(m.t+ts*0.012)%1; if(u<0.06) continue;
+      const tw=0.5+0.5*Math.sin(ts*3+m.ph), al=a0*1.3*(1-u)*tw; if(al<0.05) continue;
+      bc.fillStyle='rgba(255,248,220,'+Math.min(1,al).toFixed(2)+')';
+      bc.fillRect(Math.round(LX+dx*u+nx*m.s*w*u),Math.round(LY+dy*u+ny*m.s*w*u),1,1);
+    }
     const refl=1-menuSmooth(-0.15,0.4,bm.z);
     if(refl>0.01){ br.globalAlpha=refl; br.fillStyle=gr; quad(br); br.globalAlpha=1; }
   }
@@ -9317,8 +9364,19 @@ function drawMenuScene(){
     g.fillRect(Math.round(LX-flash*46),LY,Math.round(flash*92),1); g.fillRect(LX,Math.round(LY-flash*16),1,Math.round(flash*32));
   }
   g.restore();
-  g.fillStyle='rgba(255,226,160,'+(0.55+flash*0.45).toFixed(2)+')'; g.fillRect(185+OX,89+OY,3,4);
-  const lensX=185+OX+1+Math.cos(th), l0=Math.floor(lensX), lf2=lensX-l0;   // la lente se desliza repartiendo su brillo entre dos píxeles
+  // halo cálido que siempre envuelve la linterna (la luz se dispersa en el aire húmedo)
+  g.save(); g.globalCompositeOperation='lighter';
+  const hal=g.createRadialGradient(LX+OX,LY+OY,0,LX+OX,LY+OY,11); hal.addColorStop(0,'rgba(255,214,150,'+(0.32+flash*0.3).toFixed(2)+')'); hal.addColorStop(1,'rgba(255,214,150,0)');
+  g.fillStyle=hal; g.fillRect(LX+OX-11,LY+OY-11,22,22);
+  // la luz de la linterna cae sobre la barandilla, el suelo del balcón y el borde de la cúpula
+  for(let x=181;x<=191;x++){ const k=(0.5+flash*0.4)*(1-Math.abs(x-186)/7);
+    g.fillStyle='rgba(255,200,130,'+k.toFixed(2)+')'; if(x%2) g.fillRect(x+OX,93+OY,1,2); g.fillRect(x+OX,95+OY,1,1); }
+  g.fillStyle='rgba(255,200,130,'+(0.35+flash*0.4).toFixed(2)+')'; g.fillRect(184+OX,87+OY,5,1);
+  g.restore();
+  // cristal de la linterna con montante central y la lente girando dentro (su brillo se reparte entre dos píxeles)
+  g.fillStyle='rgba(255,220,150,'+(0.7+flash*0.3).toFixed(2)+')'; g.fillRect(184+OX,88+OY,5,5);
+  g.fillStyle='rgba(70,40,40,0.55)'; g.fillRect(186+OX,88+OY,1,5);
+  const lensX=184+OX+2+Math.cos(th)*2, l0=Math.floor(lensX), lf2=lensX-l0;
   g.fillStyle='rgba(255,255,255,'+(1-lf2).toFixed(2)+')'; g.fillRect(l0,89+OY,1,3);
   if(lf2>0.01){ g.fillStyle='rgba(255,255,255,'+lf2.toFixed(2)+')'; g.fillRect(l0+1,89+OY,1,3); }
   // primer plano: rocas (izquierda y derecha) y un robot hackeado vigilando
