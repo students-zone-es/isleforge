@@ -2404,11 +2404,13 @@ function firePurple(x,y,a,owner,o){
   S.purple(); shake=Math.max(shake,14); flashScreen('#b06cff',0.35);
 }
 /* Paredes SUPERRESISTENTES: el Hollow Boom no puede tragárselas y explota al chocar.
-   Son la roca maciza (acantilados, cañones, yacimientos), el muro exterior del mapa y el borde del mundo. */
+   Son la roca maciza (acantilados, cañones, yacimientos), el muro exterior del mapa, el borde del mundo y,
+   mientras luchas contra un jefe, cualquier pared o cobertura (así no destroza la arena ni las columnas). */
 function superWall(c,r){
   if(!inB(c,r)) return true;
   const v=map[idx(c,r)];
   if(v===ROCK) return true;
+  if(boss&&boss.alive&&SOLID[v]&&v!==WATER) return true;   // contra un jefe no rompe nada: estalla al tocar cualquier pared o cobertura
   return (v===WALL||v===BLD)&&(c<=1||c>=WC-2||r<=2||r>=WR-3);
 }
 function voidHitsWall(v){
