@@ -9154,15 +9154,15 @@ function drawMenuScene(){
   const M=menuScene, g=M.c.getContext('2d'), ts=performance.now()/1000, HOR=M.HOR, OX=M.OX, OY=M.OY, RX=M.RX, SW=M.SW, SH=M.SH, H0=128;
   g.imageSmoothingEnabled=false;
   g.drawImage(M.bg,0,0);
-  // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos.
-  // c = hacia los lados, z = hacia ti (+) o hacia el fondo (-). Cuando un haz viene hacia ti baja hasta el mar.
+  // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos, siempre en HORIZONTAL
+  // (como un faro de verdad: barre el horizonte, nunca apunta al mar). c = hacia los lados, z = hacia ti (+) o al fondo (-).
+  // De lado el haz es largo; al alejarse se acerca un poco al horizonte (perspectiva); al venir hacia ti se acorta,
+  // se ensancha y el destello toma el relevo. Todo cambia de forma continua (sin tirones al pasar por los lados).
   const LX=186, LY=90, th=ts*Math.PI*2/7;
-  // Todo cambia de forma continua (antes, al llegar a los lados, el haz saltaba de golpe 5 px y un 25% de brillo):
-  // fr mezcla suave entre «hacia el fondo» y «hacia ti», ey baja con una rampa suave y wet dice cuánto toca el agua.
   const beams=[th,th+Math.PI].map(a=>{
     const c=Math.cos(a), z=Math.sin(a), ac=Math.abs(c), zf=Math.max(0,z), fr=menuSmooth(-0.25,0.25,z);
-    const ey=LY+6+68*(z+Math.hypot(z,0.25))/2.0156, wet=menuSmooth(H0-8,H0+8,ey);
-    return {c,z,ex:LX+c*125,ey,wet,w:2+ac*3+zf*(6+20*zf*wet)*0.8,k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr),
+    const ey=LY+6+14*Math.max(0,-z)-6*zf;
+    return {c,z,ex:LX+c*125,ey,w:2+ac*3+zf*6,k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr),
       a:lerp(0.22+0.1*ac,0.42+0.2*zf,fr),st:lerp(4,1,fr)}; });
   const zMax=Math.max(beams[0].z,beams[1].z), flash=zMax>0.8?(zMax-0.8)/0.2:0;
   menuIslandLights(M,ts,beams,LX,LY,flash,H0);
@@ -9250,35 +9250,7 @@ function drawMenuScene(){
   }
   for(let y=HOR+2;y<SH;y+=2){ const w=2+(y-HOR)*0.12, j=Math.sin(ts*2.4+y*0.9)*3;
     if(Math.sin(ts*3+y*1.7)>-0.4){ g.fillStyle=(y-HOR)<20?'#f2e6c0':'#b9ab8a'; g.fillRect(Math.round(256+RX-w/2+j),y,Math.max(1,Math.round(w*(0.5+0.5*Math.sin(y+ts)))),1); } }
-  // donde el haz del faro toca el agua aparece una mancha de luz que barre el mar (coordenadas de diseño)
-  const spots=[];
   g.translate(OX,OY);
-  for(const bm of beams){
-    const zf=Math.max(0,bm.z); bm.rx=6+zf*20; bm.ry=1.5+zf*5;
-    if(bm.wet<0.01) continue;
-    spots.push({x:bm.ex,y:bm.ey,rx:bm.rx,ry:bm.ry,a:(0.3+zf*0.3)*bm.wet});
-    const gr=g.createRadialGradient(bm.ex,bm.ey,0,bm.ex,bm.ey,bm.rx);
-    gr.addColorStop(0,'rgba(255,244,200,'+((0.18+zf*0.2)*bm.wet).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
-    g.save(); g.globalCompositeOperation='lighter'; g.translate(bm.ex,bm.ey); g.scale(1,bm.ry/bm.rx); g.translate(-bm.ex,-bm.ey);
-    g.fillStyle=gr; g.beginPath(); g.arc(bm.ex,bm.ey,bm.rx,0,6.283); g.fill(); g.restore();
-    const fr=Math.floor(ts*8);
-    // el haz va iluminando las crestas de las olas por donde pasa sobre el agua (más fuerte cerca del final)
-    g.save(); g.globalCompositeOperation='lighter';
-    const ddx=bm.ex-LX, ddy=bm.ey-LY;
-    for(let y=H0+1;y<=bm.ey+bm.ry&&ddy>0;y++){
-      const u=(y-LY)/ddy, cx=LX+ddx*Math.min(u,1), hw=Math.max(1.5,bm.w*Math.min(u,1)*1.4);
-      for(let n=0;n<Math.ceil(hw/2.5);n++){
-        if(opsHash(y,n,fr+40)>0.6) continue;
-        const o=(opsHash(y,n+3,fr+40)*2-1), al=bm.wet*(0.25+0.45*zf)*(1-Math.abs(o))*(0.35+0.65*Math.min(u,1));
-        if(al<0.04) continue;
-        g.fillStyle='rgba(255,236,190,'+Math.min(1,al).toFixed(2)+')'; g.fillRect(Math.round(cx+o*hw),y,1+Math.round(opsHash(y,n+6,fr+40)*2),1);
-      }
-    }
-    g.restore();
-    for(let i=0;i<12;i++){ const u=opsHash(i,fr,3)*2-1, v=opsHash(i,fr,4)*2-1; if(u*u+v*v>1||opsHash(i,fr,5)>bm.wet) continue;
-      g.fillStyle=i%3?'#fff8dc':'#ffffff'; g.fillRect(Math.round(bm.ex+u*bm.rx*0.85),Math.round(bm.ey+v*bm.ry),2,1); }
-  }
-  // reflejo de la lámpara en el agua
   // reflejo de la linterna: como el de la luna, crestas que se encienden y se mecen con la ola (más anchas hacia ti),
   // más vivas alrededor del punto espejo y más fuertes cuando el haz te apunta
   g.save(); g.globalCompositeOperation='lighter';
@@ -9324,14 +9296,8 @@ function drawMenuScene(){
     g.globalAlpha=0.32*(1-j/46); g.drawImage(M.beamR,0,HOR-1-j,SW,1,wob,HOR+1+j,SW,1);
   }
   g.restore();
-  // mapa de luz del faro (haz en el aire + manchas en el agua): decide qué píxeles del barco se iluminan
+  // mapa de luz del faro (el haz en el aire): decide qué píxeles del barco se iluminan
   const lc=M.lightC.getContext('2d'); lc.clearRect(0,0,SW,SH); lc.drawImage(M.beamC,0,0);
-  lc.save(); lc.translate(OX,OY);
-  for(const sp of spots){
-    const gr=lc.createRadialGradient(sp.x,sp.y,0,sp.x,sp.y,sp.rx); gr.addColorStop(0,'rgba(255,244,200,'+sp.a.toFixed(3)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
-    lc.save(); lc.translate(sp.x,sp.y); lc.scale(1,sp.ry/sp.rx); lc.translate(-sp.x,-sp.y); lc.fillStyle=gr; lc.beginPath(); lc.arc(sp.x,sp.y,sp.rx,0,6.283); lc.fill(); lc.restore();
-  }
-  lc.restore();
   // barco ISF-01 cruzando todo el ancho (con estela)
   const sx=((ts*5)%(SW+90))-40, sy=Math.round(HOR+18+Math.sin(ts*1.4)*0.8), sxr=Math.round(sx);
   menuShipWake(g,sxr,sy,ts,SW);
