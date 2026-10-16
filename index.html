@@ -9021,7 +9021,7 @@ function menuBuildScene(){
   const silR=mkCanvas(300,H0), rq=silR.getContext('2d'); rq.drawImage(sil,0,0);   // reflejo: la torre de colores no debe pintar manchas en el agua
   rq.globalCompositeOperation='source-atop'; rq.fillStyle='rgba(10,8,22,0.7)'; rq.fillRect(0,0,300,H0);
   const lit=menuBuildLit(sil,H0);
-  menuScene={silR,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),beamR:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
+  menuScene={silR,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
     stars:Array.from({length:Math.round(90*FX)},(_,i)=>[(opsHash(i,1,5)*SW)|0,(opsHash(i,2,5)*(HOR-32))|0,opsHash(i,3,5)*6.28,opsHash(i,4,5)]),
     wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
     smoke:[], lastPuff:-1, embers:[], bubbles:[]};
@@ -9165,7 +9165,8 @@ function drawMenuScene(){
     const c=Math.cos(a), z=Math.sin(a), ac=Math.abs(c), zf=Math.max(0,z), fr=menuSmooth(-0.25,0.25,z);
     const sv=z>0?Math.min(1,0.8/z):1, q=1-sv*z;          // hasta dónde se ve el haz (en distancias al faro) y su profundidad allí
     const face=menuSmooth(0.1,0.45,ac);
-    return {c,z,ex:LX+HH*K*sv*c/q,ey:LY-HH*sv*z/q,w:Math.min(28,1.5+3/Math.pow(q,0.9)),
+    const ex=LX+HH*K*sv*c/q, ey=LY-HH*sv*z/q, sp=0.035+0.17*Math.pow(zf,1.2);   // sp: apertura del cono (tangente del medio ángulo)
+    return {c,z,ex,ey,w:Math.max(2,Math.hypot(ex-LX,ey-LY)*sp),
       k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr)*face,a:(0.14+0.2*(z+1))*face,st:lerp(4,1,fr)}; });
   const zMax=Math.max(beams[0].z,beams[1].z), flash=zMax>0.8?(zMax-0.8)/0.2:0;
   menuIslandLights(M,ts,beams,LX,LY,flash,H0);
@@ -9266,18 +9267,20 @@ function drawMenuScene(){
   }
   g.restore();
   g.restore();
-  // haces del faro (luz que se suma): se preparan aquí y su parte en el aire se refleja en el mar
+  // haces del faro (luz que se suma): conos con bruma exterior, cuerpo y núcleo brillante
   const bc=M.beamC.getContext('2d'); bc.clearRect(0,0,SW,SH);
-  const br=M.beamR.getContext('2d'); br.clearRect(0,0,SW,SH);
-  bc.save(); bc.translate(OX,OY); br.save(); br.translate(OX,OY);
+  bc.save(); bc.translate(OX,OY);
   for(const bm of beams){
     const dx=bm.ex-LX, dy=bm.ey-LY, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
     const w=bm.w, a0=Math.min(0.9,bm.a*(1+wAmt('fog')*0.9+(wAmt('rain')+wAmt('storm'))*0.35));   // en la niebla el haz se ve mucho más
     const st=bm.st;   // el haz que va hacia el fondo empieza detrás de la torre
     const gr=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
     gr.addColorStop(0,'rgba(255,244,200,'+a0.toFixed(2)+')'); gr.addColorStop(0.7,'rgba(255,244,200,'+(a0*0.3).toFixed(2)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
-    const quad=q=>{ q.beginPath(); q.moveTo(LX+dx/L*st+nx,LY+dy/L*st+ny); q.lineTo(bm.ex+nx*w,bm.ey+ny*w); q.lineTo(bm.ex-nx*w,bm.ey-ny*w); q.lineTo(LX+dx/L*st-nx,LY+dy/L*st-ny); q.closePath(); q.fill(); };
-    bc.fillStyle=gr; quad(bc);
+    const quad=ww=>{ bc.beginPath(); bc.moveTo(LX+dx/L*st+nx,LY+dy/L*st+ny); bc.lineTo(bm.ex+nx*ww,bm.ey+ny*ww); bc.lineTo(bm.ex-nx*ww,bm.ey-ny*ww); bc.lineTo(LX+dx/L*st-nx,LY+dy/L*st-ny); bc.closePath(); bc.fill(); };
+    const gh=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);   // bruma exterior: el borde del cono se difumina
+    gh.addColorStop(0,'rgba(255,236,190,'+(a0*0.4).toFixed(2)+')'); gh.addColorStop(0.6,'rgba(255,236,190,'+(a0*0.12).toFixed(2)+')'); gh.addColorStop(1,'rgba(255,236,190,0)');
+    bc.fillStyle=gh; quad(w*1.7);
+    bc.fillStyle=gr; quad(w);
     // núcleo del haz: más estrecho y brillante (la luz se concentra en el centro y se difumina hacia los bordes)
     const wc=w*0.35, gc=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
     gc.addColorStop(0,'rgba(255,250,225,'+(a0*0.9).toFixed(2)+')'); gc.addColorStop(0.5,'rgba(255,250,225,'+(a0*0.25).toFixed(2)+')'); gc.addColorStop(1,'rgba(255,250,225,0)');
@@ -9289,14 +9292,20 @@ function drawMenuScene(){
       bc.fillStyle='rgba(255,248,220,'+Math.min(1,al).toFixed(2)+')';
       bc.fillRect(Math.round(LX+dx*u+nx*m.s*w*u),Math.round(LY+dy*u+ny*m.s*w*u),1,1);
     }
-    const refl=1-menuSmooth(-0.15,0.4,bm.z);
-    if(refl>0.01){ br.globalAlpha=refl; br.fillStyle=gr; quad(br); br.globalAlpha=1; }
   }
-  for(const q of [bc,br]){ q.globalCompositeOperation='destination-out'; q.drawImage(M.bmask,0,0); q.globalCompositeOperation='source-over'; q.restore(); }
+  bc.globalCompositeOperation='destination-out'; bc.drawImage(M.bmask,0,0); bc.globalCompositeOperation='source-over'; bc.restore();
+  // el haz se refleja en las crestas de las olas: una franja de destellos justo bajo el horizonte a lo largo del haz
+  // (en el mar picado no hay reflejo liso; más ancha y viva cuando el haz viene hacia ti, apenas nada cuando se aleja)
   g.save(); g.globalCompositeOperation='lighter';
-  for(let j=0;j<46&&j<HOR;j++){
-    const wob=Math.round(Math.sin(ts*2.4+j*0.8)*(0.5+j*0.06));
-    g.globalAlpha=0.32*(1-j/46); g.drawImage(M.beamR,0,HOR-1-j,SW,1,wob,HOR+1+j,SW,1);
+  for(const bm of beams){
+    if(bm.a<0.04) continue;
+    const zf=Math.max(0,bm.z), dir=Math.sign(bm.ex-LX)||1, len=Math.min(Math.abs(bm.ex-LX),SW), depth=3+zf*20;
+    for(let d=1;d<=depth;d++) for(let sx=2;sx<len;sx+=3){
+      const x=LX+OX+dir*sx, on=Math.sin(ts*2.3+x*0.37+d*1.9)+Math.sin(ts*1.4-x*0.13+d*0.6);
+      if(on<0.8) continue;
+      const al=bm.a*2.6*(1-sx/len)*(1-d/(depth+1))*(on-0.8); if(al<0.03) continue;
+      g.fillStyle='rgba(255,236,180,'+Math.min(1,al).toFixed(2)+')'; g.fillRect(Math.round(x),HOR+d,1+(d>>2)+(on>1.5?1:0),1);
+    }
   }
   g.restore();
   // mapa de luz del faro (el haz en el aire): decide qué píxeles del barco se iluminan
