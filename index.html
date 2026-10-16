@@ -2924,7 +2924,53 @@ function turretAI(en,dt){
     }
   }
 }
+/* TRITURADOR · SALTO y APLASTAMIENTO (crushing blow): si estás lejos se agacha y salta adonde vas a estar; al caer (o
+   de cerca, tras un aviso) golpea el suelo: onda de área con poco daño y, si te pilla DE LLENO, el 75% de tu vida y te
+   aturde. Con más nivel (mundo, veces que te venció, refuerzos) la zona crece y el golpe de lleno llega al 95%. */
+function meleeLvl(en){ return (world?world.id:1)+(en.vengeLvl||0)*2+(en.reinf&&world?Math.floor((world.reinfLvl||0)/2):0); }
+function crushZone(en){ const L=meleeLvl(en); return {L,R:80+10*(L-1),inner:26+2*(L-1)}; }
+function crushBlow(en){
+  const {L,R,inner}=crushZone(en), x=en.cx, y=en.cy, p=player;
+  shake=Math.max(shake,14); S.stomp(); spawnDebris(x,y,16,'#bbb');
+  rings.push({x,y,r:inner,max:R,life:22,maxLife:22,color:'#ff6b3a'});
+  if(p.alive){
+    const d=Math.hypot(p.x-x,p.y-y);
+    if(d<inner+p.radius){ damagePlayer(p.maxHp*Math.min(0.95,0.75+0.05*(L-1))); stunPlayer(70+10*(L-1)); popup(p.x,p.y-36,'¡APLASTAMIENTO!','#ff4757',16); }
+    else if(d<R+p.radius){ damagePlayer(p.maxHp*Math.min(0.3,0.1+0.03*(L-1))); push(p,x,y,7); }
+  }
+  for(const u of friendlies()) if(!u.air&&Math.hypot(u.x-x,u.y-y)<R+u.radius){ hurtFriendly(u,20); push(u,x,y,6); }
+  for(let r=Math.floor((y-40)/TILE);r<=Math.floor((y+40)/TILE);r++) for(let c=Math.floor((x-40)/TILE);c<=Math.floor((x+40)/TILE);c++) hitTile(c,r,2);
+}
+function meleeCrush(en,tg,dd,los,dt){   // devuelve true mientras salta o prepara el golpe
+  if(en.leapCd>0) en.leapCd-=dt;
+  if(en.crushCd>0) en.crushCd-=dt;
+  if(en.crushWind>0){   // agachado antes de saltar, o con el puño en alto antes del golpe de cerca
+    en.crushWind-=dt; en.vx*=0.6; en.vy*=0.6; en.angle=turnTo(en.angle,Math.atan2(en.cy-en.y,en.cx-en.x),0.2*dt);
+    if(en.crushWind<=0){ if(en.leaping){ en.leapT=36; en.sx=en.x; en.sy=en.y; S.rev(); } else { crushBlow(en); en.crushCd=200; en.atkCd=60; } }
+    return true;
+  }
+  if(en.leapT>0){
+    en.leapT-=dt; const k=1-Math.max(0,en.leapT)/36;
+    en.x=lerp(en.sx,en.cx,k); en.y=lerp(en.sy,en.cy,k); en.leapZ=Math.sin(k*Math.PI)*60; en.vx=en.vy=0;
+    if(en.leapT<=0){ en.leapZ=0; en.leaping=false; unstick(en); crushBlow(en); en.leapCd=320; en.crushCd=Math.max(en.crushCd||0,120); en.atkCd=50; }
+    return true;
+  }
+  if(tg.u!==player||!player.alive||!canAttack(en)) return false;
+  if(dd>200&&dd<480&&los&&(en.leapCd||0)<=0){   // estás lejos: salta hacia donde vas a estar
+    let cx=player.x+(player.vx||0)*18, cy=player.y+(player.vy||0)*18;
+    const c=Math.floor(cx/TILE), r=Math.floor(cy/TILE);
+    if(SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,4); if(!nb) return false; cx=nb[0]*TILE+15; cy=nb[1]*TILE+15; }
+    if(!pathClear(en.x,en.y,cx,cy,en.radius*0.6)){ en.leapCd=60; return false; }
+    en.cx=cx; en.cy=cy; en.leaping=true; en.crushWind=26; popup(en.x,en.y-28,'¡SALTA!','#ff8a3a',12);
+    return true;
+  }
+  if(dd<70&&los&&(en.crushCd||0)<=0&&en.windup<=0&&en.lunge<=0&&Math.random()<0.02*dt){   // de cerca: golpe al suelo con aviso
+    en.cx=player.x; en.cy=player.y; en.leaping=false; en.crushWind=32; return true;
+  }
+  return false;
+}
 function combatMelee(en,tg,dd,los,dt){
+  if(meleeCrush(en,tg,dd,los,dt)) return;
   // IZQUIERDAZO: pegado a ti puede soltarte un gancho que te deja aturdido (aviso: el puño brilla un instante)
   if(en.hookCd>0) en.hookCd-=dt;
   if(en.hookT>0){
@@ -3708,7 +3754,8 @@ function drawEnemy(en){
     let ang=en.angle;
     const rx=en.x-Math.cos(ang)*(en.recoil||0)*0.4, ry=en.y-Math.sin(ang)*(en.recoil||0)*0.4;
     if(d.look==='brawler' && (en.windup>0)){ ang+=Math.sin(t*1.2)*0.15; }
-    blit(spr,rx,ry,ang,sc);
+    if(en.leapZ>0){ ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(en.x,en.y+6,en.radius*(1-en.leapZ/150),en.radius*0.45,0,0,Math.PI*2); ctx.fill(); }
+    blit(spr,rx,ry-(en.leapZ||0),ang,sc*(1+(en.leapZ||0)/200));
     if(d.look==='spotter'){
       ctx.save(); ctx.translate(rx,ry); ctx.rotate(ang);   // minicañón en el costado derecho (de ahí salen sus balas)
       ctx.fillStyle='#140808'; ctx.fillRect(2*sc,2.6*sc,8*sc,2.8*sc);
@@ -4405,7 +4452,13 @@ function render(){
   drawDeposits();
   drawTurretsSoldiers();
   for(const en of enemies) if(en.alive&&!en.air) drawEnemy(en);
-  for(const en of enemies) if(en.alive&&en.def.role==='spotter'&&en.lock>0) sniperLaser(en);   // el vigía cargando su disparo
+  for(const en of enemies) if(en.alive&&en.def.role==='spotter'&&en.lock>0) sniperLaser(en);
+  for(const en of enemies) if(en.alive&&en.cx!=null&&(en.crushWind>0||en.leapT>0)){   // aviso del APLASTAMIENTO: zona y centro mortal
+    const z=crushZone(en), pulse=0.5+0.5*Math.sin(t*0.5);
+    ctx.strokeStyle='rgba(255,71,87,'+(0.5+0.3*pulse).toFixed(2)+')'; ctx.lineWidth=2; ctx.setLineDash([8,6]);
+    ctx.beginPath(); ctx.arc(en.cx,en.cy,z.R,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,71,87,'+(0.22+0.2*pulse).toFixed(2)+')'; ctx.beginPath(); ctx.arc(en.cx,en.cy,z.inner,0,Math.PI*2); ctx.fill();
+  }   // el vigía cargando su disparo
   for(const en of enemies) if(en.alive&&en.vengeLvl&&!en.hidden){   // te vencieron: una marca roja por cada vez
     ctx.fillStyle='#ff4757'; for(let i=0;i<Math.min(3,en.vengeLvl);i++){ const x=en.x-(Math.min(3,en.vengeLvl)-1)*4+i*8, y=en.y-en.radius-14; ctx.beginPath(); ctx.moveTo(x-3,y); ctx.lineTo(x,y+3); ctx.lineTo(x+3,y); ctx.lineTo(x+3,y+2); ctx.lineTo(x,y+5); ctx.lineTo(x-3,y+2); ctx.closePath(); ctx.fill(); }
   }
