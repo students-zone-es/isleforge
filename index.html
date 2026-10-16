@@ -1503,6 +1503,8 @@ function updatePlayer(dt){
   if(keys.d||keys.arrowright) ix+=1;
   const flying=p.launchT>0;   // lanzado por un golpe: no controlas la máquina hasta aterrizar
   if(flying){ p.launchT-=dt; ix=iy=0; }
+  const stunned=p.stunT>0;    // aturdido por un izquierdazo
+  if(stunned){ p.stunT-=dt; ix=iy=0; }
   const aimWant=Math.atan2(mouse.y-p.y,mouse.x-p.x);
   if(p.ch.id==='tank'){
     // Casco con dirección propia (marcha atrás si pides ir hacia atrás) y torreta 360° independiente
@@ -1546,9 +1548,9 @@ function updatePlayer(dt){
   }
   if(p.recoil>0) p.recoil=Math.max(0,p.recoil-0.6*dt);
   if(p.fireCd>0) p.fireCd-=dt;
-  if((keys[' ']||mouse.down) && p.fireCd<=0) firePlayerWeapon();
+  if((keys[' ']||mouse.down) && p.fireCd<=0 && !stunned) firePlayerWeapon();
   if(p.nadeCd>0) p.nadeCd-=dt;
-  if((mouse.right||keys.shift) && p.nadeCd<=0) throwGrenade();
+  if((mouse.right||keys.shift) && p.nadeCd<=0 && !stunned) throwGrenade();
   if(p.cloak>0){ p.cloak-=dt; if(p.cloak<=0){ p.cloak=0; p.cloakCd=p.cloakCdBase; S.uncloak(); popup(p.x,p.y-26,'VISIBLE','#8ea0b8',12); } }
   else if(p.cloakCd>0) p.cloakCd-=dt;
   if(p.regenRate>0){
@@ -1625,6 +1627,21 @@ function activateCloak(){
     if(en.ai==='combat'){ en.ai='hunt'; en.lastKnown={x:p.x,y:p.y}; en.huhT=60; en.searchT=0; }
   }
 }
+/* Los de cuerpo a cuerpo ven venir las balas de frente: a veces las ESQUIVAN (paso lateral) o les hacen PARRY (la
+   devuelven hacia ti, más floja). Los obuses de cañón no se pueden desviar. Tras una, tardan un poco en poder otra. */
+function meleeEvade(en,b){
+  if(en.def.role!=='melee'||en.ai!=='combat'||en.stun>0||(en.evadeT||0)>t) return false;
+  const from=Math.atan2(b.oy-en.y,b.ox-en.x); if(Math.abs(angDiff(en.angle,from))>1.2) return false;
+  const r=Math.random();
+  if(r<0.14&&b.kind!=='shell'){
+    en.evadeT=t+28; b.owner='e'; b.vx=-b.vx; b.vy=-b.vy; b.src=en; b.fac=en.def.fac||'r'; b.life=60; b.ox=b.x; b.oy=b.y; b.dmg=Math.round(b.dmg*0.7); b.pierce=0;
+    slashFx(en.x,en.y,from,en.radius+14,'#ffd76e'); popup(en.x,en.y-24,'¡PARRY!','#ffd76e',12); S.slash(); return 'parry';
+  }
+  if(r<0.34){ en.evadeT=t+28; const pa=from+Math.PI/2*(Math.random()<0.5?-1:1); en.vx+=Math.cos(pa)*5; en.vy+=Math.sin(pa)*5; popup(en.x,en.y-24,'ESQUIVA','#cfd6df',10); return 'dodge'; }
+  return false;
+}
+/* Aturdido (izquierdazo): no controlas la máquina ni disparas durante un momento */
+function stunPlayer(f){ if(player.alive&&!god) player.stunT=Math.max(player.stunT||0,f); }
 /* Te lanza por los aires (golpes muy fuertes de los jefes); las máquinas pesadas vuelan menos */
 function launchPlayer(x,y,force,ang){
   const p=player; if(!p.alive) return;
@@ -1710,12 +1727,15 @@ function updateBullets(dt){
           if(!en.alive||(b.hitList&&b.hitList.includes(en))) continue;
           const rr=b.radius+en.radius;
           if((b.x-en.x)**2+(b.y-en.y)**2<rr*rr){
+            const ev=meleeEvade(en,b);
+            if(ev==='dodge'){ (b.hitList||(b.hitList=[])).push(en); continue; }
+            if(ev==='parry') break;   // la bala ahora es suya y vuelve hacia ti
             damageEnemy(en,b.dmg,{src:b.src||player, bx:b.ox, by:b.oy, frag:b.frag});
             if(b.splash){ explode(b.x,b.y,b.splash,b.dmg*0.5,'p',{exclude:en,stunMul:b.stunMul}); dead=true; break; }
             if(b.pierce>0){ b.pierce--; (b.hitList||(b.hitList=[])).push(en); } else { dead=true; break; }
           }
         }
-        if(!dead && boss && boss.alive && boss.z<=0 && (b.x-boss.x)**2+(b.y-boss.y)**2<(b.radius+boss.radius)**2){
+        if(!dead && b.owner==='p' && boss && boss.alive && boss.z<=0 && (b.x-boss.x)**2+(b.y-boss.y)**2<(b.radius+boss.radius)**2){
           damageBoss(b.dmg,{stunAdd:b.dmg*b.stunMul});
           if(b.splash) explode(b.x,b.y,b.splash,0,'p',{});
           dead=true;
@@ -2897,6 +2917,20 @@ function turretAI(en,dt){
   }
 }
 function combatMelee(en,tg,dd,los,dt){
+  // IZQUIERDAZO: pegado a ti puede soltarte un gancho que te deja aturdido (aviso: el puño brilla un instante)
+  if(en.hookCd>0) en.hookCd-=dt;
+  if(en.hookT>0){
+    en.hookT-=dt; en.vx*=0.7; en.vy*=0.7; en.angle=turnTo(en.angle,Math.atan2(tg.y-en.y,tg.x-en.x),0.3*dt);
+    if(en.hookT<=0){
+      en.hookCd=160; slashFx(en.x,en.y,en.angle,en.radius+18,'#ffd76e'); S.slash();
+      if(tg.u===player&&player.alive&&dist(en,player)<en.radius+player.radius+18){
+        damagePlayer(en.def.dmg*0.8); stunPlayer(50); push(player,en.x,en.y,6); shake=Math.max(shake,9);
+        popup(player.x,player.y-34,'¡IZQUIERDAZO!','#ffd76e',14);
+      }
+    }
+    return;
+  }
+  if(tg.u===player&&dd<en.radius+player.radius+22&&los&&(en.hookCd||0)<=0&&en.windup<=0&&en.lunge<=0&&canAttack(en)&&Math.random()<0.5){ en.hookT=10; return; }
   if(en.lunge>0){ en.lunge-=dt; if(en.lunge<=0){ meleeSwipe(en); en.atkCd=55; } return; }
   if(en.windup>0){
     en.windup-=dt; en.vx*=0.8; en.vy*=0.8;
@@ -4337,6 +4371,7 @@ function render(){
   }
   if(mate&&mate.alive&&!mate.air) drawMate(mate);
   drawPlayer();
+  if(player&&player.alive&&player.stunT>0) for(let i=0;i<3;i++){ const a=t*0.18+i*2.09; ctx.fillStyle=i%2?'#ffd76e':'#fff6c0'; ctx.fillRect(Math.round(player.x+Math.cos(a)*12)-1,Math.round(player.y-player.radius-10+Math.sin(a)*4)-1,3,3); }   // aturdido
   drawBoss();
   drawBossExtra();
   drawPresses();
@@ -5476,6 +5511,10 @@ function openGate(g,silent){
   for(let c=0;c<WC;c++) for(const r of [g.row,g.row+1]){ if(map[idx(c,r)]===DOOR||(c>=18&&c<=21&&map[idx(c,r)]===SCORCH)){ setTile(c,r,FLOOR); paintTile(c,r); } }
   miniDirty=true;
   for(const en of g.gens) if(en.alive){ en.alive=false; }
+  // los Trituradores y camaleones que dejaste con vida detrás escapan… y volverán más fuertes con el jefe
+  if(!silent) for(const en of enemies) if(en.alive&&!en.reinf&&(en.def.role==='melee'||en.def.role==='chameleon')&&en.y>(g.row+2)*TILE){
+    (world.vets||(world.vets=[])).push({id:en.id,lvl:(en.vengeLvl||0)+1}); en.alive=false;
+  }
   world.section=Math.max(world.section,g.idx+2);
   const wk=worldSave(world.id); wk.best=Math.max(wk.best||1,world.section); saveSave();
   if(silent) return;
@@ -5510,6 +5549,14 @@ function spawnEncounter(e){
     en.home={x,y}; en.patrolR=90;
     if(EDEFS[id].role==='turret'){ en.static=true; en.ai='patrol'; en.aim=Math.PI/2; }
     if(o&&o.hunt&&player.alive){ en.ai='hunt'; en.lastKnown={x:player.x,y:player.y}; en.spawnGrace=40; }
+  }
+  // CAMALEÓN en todos los mundos: a veces acompaña a los Trituradores (cuerpo a cuerpo) para ayudarles (máx. 3 por mundo;
+  // el Mundo 1 ya trae los suyos)
+  const brawl=e.units.find(u=>EDEFS[u[0]]&&EDEFS[u[0]].role==='melee');
+  if(world&&world.id>=2&&brawl&&(world.chams||0)<3&&Math.random()<0.6){
+    world.chams=(world.chams||0)+1;
+    const c=brawl[1]+(Math.random()<0.5?-2:2), r=brawl[2]+1, nb=SOLID[tileAtC(c,r)]?nearestWalkable(c,r,5):[c,r];
+    if(nb){ const en=addEnemy('chameleon',nb[0]*TILE+TILE/2,nb[1]*TILE+TILE/2,sid,true); en.home={x:en.x,y:en.y}; en.patrolR=90; }
   }
 }
 function worldDropSpot(px,py){
@@ -8562,6 +8609,12 @@ function chamTongue(en,dt){
     const tx=mx+Math.cos(T.a)*T.len, ty=my+Math.sin(T.a)*T.len;
     if(player.alive&&player.invuln<=0&&Math.hypot(player.x-tx,player.y-ty)<player.radius+6){
       T.victim=player; T.phase='pull'; damagePlayer(en.def.dmg); popup(player.x,player.y-26,'¡ATRAPADO!','#9fe86a',13);
+      // ayuda al cuerpo a cuerpo: si hay un Triturador cerca, te lanza hacia él y le deja el golpe preparado
+      const ally=enemies.filter(o=>o.alive&&o.def.role==='melee'&&dist(o,player)<300).sort((a,b)=>dist(a,player)-dist(b,player))[0];
+      if(ally){ const dd=dist(ally,player), a=Math.atan2(ally.y-player.y,ally.x-player.x);
+        launchPlayer(0,0,clamp(dd/14*Math.sqrt(player.mass||1)/1.1,6,14),a);
+        ally.ai='combat'; ally.aware=1; ally.lastKnown={x:player.x,y:player.y}; ally.atkCd=0; ally.hookCd=0;
+        popup(player.x,player.y-40,'¡TE LANZA A SU ALIADO!','#9fe86a',13); T.victim=null; T.phase='back'; }
     } else {
       const pw=pows.find(p=>p.alive&&!p.held&&Math.hypot(p.x-tx,p.y-ty)<p.radius+6);
       if(pw){ T.victim=pw; T.phase='pull'; pw.follow=false; pw.escort=false; popup(pw.x,pw.y-18,'¡SE LLEVA A UN REHÉN!','#ff6b6b',13); }
@@ -8898,6 +8951,16 @@ function bossInit(b){
   const g=bossGear(); b.gear=g; b.gearMsg=true;
   b.hp=b.maxHp=Math.round(b.maxHp*(1+1.2*g)); b.dmgK=1+0.6*g; b.aggr=1+0.5*g; b.speedMax*=1+0.2*g;
   b.xCd=200; b.xLast=''; b.lances=null;
+  // los que dejaste escapar vuelven más fuertes (los apunta openGate en world.vets)
+  const vets=world&&world.vets?world.vets.splice(0,4):[];
+  if(vets.length){
+    const sid=newSquad({boss:true});
+    vets.forEach((v,i)=>{ const a=i/vets.length*Math.PI*2, en=addEnemy(v.id,b.x+Math.cos(a)*110,b.y+Math.sin(a)*110+60,sid,true);
+      unstick(en); en.vengeLvl=v.lvl+1; en.maxHp=Math.round(en.maxHp*(1+0.5*en.vengeLvl)); en.hp=en.maxHp;
+      if(en.def.dmg!=null){ en.def=Object.create(en.def); en.def.dmg=Math.round(en.def.dmg*(1+0.3*en.vengeLvl)); }
+      en.ai='hunt'; en.aware=1; en.lastKnown={x:player.x,y:player.y}; en.spawnGrace=120; });
+    announce('¡VUELVEN LOS QUE DEJASTE CON VIDA!','#ff8a3a',vets.length+' enemigos que escaparon luchan junto al jefe, más fuertes');
+  }
 }
 function bossPick(b,dd){
   const far=dd>260, minions=enemies.filter(e=>e.alive&&e.summon).length;
