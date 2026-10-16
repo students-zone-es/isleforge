@@ -1630,8 +1630,8 @@ function activateCloak(){
 /* Los de cuerpo a cuerpo ven venir las balas de frente: a veces las ESQUIVAN (paso lateral) o les hacen PARRY (la
    devuelven hacia ti, más floja). Los obuses de cañón no se pueden desviar. Tras una, tardan un poco en poder otra. */
 function meleeEvade(en,b){
-  // ESCUDO HUMANO: lo que le llega de frente al mecánico se lo come el rehén
-  if(en.shieldPow&&en.shieldPow.alive&&Math.abs(angDiff(en.angle,Math.atan2(b.oy-en.y,b.ox-en.x)))<1.1) return 'shield';
+  // ESCUDO HUMANO: si le disparas a un mecánico con rehén, el rehén muere (venga de donde venga la bala)
+  if(en.shieldPow&&en.shieldPow.alive) return 'shield';
   // MECÁNICO: esquiva como un mosquito, venga la bala de donde venga
   if(en.def.role==='mechanic'){
     if((en.evadeT||0)>t||en.stun>0||Math.random()>=0.45) return false;
@@ -1739,7 +1739,10 @@ function updateBullets(dt){
             const ev=meleeEvade(en,b);
             if(ev==='dodge'){ (b.hitList||(b.hitList=[])).push(en); continue; }
             if(ev==='parry') break;   // la bala ahora es suya y vuelve hacia ti
-            if(ev==='shield'){ const pw=en.shieldPow; hurtFriendly(pw,b.dmg); if(pw.alive&&(en.shieldT||0)<t){ en.shieldT=t+40; popup(pw.x,pw.y-18,'¡CUIDADO, EL REHÉN!','#ff6b6b',11); } dead=true; break; }
+            if(ev==='shield'){   // matas al rehén; casi seguro la misma bala lo mata a él (si no, huye)
+              hurtFriendly(en.shieldPow,999); en.shieldPow=null; popup(en.x,en.y-34,'¡HAS MATADO AL REHÉN!','#ff4757',13);
+              if(Math.random()<0.6) damageEnemy(en,999,{src:b.src||player,bx:b.ox,by:b.oy}); else mechFlee(en);
+              dead=true; break; }
             damageEnemy(en,b.dmg,{src:b.src||player, bx:b.ox, by:b.oy, frag:b.frag});
             if(b.splash){ explode(b.x,b.y,b.splash,b.dmg*0.5,'p',{exclude:en,stunMul:b.stunMul}); dead=true; break; }
             if(b.pierce>0){ b.pierce--; (b.hitList||(b.hitList=[])).push(en); } else { dead=true; break; }
@@ -1976,7 +1979,7 @@ function deploySquad(){
 function nearestEnemyFrom(x,y,range,needLos,filter){
   let best=null, bd=range*range;
   for(const en of enemies){
-    if(!en.alive||en.practice||en.hidden||(filter&&!filter(en))) continue;   // ni objetivos de prácticas ni camaleones camuflados
+    if(!en.alive||en.practice||en.hidden||en.shieldPow||(filter&&!filter(en))) continue;   // ni prácticas, ni camaleones camuflados, ni quien lleva un rehén de escudo
     const d=(en.x-x)**2+(en.y-y)**2;
     if(d<bd && (!needLos||en.air||lineClear(x,y,en.x,en.y))){ bd=d; best=en; }
   }
@@ -2024,6 +2027,15 @@ function updateSupport(dt){
   alive.forEach((so,i)=>{
     const tg=nearestEnemyFrom(so.x,so.y,200,true);
     const a=i*(Math.PI*2/n)+t*0.01;
+    // RESCATE: solo tus soldados pueden salvar a un rehén usado de escudo (corren a por el mecánico y se lo quitan)
+    const hk=enemies.find(e=>e.alive&&e.shieldPow&&e.shieldPow.alive&&dist(e,so)<300);
+    if(hk){
+      steerTo(so,hk.x,hk.y,dt,1.3);
+      if(dist(hk,so)<hk.radius+so.radius+10){
+        const pw=hk.shieldPow; pw.held=null; pw.follow=true; hk.shieldPow=null; hk.stun=Math.max(hk.stun||0,90); damageEnemy(hk,10,{src:so});
+        popup(pw.x,pw.y-22,'¡TUS SOLDADOS LIBERAN AL REHÉN!','#3ee67a',13); S.rescue();
+      }
+    } else
     if(anchor){ const fx=anchor.x+Math.cos(a)*42, fy=anchor.y+Math.sin(a)*42; if(Math.hypot(fx-so.x,fy-so.y)>14) steerTo(so,fx,fy,dt,1); }
     if(tg){
       so.angle=Math.atan2(tg.y-so.y,tg.x-so.x);
@@ -5826,8 +5838,9 @@ function worldDeathRespawn(){
   announce('¡CAÍSTE RETROCEDIENDO!','#ff8a3a','Reapareces en tu posición más avanzada… y los que te vencieron vienen detrás, más fuertes');
   return spot;
 }
-/* TORRETA destruida: pide refuerzos, que caen en paracaídas a su alrededor (2-3 tropas de su bando) */
-function turretCallHelp(en){
+/* Pide refuerzos, que caen en paracaídas a su alrededor (2-3 tropas de su bando): la torreta al caer, el mecánico al huir */
+function turretCallHelp(en){ callHelpDrop(en,'¡LA TORRETA PIDE REFUERZOS!'); }
+function callHelpDrop(en,label){
   if(!world||world.done||(boss&&boss.alive)) return;
   const pool=worldReinfPool(world), fac=en.def.fac||'r', mine=pool.filter(id=>(EDEFS[id].fac||'r')===fac&&!EDEFS[id].air);
   const ids=(mine.length?mine:pool).slice(0,3), sid=newSquad({reinf:true}), n=2+(Math.random()<0.5?1:0);
@@ -5837,7 +5850,7 @@ function turretCallHelp(en){
       if(!world||world.done) return;
       const e=addEnemy(id,l.x1,l.y1,sid,true); e.reinf=true; e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=40; }});
   }
-  popup(en.x,en.y-30,'¡LA TORRETA PIDE REFUERZOS!','#ff8a3a',13); alarmT=Math.max(alarmT,120); S.alarm();
+  popup(en.x,en.y-30,label,'#ff8a3a',13); alarmT=Math.max(alarmT,120); S.alarm();
 }
 EDEFS.emplacement.onDeath=turretCallHelp;
 /* Al reaparecer, los que te vencieron llegan por detrás (justo fuera de la pantalla) y van a por ti */
@@ -9263,11 +9276,30 @@ function drawMinidroid(en){
 }
 
 /* ---------- MECÁNICO DE MANIOBRAS ---------- */
-function mechanicUpdate(en,dt){   // el rehén va delante, pegado a él
+/* Solo TUS SOLDADOS (Q) pueden rescatar a un rehén-escudo (updateSupport). Si te acercas TÚ, lo ejecuta, pide refuerzos y
+   huye; si le disparas, muere el rehén (y casi seguro él también, o escapa). Si escapa, vuelve más fuerte con el jefe. */
+function mechanicUpdate(en,dt){
+  if(en.fleeT>0){   // huye a toda velocidad lejos de ti
+    en.fleeT-=dt; const a=Math.atan2(en.y-player.y,en.x-player.x);
+    en.vx+=Math.cos(a)*1.4*dt; en.vy+=Math.sin(a)*1.4*dt; limitSpeed(en,6); en.angle=a; moveUnit(en,dt);
+    if(en.fleeT<=0||dist(en,player)>650){
+      const sq=squads[en.squad]; if(sq) sq.alive--; en.alive=false;
+      if(world) (world.vets||(world.vets=[])).push({id:'mechanic',lvl:(en.vengeLvl||0)+1});
+      popup(en.x,en.y-26,'¡ESCAPÓ!','#ff8a3a',12);
+    }
+    return true;
+  }
   const pw=en.shieldPow;
-  if(pw){ if(!pw.alive){ en.shieldPow=null; } else { pw.x=en.x+Math.cos(en.angle)*15; pw.y=en.y+Math.sin(en.angle)*15; pw.vx=pw.vy=0; } }
+  if(pw){
+    if(!pw.alive){ en.shieldPow=null; }
+    else if(player.alive&&dist(player,en)<70){   // te acercas tú: ejecuta al rehén
+      hurtFriendly(pw,999); en.shieldPow=null; popup(en.x,en.y-34,'¡EJECUTA AL REHÉN!','#ff4757',14);
+      callHelpDrop(en,'¡PIDE REFUERZOS!'); mechFlee(en);
+    } else { pw.x=en.x+Math.cos(en.angle)*15; pw.y=en.y+Math.sin(en.angle)*15; pw.vx=pw.vy=0; }
+  }
   return false;
 }
+function mechFlee(en){ en.fleeT=300; en.shieldPow=null; popup(en.x,en.y-20,'¡HUYE!','#ffd76e',11); }
 function mechanicDeath(en){ if(en.shieldPow){ en.shieldPow.held=null; popup(en.shieldPow.x,en.shieldPow.y-18,'¡REHÉN LIBERADO!','#ffd76e',13); en.shieldPow=null; } }
 function mechShoot(en,tg,dd,los,dt){
   en.fireCd-=dt;
@@ -9278,6 +9310,9 @@ function mechShoot(en,tg,dd,los,dt){
   }
 }
 function mechanicCombat(en,tg,dd,los,aimed,dt){
+  // con un rehén a cuestas va más lento y no pierde de vista al jugador (así tus soldados pueden pillarlo por los lados)
+  if(en.shieldPow&&player.alive){ tg={x:player.x,y:player.y,u:player}; dd=dist(en,player); los=lineClear(en.x,en.y,player.x,player.y); en.speedMax=en.def.speed*0.5; }
+  else en.speedMax=en.def.speed;
   en.angle=turnTo(en.angle,Math.atan2(tg.y-en.y,tg.x-en.x),0.25*dt);
   if(!en.shieldPow){   // coge a un rehén cercano (también de los que te siguen) para usarlo de escudo
     const pw=pows.find(p=>p.alive&&!p.held&&dist(p,en)<230);
