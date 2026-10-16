@@ -9154,16 +9154,19 @@ function drawMenuScene(){
   const M=menuScene, g=M.c.getContext('2d'), ts=performance.now()/1000, HOR=M.HOR, OX=M.OX, OY=M.OY, RX=M.RX, SW=M.SW, SH=M.SH, H0=128;
   g.imageSmoothingEnabled=false;
   g.drawImage(M.bg,0,0);
-  // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos, siempre en HORIZONTAL
-  // (como un faro de verdad: barre el horizonte, nunca apunta al mar). c = hacia los lados, z = hacia ti (+) o al fondo (-).
-  // De lado el haz es largo; al alejarse se acerca un poco al horizonte (perspectiva); al venir hacia ti se acorta,
-  // se ensancha y el destello toma el relevo. Todo cambia de forma continua (sin tirones al pasar por los lados).
-  const LX=186, LY=90, th=ts*Math.PI*2/7;
+  // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos y HORIZONTALES (barren el horizonte,
+  // nunca apuntan al mar). c = hacia los lados, z = hacia ti (+) o al fondo (-). Se proyectan con perspectiva de verdad
+  // (la linterna está HH px sobre el horizonte y el faro a K «alturas» de ti), así los dos haces nunca se ven iguales:
+  // el que se aleja converge hacia el horizonte, más corto, fino y tenue; el que viene hacia ti cruza la pantalla, más
+  // ancho y brillante (la niebla y la humedad dispersan la luz hacia delante) y subiendo un poco porque pasa cerca.
+  // Justo de frente o de espaldas el haz casi no se ve: queda el destello.
+  const LX=186, LY=90, th=ts*Math.PI*2/7, K=12, HH=H0-LY;
   const beams=[th,th+Math.PI].map(a=>{
     const c=Math.cos(a), z=Math.sin(a), ac=Math.abs(c), zf=Math.max(0,z), fr=menuSmooth(-0.25,0.25,z);
-    const ey=LY+6+14*Math.max(0,-z)-6*zf;
-    return {c,z,ex:LX+c*125,ey,w:2+ac*3+zf*6,k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr),
-      a:lerp(0.22+0.1*ac,0.42+0.2*zf,fr),st:lerp(4,1,fr)}; });
+    const sv=z>0?Math.min(1,0.8/z):1, q=1-sv*z;          // hasta dónde se ve el haz (en distancias al faro) y su profundidad allí
+    const face=menuSmooth(0.1,0.45,ac);
+    return {c,z,ex:LX+HH*K*sv*c/q,ey:LY-HH*sv*z/q,w:Math.min(28,1.5+3/Math.pow(q,0.9)),
+      k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr)*face,a:(0.14+0.2*(z+1))*face,st:lerp(4,1,fr)}; });
   const zMax=Math.max(beams[0].z,beams[1].z), flash=zMax>0.8?(zMax-0.8)/0.2:0;
   menuIslandLights(M,ts,beams,LX,LY,flash,H0);
   // reflejo de la base en el agua: filas invertidas que se ondulan (la silueta y también sus luces:
