@@ -486,7 +486,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -639,6 +639,8 @@ const CHARS={
     hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
   jeep:{id:'jeep', name:'JACKAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
     hp:60, speed:4.0, accel:0.46, friction:0.9, radius:12, mass:1.6, fireCd:11, dmg:4, twin:true, hurt:1.25, cloakDur:360, cloakCd:1000, nadeCd:70, nadeDmg:24},
+  moto:{id:'moto', name:'JINETE', locked:'jinete', desc:'Moto bandida reprogramada. La más rápida y ágil, pero la más frágil (recibe +30% de daño). El jinete dispara una pistola rápida.',
+    hp:55, speed:4.8, accel:0.55, friction:0.9, radius:11, mass:1.2, fireCd:8, dmg:3, hurt:1.3, cloakDur:420, cloakCd:900, nadeCd:80, nadeDmg:22},
 };
 const MATES={
   car:{id:'car', name:'JABALÍ', evo:'MINITANQUE JABALÍ', desc:'Auto con ametralladora giratoria. Con R evoluciona a MINITANQUE con cañón.'},
@@ -1544,10 +1546,14 @@ function updatePlayer(dt){
     if(!flying){ p.vx=lerp(p.vx,fx*along,0.25); p.vy=lerp(p.vy,fy*along,0.25); }
     p.tread+=along*dt*0.5;
     p.aim=turnTo(p.aim,aimWant,0.13*dt);
-  } else if(p.ch.id==='jeep'){
+  } else if(p.ch.id==='jeep'||p.ch.id==='moto'){
     if(ix||iy) accelerate(p,ix,iy,dt);
-    const sp=Math.hypot(p.vx,p.vy);
+    const sp=Math.hypot(p.vx,p.vy), b0=p.body;
     if(sp>0.4) p.body=turnTo(p.body,Math.atan2(p.vy,p.vx),0.16*dt);
+    if(p.ch.id==='moto'){   // se tumba en las curvas y deja estela de neón (p9j_moto.js)
+      p.lean=lerp(p.lean||0,clamp(angDiff(b0,p.body)/Math.max(dt,0.01)*sp*2.5,-0.9,0.9),0.15);
+      motoTrailStep(p,p.body,dt);
+    }
     p.aim=turnTo(p.aim,aimWant,0.3*dt);
     p.tread+=sp*dt*0.5;
   } else {
@@ -3916,6 +3922,7 @@ function drawPlayer(){
   if(p.hurtFlash>0) ctx.filter='brightness(2.2)';
   if(p.ch.id==='mech') drawMech(p);
   else if(p.ch.id==='tank') drawTankUnit(p,'#d9a53a','#3a2a05',p.body,p.aim,12);
+  else if(p.ch.id==='moto') drawPlayerMoto(p);
   else drawJeep(p,'#c9a74a');
   ctx.restore();
   ctx.filter='none';
@@ -5366,7 +5373,7 @@ function drawUpgradeStation(){
   ctx.beginPath(); ctx.arc(cx,cy,52,t*0.03,t*0.03+Math.PI*1.4); ctx.stroke(); ctx.restore();
   const ch=CHARS[sel().char]||CHARS.mech;
   const u={x:cx,y:cy,radius:ch.radius*1.8,body:Math.PI/2,aim:Math.PI/2+Math.sin(t*0.02)*0.6,walk:0,tread:0,angle:Math.PI/2};
-  if(ch.id==='mech') drawMech(u); else if(ch.id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else drawJeep(u,'#c9a74a');
+  if(ch.id==='mech') drawMech(u); else if(ch.id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else if(ch.id==='moto') drawPlayerMoto(u); else drawJeep(u,'#c9a74a');
   for(const sd of [-1,1]){
     const bx=cx+sd*(w/2-16), by=cy-34;
     const tx=cx+sd*22+Math.sin(t*0.05+sd)*8, ty=cy+Math.cos(t*0.04+sd)*12;
@@ -9013,14 +9020,38 @@ function raiderUpdate(en,dt){
   en.speedMax=en.def.speed; en.drvV=null; en.drvSlide=false;   // el nitro y el derrape solo duran lo que pida combatRaider
   en._vx=en.vx; en._vy=en.vy;
   if(en.stun>0){ const k=Math.pow(0.93,dt); en.vx*=k; en.vy*=k; en.lean*=0.9; }   // estrellada: se arrastra hasta parar
-  // estelas de luz de las dos ruedas (se guardan siempre, también patrullando)
-  const c=Math.cos(en.bodyA), s=Math.sin(en.bodyA);
-  en.trailT=(en.trailT||0)-dt;
-  if(en.trailT<=0){ en.trailT=2; (en.trail||(en.trail=[])).push({f:[en.x+c*17,en.y+s*17],r:[en.x-c*16,en.y-s*16]}); if(en.trail.length>22) en.trail.shift(); }
+  motoTrailStep(en,en.bodyA,dt);
+  // CAPTURA: con la moto aturdida (estrellada o por tu granada), pégate a ella y mantén C para reprogramarla
+  en.canHack=player.alive&&en.stun>0&&dist(en,player)<70;
+  if(en.canHack&&keys.c){
+    en.stun=Math.max(en.stun,8); en.hackT=(en.hackT||0)+dt;
+    if(Math.random()<0.3*dt) particles.push({x:en.x+rand(-10,10),y:en.y+rand(-10,10),vx:0,vy:-0.7,life:18,maxLife:18,color:'#3ee6e6',size:2});
+    if(en.hackT>=MOTO_HACK){ captureMoto(en); return true; }
+  } else en.hackT=Math.max(0,(en.hackT||0)-2*dt);
   for(const k of en.skids) k.l-=dt;
   while(en.skids.length&&en.skids[0].l<=0) en.skids.shift();
   return false;
 }
+
+const MOTO_HACK=90;   // 1,5 s manteniendo C
+/* estelas de luz de las dos ruedas (se guardan siempre, también patrullando) */
+function motoTrailStep(u,a,dt){
+  const c=Math.cos(a), s=Math.sin(a);
+  u.trailT=(u.trailT||0)-dt;
+  if(u.trailT<=0){ u.trailT=2; (u.trail||(u.trail=[])).push({f:[u.x+c*17,u.y+s*17],r:[u.x-c*16,u.y-s*16]}); if(u.trail.length>22) u.trail.shift(); }
+}
+/* Moto reprogramada: sale del combate y, la primera vez, desbloquea la 4.ª máquina (JINETE) */
+function captureMoto(en){
+  en.alive=false;
+  const sq=squads[en.squad]; if(sq) sq.alive--;
+  if(!en.noCount) killed++;
+  registerKill(en.def.score,en.x,en.y);
+  rings.push({x:en.x,y:en.y,r:8,max:70,life:24,maxLife:24,color:'#3ee6e6'}); spawnDebris(en.x,en.y,10,'#3ee6e6'); S.upgrade();
+  if(!save.jinete){ save.jinete=true; saveSave(); announce('¡JINETE CAPTURADO!','#3ee6e6','Ya puedes elegir la moto en el hangar'); }
+  else { runWork+=10; popup(en.x,en.y-30,'MOTO REPROGRAMADA · +10 ◆ en piezas','#3ee6e6',13); }
+}
+/* Tu moto: el mismo dibujo, con pañuelo verde, y la estela que deja al correr */
+function drawPlayerMoto(u){ drawMoto({x:u.x,y:u.y,bodyA:u.body,lean:u.lean||0,steer:u.steer||0,trail:u.trail,skids:null,wheelie:0},'#3ee67a'); }
 
 function motoDrive(en,dt){
   const M=MOTO, kGeo=Math.tan(M.steerMax)/M.L;
@@ -9199,6 +9230,14 @@ function drawMoto(en,col){
   ctx.fillStyle='#d8b48a'; ctx.fillRect(-2,-1,3,2); ctx.fillStyle='#2a1a10'; ctx.fillRect(-4,-1,2,2);
   ctx.restore();
   ctx.restore();
+  if(en.canHack){   // aviso de captura: tecla C y anillo de progreso
+    const k=(en.hackT||0)/MOTO_HACK;
+    ctx.strokeStyle='rgba(62,230,230,.35)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(en.x,en.y-42,9,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='#3ee6e6'; ctx.beginPath(); ctx.arc(en.x,en.y-42,9,-Math.PI/2,-Math.PI/2+k*Math.PI*2); ctx.stroke();
+    ctx.fillStyle='#e8fbff'; ctx.font='bold 10px monospace'; ctx.textAlign='center'; ctx.fillText('C',en.x,en.y-38.5);
+    if(k<=0){ ctx.font='bold 9px monospace'; ctx.fillStyle='#3ee6e6'; ctx.fillText('MANTÉN C: REPROGRAMAR',en.x,en.y-56); }
+    ctx.textAlign='left';
+  }
 }
 /* ===================== JEFES: más duros con tu equipo y ataques nuevos (inspirados en Terraria) =====================
    · Al aparecer, el jefe mira tus mejoras del taller y gana vida (hasta x2,2), daño (+60%), velocidad y ritmo.
@@ -9492,7 +9531,7 @@ function menuCursor(){
   menuCurFor=ch;
   const c=previewCanvas(()=>{
     const u={x:28,y:28,radius:ch==='mech'?23:21,body:0,aim:0,walk:0.6,tread:0,angle:0};
-    if(ch==='mech') drawMech(u); else if(ch==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',0,0,12); else drawJeep(u,'#c9a74a');
+    if(ch==='mech') drawMech(u); else if(ch==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',0,0,12); else if(ch==='moto') drawPlayerMoto(u); else drawJeep(u,'#c9a74a');
   });
   document.getElementById('scrMenu').style.setProperty('--mcur','url('+c.toDataURL()+')');
 }
@@ -9502,7 +9541,7 @@ function menuCardHtml(){
     return '<div class="mCardHead">EN COMBATE</div>'+
       K(['W','A','S','D'],'mover')+K(['RATÓN'],'apuntar (la torreta gira 360°)')+K(['CLIC IZQ','ESPACIO'],'disparar')+
       K(['CLIC DER','SHIFT'],'ataque en arco: pasa por encima de los muros')+K(['F'],'camuflaje')+K(['R'],'evolucionar aliado ◆20')+
-      K(['E'],'mini-dron ◆8')+K(['T'],'torreta ◆12')+K(['Q'],'escuadra ◆10')+K(['G'],'la escuadra escolta a los rehenes')+K(['X'],'pedir el Orbe Vital (en los mundos)')+K(['P','ESC'],'pausa')+
+      K(['E'],'mini-dron ◆8')+K(['T'],'torreta ◆12')+K(['Q'],'escuadra ◆10')+K(['G'],'la escuadra escolta a los rehenes')+K(['X'],'pedir el Orbe Vital (en los mundos)')+K(['C'],'pegado a una moto aturdida: reprogramarla')+K(['P','ESC'],'pausa')+
       '<div class="mCardHead" style="margin-top:1cqw">EN LA BASE Y EN EL MAPA</div>'+
       K(['W','A','S','D'],'caminar · SHIFT correr')+K(['E'],'usar edificios y el huerto')+K(['← →'],'elegir destino · INTRO despegar');
   }
@@ -10522,12 +10561,13 @@ function previewCanvas(drawFn){
 function renderHangar(){
   const s=sel();
   const charRow=document.getElementById('charRow'); charRow.innerHTML='';
-  Object.values(CHARS).forEach(ch=>{
+  Object.values(CHARS).filter(ch=>!ch.locked||save[ch.locked]).forEach(ch=>{   // el JINETE aparece al capturar una moto
     const card=document.createElement('div'); card.className='pickCard'+(s.char===ch.id?' sel':'');
     const cvs=previewCanvas(()=>{
       const u={x:28,y:31,radius:ch.radius*(ch.id==='tank'?1.35:1.55),body:-Math.PI/2,aim:-Math.PI/2-0.6,walk:0.6,tread:0,angle:-Math.PI/2};
       if(ch.id==='mech') drawMech(u);
       else if(ch.id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12);
+      else if(ch.id==='moto') drawPlayerMoto(u);
       else drawJeep(u,'#c9a74a');
     });
     card.appendChild(cvs);
