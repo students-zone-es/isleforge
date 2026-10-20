@@ -2862,6 +2862,10 @@ function updateEnemies(dt){
     endgameT-=dt;
     if(endgameT<=0){
       endgameT=240;
+      if(baseOrb()){   // SUPERVIVENCIA: los últimos se lanzan todos a por el Orbe
+        if(enemies.some(en=>!en.raid)) announce('¡VAN A POR EL ORBE!','#ff4757','Los últimos enemigos asaltan tu base');
+        for(const en of enemies){ en.revealed=true; en.raid=true; }
+      } else
       for(const en of enemies){ en.revealed=true; if(en.ai==='patrol'||en.ai==='search'){ en.ai='hunt'; en.lastKnown={x:player.x+rand(-80,80),y:player.y+rand(-80,80)}; en.searchT=0; } }
     }
   }
