@@ -670,7 +670,7 @@ const ROSTER={
 
 /* ===================== ESTADO GLOBAL ===================== */
 let state='menu';
-let map=null, tileHp=null, cageInfo=new Map();
+let map=null, tileHp=null, cageInfo=new Map(), wallKind=new Map();   // wallKind: muros que construyes (casilla -> 'wood'|'stone')
 let mapCanvas=null, mapG=null, miniBase=null, miniDirty=false, miniT=0;
 let nodes=[], ship=null, orb=null, landing=null, arena=null;
 let player=null, enemies=[], bullets=[], lobs=[], voids=[], particles=[], popups=[], bolts=[], rings=[], slashes=[];
@@ -1212,6 +1212,7 @@ function paintTile(c,r){
     if(tileAtC(c+1,r)!==CONT) mapG.fillRect(x+TILE-3,y,3,TILE);
   }
   extraPaint(v,c,r,x,y,h);
+  if(v===RUB&&wallKind.has(k)) paintBuiltWall(wallKind.get(k),tileHp[k],x,y);
   if(v===BRIDGE){   // barandillas donde el puente da al agua
     mapG.fillStyle='#4a2a14';
     if(tileAtC(c-1,r)===WATER) mapG.fillRect(x,y,4,TILE);
@@ -1225,6 +1226,22 @@ function paintTile(c,r){
     if(tileAtC(c+1,r)!==WATER) mapG.fillRect(x+TILE-3,y,3,TILE);
     mapG.globalAlpha=1;
   }
+}
+/* Muros que construyes (supervivencia): tablones de madera o sillares de piedra, con grietas según el daño */
+function paintBuiltWall(kind,hp,x,y){
+  const wood=kind==='wood', max=DEF_BY[kind].wall, g=mapG;
+  g.fillStyle=wood?'#4a2c12':'#4d5157'; g.fillRect(x+1,y+2,TILE-2,TILE-3);
+  if(wood){
+    for(let i=0;i<4;i++){ g.fillStyle=i%2?'#94602c':'#a8703a'; g.fillRect(x+2,y+3+i*7,TILE-4,6); g.fillStyle='#d8a060'; g.fillRect(x+4,y+4+i*7,2,1); g.fillRect(x+TILE-7,y+4+i*7,2,1); }
+    g.fillStyle='#5a3418'; g.fillRect(x+6,y+3,3,TILE-5); g.fillRect(x+TILE-9,y+3,3,TILE-5);   // travesaños
+  } else {
+    for(let row=0;row<3;row++) for(let col=0;col<3;col++){
+      const off=row%2?5:0, bx=x+2+col*9+off-(row%2&&col===2?9:0), by=y+3+row*9;
+      g.fillStyle=(row+col)%2?'#9aa0a8':'#888e96'; g.fillRect(bx,by,8,8); g.fillStyle='#b8bec6'; g.fillRect(bx,by,8,1);
+    }
+  }
+  if(hp<=max*0.6){ g.strokeStyle='rgba(0,0,0,.6)'; g.lineWidth=1.5; g.beginPath(); g.moveTo(x+8,y+4); g.lineTo(x+14,y+14); g.lineTo(x+11,y+22); g.stroke(); }
+  if(hp<=max*0.3){ g.beginPath(); g.moveTo(x+22,y+6); g.lineTo(x+18,y+16); g.lineTo(x+24,y+26); g.stroke(); }
 }
 function buildMapCanvas(){
   tileCache={};
@@ -1268,6 +1285,7 @@ function destroyTile(c,r,toScorch){
   if(v===WIRE) spawnDebris(x,y,5,'#9a9a9a');
   if(v===RUB||v===TREE||v===CAGE||v===WALL) spawnDebris(x,y,6, v===TREE?era.tree:v===WALL?'#9aa0a8':era.rubble);
   if(v===TREE&&!toScorch) stumpSet().add(k); else stumpSet().delete(k);
+  wallKind.delete(k);
   map[k]=toScorch?SCORCH:G; tileHp[k]=0;
   paintTile(c,r);
   miniDirty=true;
@@ -1680,6 +1698,13 @@ function killPlayer(reason){
   if(reason) popup(p.x,p.y-46,reason,'#c77dff',16);
   onPlayerDeath();
 }
+/* SUPERVIVENCIA: sin Orbe no hay quien rearme tu máquina: se acaba la partida */
+function baseLost(){
+  spawnBlast(orb.x,orb.y,120); shake=Math.max(shake,22); flashScreen('#ff4757',0.4);
+  announce('¡EL ORBE VITAL HA CAÍDO!','#ff4757','Ya nadie puede rearmar tu máquina');
+  lives=0; gameOverT=150;
+  if(player.alive){ player.alive=false; spawnBlast(player.x,player.y,60); }
+}
 function onPlayerDeath(){
   const p=player;
   lives--; S.death(); shake=Math.max(shake,16);
@@ -1815,6 +1840,7 @@ function landLob(l){
 /* ===================== EXPLOSIONES Y EFECTOS ===================== */
 function friendlies(){
   const a=[];
+  if(baseOrb()) a.push(orb);   // supervivencia: el Orbe Vital también recibe golpes
   if(mate&&mate.alive) a.push(mate);
   for(const s of soldiers) if(s.alive) a.push(s);
   for(const tu of turrets) if(tu.alive) a.push(tu);
@@ -1822,7 +1848,9 @@ function friendlies(){
   for(const pw of pows) if(pw.alive) a.push(pw);
   return a;
 }
+function baseOrb(){ return survLvl&&orb&&orb.alive?orb:null; }
 function hitFriendly(x,y,r){
+  if(baseOrb()&&(x-orb.x)**2+(y-orb.y)**2<(r+orb.radius)**2) return orb;
   if(mate&&mate.alive&&(x-mate.x)**2+(y-mate.y)**2<(r+mate.radius)**2) return mate;
   for(const u of soldiers) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
   for(const u of turrets) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
@@ -1837,10 +1865,12 @@ function hurtFriendly(u,dmg){
     if(en&&en!==boss) escortDetected(en,u); else { escort.detected=true; escort.pathT=0; }
   }
   u.hp-=dmg*survK('enemigos')/survK('aliados'); u.flash=5; spawnDebris(u.x,u.y,2,'#9ff');   // supervivencia: nivel de quien pega contra el de tus aliados
+  if(u===orb&&u.hp>0&&(orb.warnT||0)<t){ orb.warnT=t+300; announce('¡ATACAN EL ORBE VITAL!','#ff4757','Defiéndelo: si cae, se acaba la partida'); S.alarm(); }
   if(u.hp<=0){
     u.alive=false; spawnBlast(u.x,u.y,u.radius*2); spawnDebris(u.x,u.y,10,'#9ff');
     if(u===mate){ mateTimer=900; popup(u.x,u.y-20,MATES[u.mk].name+' DESTRUIDO','#ff6b6b',14); popup(u.x,u.y-4,'el barco enviará otro en 15 s','#8ea0b8',11); }
     if(u.kind==='pow') popup(u.x,u.y-14,'REHÉN PERDIDO','#ff6b6b',12);
+    if(u===orb) baseLost();
   }
 }
 function explode(x,y,radius,dmg,owner,o){
@@ -1949,6 +1979,24 @@ function dropWork(x,y,n){
 
 /* ===================== APOYO: MINI-DRONES, TORRETAS, ESCUADRA ===================== */
 const TURRET_COST=12, SQUAD_COST=10, DRONE_COST=8, TURRET_MAX=2, TURRET_RANGE=260;
+/* DEFENSAS (supervivencia): con B eliges qué construye la T. Los muros son casillas de verdad: cortan el paso y las balas
+   hasta que los rompen (wall = golpes que aguantan). Las torres usan la lista de torretas con su «type». */
+const DEFENSES=[
+  {id:'turret', name:'TORRETA', ic:'🗼', cost:TURRET_COST, hp:40, range:TURRET_RANGE, cd:22, turn:0.09, shot:{dmg:5,speed:7,life:60}},
+  {id:'wood',   name:'MURO DE MADERA', ic:'🪵', cost:4, wall:3},
+  {id:'stone',  name:'MURO DE PIEDRA', ic:'🧱', cost:8, wall:9},
+  {id:'sniper', name:'TORRE DE FRANCOTIRADOR', ic:'🎯', cost:20, hp:90, range:430, cd:95, turn:0.05, shot:{dmg:24,speed:12,life:50,radius:2.5}},
+  {id:'bazooka',name:'BAZUQUERO', ic:'🚀', cost:18, hp:60, range:280, cd:80, turn:0.07, shot:{dmg:14,speed:6,life:60,radius:4.5,kind:'shell',splash:40,stunMul:0.8}},
+];
+const DEF_BY=Object.fromEntries(DEFENSES.map(d=>[d.id,d]));
+let defSel=0;
+function curDefense(){ return survLvl?DEFENSES[defSel]:DEFENSES[0]; }
+function towerMax(){ return TURRET_MAX+(survLvl?3:0); }
+function cycleDefense(){
+  if(!survLvl) return;
+  defSel=(defSel+1)%DEFENSES.length; const D=DEFENSES[defSel];
+  popup(player.x,player.y-34,'T: '+D.ic+' '+D.name+' ◆'+D.cost,'#3ee6e6',12);
+}
 function spawnDrone(free){
   if(!player||!player.alive) return;
   if(!free){
@@ -1961,13 +2009,30 @@ function spawnDrone(free){
 }
 function deployTurret(){
   if(!player||!player.alive) return;
-  if(turrets.filter(tu=>tu.alive).length>=TURRET_MAX){ popup(player.x,player.y-20,'MÁX. '+TURRET_MAX+' TORRETAS','#ff6b6b',12); return; }
-  if(runWork<TURRET_COST){ popup(player.x,player.y-20,'WORK insuficiente','#ff6b6b',12); return; }
+  const D=curDefense();
+  if(runWork<D.cost){ popup(player.x,player.y-20,'WORK insuficiente','#ff6b6b',12); return; }
+  if(D.wall){ buildWall(D); return; }
+  if(turrets.filter(tu=>tu.alive).length>=towerMax()){ popup(player.x,player.y-20,'MÁX. '+towerMax()+' TORRES','#ff6b6b',12); return; }
   const x=player.x+Math.cos(player.aim)*30, y=player.y+Math.sin(player.aim)*30;
   if(solidAt(x,y)||solidAt(x+10,y)||solidAt(x-10,y)||solidAt(x,y+10)||solidAt(x,y-10)){ popup(player.x,player.y-20,'Sitio bloqueado','#ff6b6b',12); return; }
-  runWork-=TURRET_COST;
-  turrets.push({kind:'turret',x,y,vx:0,vy:0,radius:11,static:true,hp:40,maxHp:40,angle:player.aim,fireCd:20,alive:true,flash:0});
-  popup(x,y-22,'TORRETA','#3ee6e6',14); spawnDebris(x,y,8,'#3ee6e6');
+  runWork-=D.cost;
+  const hp=D.hp*(survLvl&&D.id==='turret'?2:1);   // en supervivencia, torretas reforzadas
+  turrets.push({kind:'turret',type:D.id,x,y,vx:0,vy:0,radius:11,static:true,hp,maxHp:hp,angle:player.aim,fireCd:20,alive:true,flash:0});
+  popup(x,y-22,D.name,'#3ee6e6',14); spawnDebris(x,y,8,'#3ee6e6');
+}
+/* Muro de 3 casillas delante de ti, de lado (no tapa casillas ocupadas ni sólidas) */
+function buildWall(D){
+  const a=player.aim, cx=player.x+Math.cos(a)*48, cy=player.y+Math.sin(a)*48, px=-Math.sin(a), py=Math.cos(a);
+  const busy=(c,r)=>[player,...enemies,...soldiers].some(u=>u.alive&&!u.air&&Math.abs(u.x-(c*TILE+TILE/2))<TILE/2+u.radius&&Math.abs(u.y-(r*TILE+TILE/2))<TILE/2+u.radius);
+  let n=0;
+  for(let i=-1;i<=1;i++){
+    const c=Math.floor((cx+px*i*TILE)/TILE), r=Math.floor((cy+py*i*TILE)/TILE);
+    if(!inB(c,r)||SOLID[map[idx(c,r)]]||busy(c,r)) continue;
+    setTile(c,r,RUB); tileHp[idx(c,r)]=D.wall; wallKind.set(idx(c,r),D.id); paintTile(c,r); n++;
+  }
+  if(!n){ popup(player.x,player.y-20,'Sitio bloqueado','#ff6b6b',12); return; }
+  runWork-=D.cost; miniDirty=true;
+  popup(cx,cy-22,D.name,'#3ee6e6',13); spawnDebris(cx,cy,8,D.id==='wood'?'#a0703a':'#9aa0a8'); S.stomp();
 }
 function deploySquad(){
   if(!player||!player.alive) return;
@@ -2016,12 +2081,15 @@ function updateSupport(dt){
   for(const tu of turrets){
     if(!tu.alive) continue;
     if(tu.flash>0) tu.flash-=dt;
-    const tg=nearestEnemyFrom(tu.x,tu.y,TURRET_RANGE,true);
+    const D=DEF_BY[tu.type]||DEF_BY.turret, tg=nearestEnemyFrom(tu.x,tu.y,D.range,true);
     tu.fireCd-=dt;
     if(tg){
       const want=Math.atan2(tg.y-tu.y,tg.x-tu.x), diff=angDiff(tu.angle,want);
-      tu.angle+=clamp(diff,-0.09*dt,0.09*dt);
-      if(Math.abs(diff)<0.2 && tu.fireCd<=0){ fireBullet(tu.x+Math.cos(tu.angle)*14,tu.y+Math.sin(tu.angle)*14,tu.angle,'p',{dmg:5,pierce:0,frag:0,speed:7,life:60,src:tu}); tu.fireCd=22; }
+      tu.angle+=clamp(diff,-D.turn*dt,D.turn*dt);
+      if(Math.abs(diff)<0.2 && tu.fireCd<=0){
+        fireBullet(tu.x+Math.cos(tu.angle)*14,tu.y+Math.sin(tu.angle)*14,tu.angle,'p',Object.assign({pierce:0,frag:0,src:tu},D.shot)); tu.fireCd=D.cd;
+        if(tu.type==='sniper'||tu.type==='bazooka') S.cannon();
+      }
     }
   }
   turrets=turrets.filter(tu=>tu.alive);
@@ -2619,7 +2687,7 @@ function makeEnemy(id,x,y,sid){
     home:{x,y},wp:null,wpT:0,path:null,pathT:0,
     fireCd:rand(50,100),burst:0,burstT:0,windup:0,lunge:0,atkCd:0,strafe:Math.random()<0.5?1:-1,strafeT:rand(60,120),
     stun:0,flash:0,squad:sid,spawnGrace:50,z:def.air?1:0,
-    carrier:wave>=2&&Math.random()<(def.purple||0)*(world?0.5:1),vacio:null,vacioUsed:false,
+    carrier:wave>=2&&Math.random()<(def.purple||0)*(world?0.5:1),vacio:null,vacioUsed:false,raid:survLvl>0&&!world&&Math.random()<0.35,
     alarmCd:0,glitch:0,ramT:0,ramA:0,ramHits:null,crushCd:0,walk:0,tread:0,orbitA:null,bombCd:rand(200,320),dish:0,recoil:0};
   en.aim=en.angle;
   if(def.look==='tank'){ en.speedMax*=0.6; en.accel*=0.55; }   // tanque de verdad: lento y pesado (al embestir no: va a 5,4)
@@ -2767,6 +2835,10 @@ function pickTarget(en){
   let best=null, bd=170*170;
   for(const s of soldiers){ if(!s.alive) continue; const d=dist2(en,s); if(d<bd){ bd=d; best=s; } }
   for(const tu of turrets){ if(!tu.alive) continue; const d=dist2(en,tu); if(d<bd){ bd=d; best=tu; } }
+  if(baseOrb()){   // SUPERVIVENCIA: el Orbe Vital es un objetivo; los asaltantes van a por él salvo que te tengan encima
+    if(en.raid&&!(en.seen&&dist2(en,player)<160*160)) return {x:orb.x,y:orb.y,u:orb};
+    const d=dist2(en,orb); if(d<bd*1.7){ bd=d; best=orb; }
+  }
   if(mate&&mate.alive){ const d=dist2(en,mate); if(d<bd*1.4 && (en.air||lineClear(en.x,en.y,mate.x,mate.y))){ bd=d; best=mate; } }
   if(best && (!en.seen || bd<dist2(en,player)*0.6)) return {x:best.x,y:best.y,u:best};
   if(en.seen) return {x:player.x,y:player.y,u:player};
@@ -2821,6 +2893,10 @@ function updateEnemy(en,dt){
   if(en.stun>0){ en.stun-=dt; moveUnit(en,dt); return; }
   if(en.vacio){ updateVacio(en,dt); moveUnit(en,dt); return; }
   perceive(en,dt);
+  if(en.raid&&baseOrb()&&d.role!=='turret'){   // ASALTANTE: marcha hacia el Orbe y, al llegar, lo ataca
+    if(dist2(en,orb)<240*240){ en.ai='combat'; en.lastSeen=t; }
+    else if(en.ai!=='combat'){ en.ai='hunt'; en.lastKnown={x:orb.x,y:orb.y}; }
+  }
   if(d.role==='turret'){ turretAI(en,dt); return; }
   checkPurpleTrigger(en);
   if(en.vacio){ moveUnit(en,dt); return; }
@@ -4100,7 +4176,8 @@ function drawShip(){
   ctx.restore();
 }
 function drawOrb(){
-  if(!orb) return;
+  if(!orb||orb.alive===false) return;
+  if(orb.maxHp&&orb.hp<orb.maxHp) hpBar(orb.x,orb.y-44,48,orb.hp/orb.maxHp,orb.hp<orb.maxHp*0.3?'#ff4757':'#3ee67a');   // vida del Orbe (supervivencia)
   const r=orb.r;
   ctx.save(); ctx.translate(orb.x,orb.y);
   ctx.globalAlpha=0.08; ctx.fillStyle='#3ee67a'; ctx.beginPath(); ctx.arc(0,0,95,0,Math.PI*2); ctx.fill();
@@ -4312,8 +4389,27 @@ function drawMuzzles(cx,cy){
   }
   ctx.restore();
 }
+/* Torre de francotirador (plataforma de madera con tirador y rifle largo) y puesto de bazuquero (sacos y lanzacohetes) */
+function drawTower(tu){
+  const sn=tu.type==='sniper', fl=tu.flash>0;
+  ctx.save(); ctx.translate(tu.x,tu.y);
+  if(sn){
+    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(-13,-9,28,24);
+    ctx.fillStyle='#5a3418'; ctx.fillRect(-12,-12,3,24); ctx.fillRect(9,-12,3,24); ctx.fillRect(-12,-12,24,3); ctx.fillRect(-12,9,24,3);   // patas y marco
+    ctx.fillStyle=fl?'#fff':'#a8703a'; ctx.fillRect(-10,-10,20,20); ctx.fillStyle='#94602c'; for(let i=-10;i<10;i+=5) ctx.fillRect(-10,i,20,1);
+  } else {
+    for(let i=0;i<8;i++){ const a=i*Math.PI/4; ctx.fillStyle=fl?'#fff':(i%2?'#b8a06a':'#a08a58'); ctx.fillRect(Math.cos(a)*11-4,Math.sin(a)*11-3,8,6); }   // anillo de sacos
+  }
+  ctx.rotate(tu.angle);
+  ctx.fillStyle='#2f7d4f'; ctx.fillRect(-4,-4,8,8); ctx.fillStyle='#e8c9a0'; ctx.fillRect(-1,-2,3,4);   // el soldado
+  if(sn){ ctx.fillStyle='#222'; ctx.fillRect(2,0,20,2); ctx.fillStyle='#3ee6e6'; ctx.fillRect(9,-1,3,1); }   // rifle con mira
+  else { ctx.fillStyle='#3a4630'; ctx.fillRect(-2,-5,16,4); ctx.fillStyle='#ff8a3a'; ctx.fillRect(13,-5,2,4); }   // lanzacohetes al hombro
+  ctx.restore();
+  hpBar(tu.x,tu.y-18,26,tu.hp/tu.maxHp,'#3ee67a');
+}
 function drawTurretsSoldiers(){
   for(const tu of turrets){
+    if(tu.type==='sniper'||tu.type==='bazooka'){ drawTower(tu); continue; }
     ctx.save(); ctx.translate(tu.x,tu.y);
     ctx.fillStyle='#1c3b3d'; ctx.fillRect(-12,-12,24,24);
     ctx.fillStyle=tu.flash>0?'#fff':'#3ee6e6'; ctx.fillRect(-10,-10,20,20);
@@ -6010,7 +6106,7 @@ function missionFailed(){
   } else if(m.type==='tutorial'){
     showResults({title:'ENTRENAMIENTO FALLIDO', html:stats, buttons:[['↻ REINTENTAR',()=>startMission({type:'tutorial'}),true],home]});
   } else {
-    showResults({title:'SIN VIDAS RESTANTES', html:'<span style="color:var(--text-dim)">Sobreviviste hasta el nivel '+wave+' del Archipiélago.</span><br><br>'+stats+
+    showResults({title:orb&&orb.alive===false?'EL ORBE VITAL HA CAÍDO':'SIN VIDAS RESTANTES', html:'<span style="color:var(--text-dim)">Sobreviviste hasta el nivel '+wave+' del Archipiélago.</span><br><br>'+stats+
       '<br><span style="color:var(--text-dim)">Récord: '+save.bestScore+' pts · Isla máxima: '+save.bestWave+'</span>',
       buttons:[['↻ OTRA VEZ',()=>startMission({type:'arch'}),true],home]});
   }
@@ -10025,6 +10121,7 @@ function startStage(){
   world=null; helis=[];
   tut=(wave===1 && mission && mission.type==='tutorial')?{step:0,t:0,d:{},moved:0,wait:0,started:false}:null;
   renderTutBox();
+  wallKind=new Map();
   buildIsland();
   carryDefenses(keep);
   seedDepositsStage();
@@ -10077,6 +10174,7 @@ function updateIntro(dt){
 }
 function orbLanded(l){
   orb={x:l.x1,y:l.y1,r:14,pulse:24};
+  if(survLvl) Object.assign(orb,{kind:'orb',alive:true,hp:400,maxHp:400,radius:18,static:true});   // la base que hay que defender
   cinePhase=2; orbLandT=cineT; cineFocus={x:orb.x,y:orb.y-40};
   shake=Math.max(shake,8); S.respawn();
   rings.push({x:orb.x,y:orb.y,r:10,max:110,life:30,maxLife:30,color:'#3ee67a'});
@@ -10202,7 +10300,7 @@ function updateHUD(){
   setText('allyV',drones.length); setText('turV',turrets.length); setText('solV',soldiers.length);
   const following=pows.filter(pw=>pw.follow&&!pw.escort).length, escorted=pows.filter(pw=>pw.escort).length;
   setText('powLbl',survLvl?'🛡 SUPERVIVENCIA NIVEL':'⛓ REHENES A SALVO:');
-  setText('powV',survLvl?(survLvl+' ('+survTxt()+')'):rescued+(following?(' · +'+following+' siguiéndote'):'')+(escorted?(' · +'+escorted+' con la escolta'):''));
+  setText('powV',survLvl?(survLvl+' ('+survTxt()+')'+(orb&&orb.maxHp?' · ORBE '+Math.max(0,Math.ceil(orb.hp/orb.maxHp*100))+'%':'')):rescued+(following?(' · +'+following+' siguiéndote'):'')+(escorted?(' · +'+escorted+' con la escolta'):''));
   setText('wlV',weaponLvl);
   setText('comboV',combo>1?('COMBO x'+combo):'');
   setStyle('hpBar','width',clamp(p.hp/p.maxHp*100,0,100).toFixed(1)+'%');
@@ -10250,7 +10348,9 @@ function updateHUD(){
   const canEvo=mate&&mate.alive&&mate.lvl<2;
   abil('abR',!canEvo?'off':runWork>=20?'ready':'',0);
   abil('abE',!alive?'off':runWork>=DRONE_COST?'ready':'',0);
-  abil('abT',!alive?'off':runWork>=TURRET_COST&&turrets.length<TURRET_MAX?'ready':'',0);
+  const curDef=curDefense(), abTel=document.getElementById('abT');
+  if(abTel._d!==curDef.id){ abTel._d=curDef.id; abTel.children[1].textContent=curDef.ic; abTel.children[2].textContent='◆'+curDef.cost; abTel.title=curDef.name+(survLvl?' · B: cambiar defensa':''); }
+  abil('abT',!alive?'off':runWork>=curDef.cost&&(curDef.wall||turrets.length<towerMax())?'ready':'',0);
   abil('abQ',!alive?'off':runWork>=SQUAD_COST?'ready':'',0);
   abil('abK',escort?'active':(!alive||!escortAvailable())?'off':'ready',0);
   if(hudTick%5===0) drawMinimap();
@@ -10364,6 +10464,7 @@ window.addEventListener('keydown',e=>{
   if(k==='r') tryEvolveMate();
   if(k==='e') spawnDrone(false);
   if(k==='t') deployTurret();
+  if(k==='b') cycleDefense();
   if(k==='q') deploySquad();
   if(k==='x') callOrbHere();
   if(k==='g') startEscort();
