@@ -808,8 +808,10 @@ function buildIsland(){
     const c=Math.floor(cx)+dc;
     for(let r=WR-1;r>=0;r--){ if(map[idx(c,r)]!==WATER){ if(r>lr){ lr=r; lc=c; } break; } }
   }
+  const shipY=(lr+1)*TILE+105;
+  if(survLvl){ lc=Math.floor(cx); lr=Math.floor(cy)+(isBossWave(wave)?12:0)+2; }   // supervivencia: el helicóptero te deja en el centro (lejos del jefe)
   landing={c:lc, r:lr-2, x:lc*TILE+TILE/2, y:(lr-2)*TILE+TILE/2};
-  ship={x:landing.x, y:(lr+1)*TILE+105, launched:false};
+  ship={x:landing.x, y:shipY, launched:false, hidden:!!survLvl};
 
   const grassList=[];
   const refreshGrass=()=>{ grassList.length=0; for(let k=0;k<WC*WR;k++){ if(map[k]===G){ const c=k%WC, r=(k/WC)|0; if(Math.hypot(c-landing.c,r-landing.r)>8) grassList.push(k); } } };
@@ -831,7 +833,7 @@ function buildIsland(){
   }
   // Búnkeres de acero con dos entradas
   const bunkers=[];
-  const nB=6+(wave>3?2:0);
+  const nB=survLvl?0:6+(wave>3?2:0);   // supervivencia: sin búnkeres (ya no hay rehenes que guardar)
   for(let i=0;i<nB;i++){
     for(let tries=0;tries<40;tries++){
       const w=irand(5,8), h=irand(4,6), c0=irand(4,WC-w-5), r0=irand(4,WR-h-12);
@@ -1363,7 +1365,7 @@ function limitSpeed(e,max){
 }
 function accelerate(e,dx,dy,dt,k){
   const l=Math.hypot(dx,dy); if(l<0.0001) return;
-  e.goX=dx; e.goY=dy; e.goK=k==null?1:k;   // meta y ganas (la usa la física de la moto)
+  e.goX=dx; e.goY=dy; e.goK=k==null?1:k; e.goT=t;   // meta, ganas y cuándo (la usan la moto y las orugas de los tanques)
   const a=(e.accel||0.25)*dt;
   e.vx+=dx/l*a; e.vy+=dy/l*a;
   limitSpeed(e,(e.speedMax||2)*(k==null?1:k));
@@ -2860,7 +2862,17 @@ function leadAim(en,tg,speed){
 }
 
 /* ===================== IA POR ESTADO ===================== */
+let survHuntT=0;
 function updateEnemies(dt){
+  // SUPERVIVENCIA: todos saben dónde estás y van a por ti (los asaltantes, a por el Orbe)
+  if(survLvl&&player.alive&&(survHuntT-=dt)<=0){
+    survHuntT=180;
+    for(const en of enemies){
+      const r=en.def.role;
+      if(!en.alive||en.raid||en.ai==='combat'||en.static||r==='turret'||r==='structure'||r==='spawner'||r==='dummy') continue;
+      en.ai='hunt'; en.lastKnown={x:player.x+rand(-60,60),y:player.y+rand(-60,60)}; en.searchT=0; en.revealed=true; en.aware=1;
+    }
+  }
   for(const en of enemies) if(en.alive) updateEnemy(en,dt);
   enemies=enemies.filter(e=>e.alive);
   // Últimos enemigos: reciben tu posición y vienen a por ti
@@ -2919,14 +2931,23 @@ function updateEnemy(en,dt){
   if(d.drive) d.drive(en,dt);   // vehículos con física propia (moto): convierten la meta de la IA en manillar y gas
   const sp=Math.hypot(en.vx,en.vy);
   if(d.tank){
-    if(sp>0.3 && en.ramT<=0) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),(d.look==='tank'?0.045:0.08)*dt);   // el casco gira despacio
+    // ORUGAS: el casco gira hacia donde quiere ir (marcha atrás si le queda detrás) y solo avanza en la dirección de
+    // las ruedas, más cuanto mejor alineado esté: nunca se desliza de lado
+    if(en.ramT<=0){
+      if(en.goT===t&&sp>0.05){
+        const want=Math.atan2(en.goY,en.goX); let diff=angDiff(en.angle,want), dir=1;
+        if(Math.abs(diff)>2.4){ diff=angDiff(en.angle,want+Math.PI); dir=-1; }
+        const turn=(d.look==='tank'?0.045:0.08)*dt; en.angle+=clamp(diff,-turn,turn);
+        const v=Math.min(sp,en.speedMax)*Math.max(0,Math.cos(diff))*dir*(dir<0?0.6:1);
+        en.vx=Math.cos(en.angle)*v; en.vy=Math.sin(en.angle)*v;
+      } else { const fx0=Math.cos(en.angle), fy0=Math.sin(en.angle), al=en.vx*fx0+en.vy*fy0; en.vx=fx0*al; en.vy=fy0*al; }
+    }
     const fx=Math.cos(en.angle), fy=Math.sin(en.angle), along=en.vx*fx+en.vy*fy;
-    if(en.ramT<=0){ en.vx=lerp(en.vx,fx*along,0.15); en.vy=lerp(en.vy,fy*along,0.15); }
     en.tread+=along*dt*0.5;
     if(en.ai!=='combat') en.aim=turnTo(en.aim,en.angle,0.05*dt);
   } else if(!d.air){
     if(en.ai==='combat' && en.seen && en.lunge<=0) en.angle=turnTo(en.angle,en.aim,0.2*dt);
-    else if(en.ai==='search' && sp>0.2) en.angle=Math.atan2(en.vy,en.vx)+Math.sin(t*0.06+en.x)*0.9;
+    else if(en.ai==='search' && sp<0.2) en.angle+=Math.sin(t*0.04+en.x)*0.03*dt;   // parado: mira a su alrededor (andando mira hacia donde va)
     else if(sp>0.3) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),0.15*dt);
     if(en.ai!=='combat') en.aim=en.angle;
   }
@@ -3422,6 +3443,15 @@ function bossPatternFire(b,toA){
     if(b.fireT<=0){ const dens=b.hp<b.maxHp*0.4?3:1; for(let i=0;i<dens;i++){ const a=b.spiral+i*0.6; fireBullet(b.x,b.y,a,'e',{speed:3,dmg:5,radius:3.5,life:170}); } b.fireT=8; S.eshoot(); }
   }
 }
+/* Arena redonda (Mundo 5): el jefe no sale del círculo (a toda velocidad atravesaba los muros finos). true si tocó el borde */
+function bossKeepInArena(b){
+  if(!b||!world||!world.arenaCircle) return false;
+  const A=world.arenaCircle, dx=b.x-A.x, dy=b.y-A.y, d=Math.hypot(dx,dy)||1, lim=A.r-b.radius*0.9;
+  if(d<=lim) return false;
+  b.x=A.x+dx/d*lim; b.y=A.y+dy/d*lim;
+  const vn=(b.vx*dx+b.vy*dy)/d; if(vn>0){ b.vx-=vn*dx/d; b.vy-=vn*dy/d; }
+  return true;
+}
 function updateBoss(dt){
   const b=boss; if(!b||!b.alive) return;
   if(b.dmgK==null) bossInit(b);   // se adapta a tu equipo (p9k_bosses.js)
@@ -3562,10 +3592,15 @@ function updateBoss(dt){
     const minY=(world.arenaTop||0)*TILE+b.radius*0.6;
     if(b.y<minY){ b.y=minY; if(b.vy<0) b.vy=0; if(b.state==='charge'&&!hit) hit={tv:WALL,c:Math.floor(b.x/TILE),r:world.arenaTop}; }
   }
+  if(bossKeepInArena(b)&&b.state==='charge'&&!hit) hit={tv:WALL,c:Math.floor(b.x/TILE),r:Math.floor(b.y/TILE)};
   if(b.state==='charge' && hit){
     if(hit.tv===RUB||hit.tv===TREE||hit.tv===CAGE) destroyTile(hit.c,hit.r,false);
-    else { shake=20; S.boom(); spawnDebris(b.x+Math.cos(b.chargeA)*b.radius,b.y+Math.sin(b.chargeA)*b.radius,16,'#cfd6df'); stunBoss(200,'¡SE ESTRELLÓ! ATURDIDO'); }
+    else {
+      shake=20; S.boom(); spawnDebris(b.x+Math.cos(b.chargeA)*b.radius,b.y+Math.sin(b.chargeA)*b.radius,16,'#cfd6df'); stunBoss(200,'¡SE ESTRELLÓ! ATURDIDO');
+      if(b.kind==='dread') dreadQuake(b,5);   // el choque del Acorazado hace temblar la tierra
+    }
   }
+  if(SOLID[tileAt(b.x,b.y)]) unstick(b);   // nunca se queda incrustado en un muro
   const sp=Math.hypot(b.vx,b.vy);
   b.walk+=sp*dt*0.06; b.tread+=sp*dt*0.5;
   if(b.kind==='tankboss'){ if(sp>0.3&&b.state!=='charge') b.angle=turnTo(b.angle,Math.atan2(b.vy,b.vx),0.04*dt); b.aim=turnTo(b.aim,toA,0.05*dt); }
@@ -4163,7 +4198,7 @@ function drawVoids(){
 
 /* ===================== ESCENARIO: BARCO, ORBE, NODOS ===================== */
 function drawShip(){
-  if(!ship) return;
+  if(!ship||ship.hidden) return;
   const bob=Math.sin(t*0.03)*2;
   ctx.save(); ctx.translate(ship.x,ship.y+bob);
   ctx.globalAlpha=0.35; ctx.fillStyle='#ffffff';
@@ -4755,7 +4790,7 @@ function drawMinimap(){
   g.strokeRect(ox+cam.x/TILE*s,oy+cam.y/TILE*s,W/TILE*s,H/TILE*s);
   nodes.forEach(n=>P(n.x,n.y,VISOR,4));
   if(world){ world.helipads.forEach(h=>P(h.x,h.y,'#f5c518',4)); world.gates.forEach(g=>g.gens.forEach(x=>{ if(x.alive) P(x.x,x.y,VISOR,5); })); }
-  if(ship) P(ship.x,ship.y,'#cfd6df',5);
+  if(ship&&!ship.hidden) P(ship.x,ship.y,'#cfd6df',5);
   if(orb) P(orb.x,orb.y,'#3ee67a',5);
   for(const pw of pows) P(pw.x,pw.y,'#ffd76e',2);
   const showAll=alarmT>0||(spawned>=toKill&&enemies.length<=3);
@@ -8622,16 +8657,17 @@ function buildWorld5(){
   K.gate(36,[[13,40],[26,40]]);
   K.start(20,93);
 
-  /* --- PUERTO MILITAR: arena del jefe (filas 3-35) --- */
-  K.rect(2,3,37,35,FLOOR);
-  K.rect(2,3,37,8,WATER); K.rect(9,3,11,8,BRIDGE); K.rect(28,3,30,8,BRIDGE);
-  for(let c=3;c<=36;c+=4) K.set(c,9,WALL);   // bolardos del muelle
-  [[8,17],[30,17],[13,27],[25,27]].forEach(([c,r])=>K.rect(c,r,c+1,r+1,WALL));   // bloques de hormigón: si te embiste y choca, se aturde
-  cont(4,30,6,31); cont(33,30,35,31);
-  arena={x:20*TILE+15, y:16*TILE};
+  /* --- PUERTO MILITAR: arena del jefe, una PLATAFORMA CIRCULAR de hormigón en medio del agua (filas 3-35) ---
+     El jefe no puede salir del círculo (world.arenaCircle): si embiste contra el borde, se estrella. */
+  const AC=20, AR=18, ARAD=15;
+  K.rect(2,3,37,35,WATER);
+  for(let r=3;r<=35;r++) for(let c=2;c<=37;c++) if((c+0.5-AC-0.5)**2+(r+0.5-AR-0.5)**2<=ARAD*ARAD) K.set(c,r,FLOOR);
+  K.rect(12,31,27,35,FLOOR);   // explanada de entrada desde la compuerta
+  for(let k=0;k<12;k++){ const a=k/12*Math.PI*2, c=Math.round(AC+Math.cos(a)*(ARAD-0.6)), r=Math.round(AR+Math.sin(a)*(ARAD-0.6)); if(r<31) K.set(c,r,WALL); }   // bolardos del borde
+  [[-6,-6],[5,-6],[-6,5],[5,5]].forEach(([dc,dr])=>K.rect(AC+dc,AR+dr,AC+dc+1,AR+dr+1,WALL));   // bloques de hormigón: si te embiste y choca, se aturde
+  arena={x:AC*TILE+15, y:AR*TILE+15};
+  world.arenaCircle={x:AC*TILE+15, y:AR*TILE+15, r:(ARAD-0.5)*TILE};
   K.start(20,33);
-
-  world.arenaTop=10;   // el jefe no se mete por los muelles
   K.finish(W5_ENC,[[158,211],[98,155],[38,95]],[G,FLOOR]);
   world.update=dt=>worldCommon(dt);
   world.drawGround=()=>{ for(const en of enemies) if(en.alive&&en.id==='searchlight'&&onScreen(en,320)) drawSearchCone(en); };
@@ -8695,7 +8731,7 @@ function dreadStates(b,dt,tgt,dd,toA,p){
         const ec=Math.floor((ox+Math.cos(b.beamA)*L)/TILE), er=Math.floor((oy+Math.sin(b.beamA)*L)/TILE); hitTile(ec,er,2);
       }
       shake=Math.max(shake,3);
-      if(b.st>=(b.phase2?70:50)) setBossState('recover');
+      if(b.st>=(b.phase2?70:50)){ setBossState('recover'); dreadQuake(b,b.phase2?8:6); }   // el disparo es devastador: tiembla la tierra
       return true; }
     case 'mines':
       b.vx*=0.9; b.vy*=0.9;
@@ -8715,7 +8751,56 @@ function dreadStates(b,dt,tgt,dd,toA,p){
   }
   return false;
 }
+/* TEMBLOR: la tierra tiembla y del techo de humo caen BLOQUES de hormigón (la mitad cerca de ti). Una sombra avisa
+   dónde caerán; al caer son indestructibles, te hacen daño y te aturden si te pillan debajo, y se deshacen a los 5 s. */
+function dreadQuake(b,n){
+  const A=world.arenaCircle; if(!A) return;
+  shake=Math.max(shake,26); S.boom(); flashScreen('#cfd6df',0.12); popup(b.x,b.y-84,'¡TEMBLOR!','#ffd76e',18);
+  const Q=world.quake||(world.quake=[]);
+  for(let i=0;i<n;i++){
+    const near=i<Math.ceil(n/2)&&player.alive, base=near?player:A;
+    for(let tries=0;tries<24;tries++){
+      const a=rand(0,Math.PI*2), d=near?rand(20,150):rand(0,A.r-50), x=base.x+Math.cos(a)*d, y=base.y+Math.sin(a)*d;
+      if(Math.hypot(x-A.x,y-A.y)>A.r-40) continue;
+      const c=Math.floor(x/TILE), r=Math.floor(y/TILE);
+      if(tileAtC(c,r)!==FLOOR||Q.some(q=>q.c===c&&q.r===r)) continue;
+      Q.push({c,r,fall:rand(40,70)+i*4,life:300,landed:false});
+      break;
+    }
+  }
+}
+function updateQuake(dt){
+  const Q=world&&world.quake; if(!Q||!Q.length) return;
+  for(const q of Q){
+    const x=q.c*TILE+TILE/2, y=q.r*TILE+TILE/2;
+    if(!q.landed){
+      if((q.fall-=dt)>0) continue;
+      if(boss&&boss.alive&&Math.hypot(boss.x-x,boss.y-y)<boss.radius+TILE){ q.done=true; spawnDebris(x,y,10,'#9aa0a8'); continue; }   // si cae sobre el jefe, se hace añicos contra su casco
+      q.landed=true; shake=Math.max(shake,8); S.stomp(); spawnDebris(x,y,10,'#9aa0a8');
+      if(player.alive&&Math.abs(player.x-x)<TILE/2+player.radius&&Math.abs(player.y-y)<TILE/2+player.radius){
+        damagePlayer(18); stunPlayer(40); popup(player.x,player.y-34,'¡APLASTADO!','#ff4757',14);
+      }
+      setTile(q.c,q.r,WALL); paintTile(q.c,q.r); miniDirty=true;
+      if(player.alive) unstick(player);
+      for(const en of enemies) if(en.alive&&!en.air) unstick(en);
+    } else if((q.life-=dt)<=0){
+      setTile(q.c,q.r,FLOOR); paintTile(q.c,q.r); miniDirty=true; spawnDebris(x,y,8,'#cfd6df'); q.done=true;
+    }
+  }
+  world.quake=Q.filter(q=>!q.done);
+}
+function drawQuake(){
+  const Q=world&&world.quake; if(!Q) return;
+  for(const q of Q){
+    if(q.landed) continue;
+    const x=q.c*TILE+TILE/2, y=q.r*TILE+TILE/2, k=clamp(1-q.fall/70,0,1);   // k: 0 recién soltado · 1 a punto de caer
+    ctx.fillStyle='rgba(0,0,0,'+(0.15+0.35*k).toFixed(2)+')'; ctx.beginPath(); ctx.ellipse(x,y+4,6+9*k,3+4*k,0,0,Math.PI*2); ctx.fill();   // sombra que crece
+    const z=(1-k)*240;
+    ctx.fillStyle='#4d5157'; ctx.fillRect(x-13,y-13-z,26,26); ctx.fillStyle='#8a8f96'; ctx.fillRect(x-11,y-11-z,22,6); ctx.fillStyle='#2e3238'; ctx.fillRect(x-13,y+9-z,26,4);
+  }
+}
 function dreadPost(b,dt){
+  updateQuake(dt);
   // las torretas viajan encima del casco
   for(const tu of b.turrets){
     if(!tu.alive) continue;
@@ -8732,6 +8817,7 @@ function dreadPost(b,dt){
   if(Math.hypot(b.vx,b.vy)>0.3&&Math.random()<0.3) particles.push({x:b.x-Math.cos(b.angle)*50+rand(-20,20),y:b.y-Math.sin(b.angle)*50+rand(-20,20),vx:0,vy:-0.4,life:40,maxLife:40,color:'#555',size:7,smoke:true});
 }
 function drawDread(b){
+  drawQuake();
   const z=b.z||0, x=b.x, y=b.y-z;
   if(z>0){ ctx.fillStyle='rgba(0,0,0,'+(0.35*(1-z/420))+')'; ctx.beginPath(); ctx.ellipse(b.x,b.y,64,48,b.angle,0,Math.PI*2); ctx.fill(); }
   // rayo del cañón principal
@@ -10508,6 +10594,7 @@ function startStage(){
   renderTutBox();
   wallKind=new Map();
   buildIsland();
+  introHeli=!!survLvl;   // supervivencia: llegas en helicóptero, no en barco
   carryDefenses(keep);
   seedDepositsStage();
   toKill=(bossStage||tut)?0:Math.min(40,7+wave*2);
@@ -10770,6 +10857,7 @@ function step(dt){
   updatePows(dt);
   updateTutorial(dt);
   separateAll();
+  if(boss&&boss.alive){ bossKeepInArena(boss); if(SOLID[tileAt(boss.x,boss.y)]) unstick(boss); }   // los empujones tampoco lo sacan de su arena ni lo meten en un muro
   updateBullets(dt);
   updateLobs(dt);
   updateVoids(dt);
