@@ -829,7 +829,8 @@ function buildIsland(){
     while(lr>Math.floor(cy)+4&&map[idx(lc,lr-2)]!==G) lr--;   // sobre tierra firme (no en la playa)
   }
   landing={c:lc, r:lr-2, x:lc*TILE+TILE/2, y:(lr-2)*TILE+TILE/2};
-  ship={x:landing.x, y:shipY, launched:false, hidden:!!survLvl};
+  ship={x:landing.x, y:shipY, launched:false};
+  if(survLvl){ let r=landing.r; while(r<WR-4&&map[idx(landing.c,r)]!==WATER) r++; ship.y=Math.min(WH-70,(r+4)*TILE); }   // fondeado frente a la costa sur del cráter
 
   const grassList=[];
   const refreshGrass=()=>{ grassList.length=0; for(let k=0;k<WC*WR;k++){ if(map[k]===G){ const c=k%WC, r=(k/WC)|0; if(Math.hypot(c-landing.c,r-landing.r)>8) grassList.push(k); } } };
@@ -2060,28 +2061,47 @@ function cycleDefense(){
   defSel=(defSel+1)%DEFENSES.length; const D=DEFENSES[defSel];
   popup(player.x,player.y-34,'T: '+D.ic+' '+D.name+' ◆'+D.cost,'#3ee6e6',12);
 }
+/* EL APOYO SALE DEL BARCO ISF-01: si está cerca, de su cubierta (y su grúa se mueve); si no (en los mundos, conforme
+   avanzas), llega desde fuera de la pantalla, por detrás de ti */
+let supplyInbound=0;   // torres que vienen de camino (cuentan para el máximo)
+function supportOrigin(){
+  if(ship&&!ship.hidden&&ship.x>0&&player&&Math.hypot(ship.x-player.x,ship.y-player.y)<1100){ ship.craneT=50; return {x:ship.x-20,y:ship.y-6,ship:true}; }
+  return {x:(player?player.x:cam.x+W/2)+rand(-80,80),y:cam.y+H+70,ship:false};
+}
+function shipDrop(tx,ty,onLand,label,extra){
+  const o=supportOrigin(), d=Math.hypot(tx-o.x,ty-o.y);
+  addLob({x0:o.x,y0:o.y,x1:tx,y1:ty,dur:Math.max(45,Math.min(110,d/9))+(extra||0),h:Math.min(260,90+d*0.25),owner:'n',kind:'drop',onLand});
+  if(label&&o.ship) popup(o.x,o.y-50,label,'#3ee6e6',12);
+  S.launch();
+}
 function spawnDrone(free){
   if(!player||!player.alive) return;
   if(!free){
     if(runWork<DRONE_COST){ popup(player.x,player.y-20,'WORK insuficiente','#ff6b6b',12); return; }
     runWork-=DRONE_COST;
   }
-  drones.push({kind:'drone',x:player.x+rand(-30,30),y:player.y+rand(-30,10),vx:0,vy:0,angle:0,radius:8,air:true,mass:0.4,
+  const o=supportOrigin();   // despega de la cubierta del barco y vuela hasta ti
+  drones.push({kind:'drone',x:o.x,y:o.y,vx:0,vy:0,angle:0,radius:8,air:true,mass:0.4,
     hp:16,maxHp:16,speedMax:2.6,accel:0.3,friction:0.88,fireCd:20,alive:true,life:1500,flash:0});
-  popup(player.x,player.y-24,'MINI-DRON','#3ee67a',13);
+  popup(player.x,player.y-24,o.ship?'MINI-DRON EN CAMINO':'MINI-DRON','#3ee67a',13);
 }
 function deployTurret(){
   if(!player||!player.alive) return;
   const D=curDefense();
   if(runWork<D.cost){ popup(player.x,player.y-20,'WORK insuficiente','#ff6b6b',12); return; }
   if(D.wall){ buildWall(D); return; }
-  if(turrets.filter(tu=>tu.alive).length>=towerMax()){ popup(player.x,player.y-20,'MÁX. '+towerMax()+' TORRES','#ff6b6b',12); return; }
+  if(turrets.filter(tu=>tu.alive).length+supplyInbound>=towerMax()){ popup(player.x,player.y-20,'MÁX. '+towerMax()+' TORRES','#ff6b6b',12); return; }
   const x=player.x+Math.cos(player.aim)*30, y=player.y+Math.sin(player.aim)*30;
   if(solidAt(x,y)||solidAt(x+10,y)||solidAt(x-10,y)||solidAt(x,y+10)||solidAt(x,y-10)){ popup(player.x,player.y-20,'Sitio bloqueado','#ff6b6b',12); return; }
   runWork-=D.cost;
-  const hp=D.hp*(survLvl&&D.id==='turret'?2:1);   // en supervivencia, torretas reforzadas
-  turrets.push({kind:'turret',type:D.id,x,y,vx:0,vy:0,radius:11,static:true,hp,maxHp:hp,angle:player.aim,fireCd:20,alive:true,flash:0});
-  popup(x,y-22,D.name,'#3ee6e6',14); spawnDebris(x,y,8,'#3ee6e6');
+  const hp=D.hp*(survLvl&&D.id==='turret'?2:1), ang=player.aim;   // en supervivencia, torretas reforzadas
+  supplyInbound++;
+  rings.push({x,y,r:6,max:26,life:30,maxLife:30,color:'#3ee6e6'}); popup(x,y-22,D.name+' EN CAMINO','#3ee6e6',12);   // marca dónde caerá
+  shipDrop(x,y,()=>{   // la caja cae del cielo y se monta
+    supplyInbound=Math.max(0,supplyInbound-1);
+    turrets.push({kind:'turret',type:D.id,x,y,vx:0,vy:0,radius:11,static:true,hp,maxHp:hp,angle:ang,fireCd:20,alive:true,flash:0});
+    popup(x,y-22,D.name,'#3ee6e6',14); spawnDebris(x,y,8,'#3ee6e6'); S.stomp();
+  },'¡ISF-01 envía '+D.name.toLowerCase()+'!');
 }
 /* Muro de 3 casillas delante de ti, de lado (no tapa casillas ocupadas ni sólidas) */
 function buildWall(D){
@@ -2103,11 +2123,15 @@ function deploySquad(){
   if(runWork<SQUAD_COST){ popup(player.x,player.y-20,'WORK insuficiente','#ff6b6b',12); return; }
   runWork-=SQUAD_COST;
   const base=soldiers.filter(s=>s.alive).length;
-  for(let i=0;i<3;i++){
-    soldiers.push({kind:'soldier',x:player.x+rand(-20,20),y:player.y+rand(10,24),vx:0,vy:0,angle:player.aim,radius:6,mass:0.6,
-      hp:14,maxHp:14,speedMax:2.5,accel:0.34,friction:0.84,fireCd:rand(0,30),alive:true,slot:base+i,flash:0,walk:0,role:'follow'});
+  for(let i=0;i<3;i++){   // cada soldado llega en una cápsula desde el barco
+    const tx=player.x+rand(-30,30), ty=player.y+rand(14,34);
+    shipDrop(tx,ty,l=>{
+      soldiers.push({kind:'soldier',x:l.x1,y:l.y1,vx:0,vy:0,angle:-Math.PI/2,radius:6,mass:0.6,
+        hp:14,maxHp:14,speedMax:2.5,accel:0.34,friction:0.84,fireCd:rand(0,30),alive:true,slot:base+i,flash:0,walk:0,role:'follow'});
+      spawnDebris(l.x1,l.y1,5,'#ffd76e');
+    },i===0?'¡ISF-01 envía una escuadra!':null,i*12);   // las cápsulas llegan una detrás de otra
   }
-  popup(player.x,player.y-24,'ESCUADRA','#ffd76e',14);
+  popup(player.x,player.y-24,'ESCUADRA EN CAMINO','#ffd76e',14);
 }
 function nearestEnemyFrom(x,y,range,needLos,filter){
   let best=null, bd=range*range;
@@ -2135,7 +2159,11 @@ function updateDrones(dt){
       d.angle=Math.atan2(tg.y-d.y,tg.x-d.x);
       d.fireCd-=dt;
       if(d.fireCd<=0 && dd<230){ fireBullet(d.x,d.y,d.angle,'p',{dmg:4,speed:7,pierce:0,frag:0,src:d,air:true}); d.fireCd=40; }
-    } else if(player.alive) accelerate(d,player.x-d.x-30,player.y-d.y-20,dt,0.8);
+    } else if(player.alive){   // sin objetivo: cada dron en su sitio alrededor de ti (repartidos), frenando al llegar
+      const i=drones.indexOf(d), a=t*0.01+i*Math.PI*2/Math.max(1,drones.length), tx=player.x+Math.cos(a)*46, ty=player.y+Math.sin(a)*34-14, dd=Math.hypot(tx-d.x,ty-d.y);
+      if(dd>12) accelerate(d,tx-d.x,ty-d.y,dt,Math.min(0.9,0.25+dd/120)); else { d.vx*=0.85; d.vy*=0.85; }
+      d.angle=turnTo(d.angle,Math.atan2(player.y-d.y,player.x-d.x)+Math.PI,0.05*dt);
+    }
     moveUnit(d,dt);
   }
   drones=drones.filter(d=>d.alive);
@@ -2374,12 +2402,11 @@ function tryEvolveMate(){
   runWork-=20; evolveMate(mate);
 }
 function sendMateFromShip(){
-  if(!ship||!orb) return;
-  addLob({x0:ship.x-90,y0:ship.y,x1:orb.x+40,y1:orb.y-10,dur:70,h:220,owner:'n',kind:'drop',onLand:(l)=>{
+  const a=player&&player.alive?player:orb; if(!a) return;
+  shipDrop(a.x+40,a.y-10,(l)=>{
     mate=makeMate(sel().mate,l.x1,l.y1,mateLvl);
     popup(l.x1,l.y1-24,'REFUERZO: '+(mate.lvl>=2?MATES[mate.mk].evo:MATES[mate.mk].name),'#3ee6e6',14);
-  }});
-  popup(ship.x,ship.y-50,'¡El barco lanza un refuerzo!','#3ee6e6',13); S.launch();
+  },'¡El barco lanza un refuerzo!');
 }
 function updateMate(dt){
   if(!mate||!mate.alive){
@@ -2401,11 +2428,22 @@ function updateCar(m,anchor,dt){
   const tg=nearestEnemyFrom(m.x,m.y,300,true);
   const base=player.alive?player.body:-Math.PI/2;
   const fa=base+Math.PI*0.78;
-  const fx=anchor.x+Math.cos(fa)*58, fy=anchor.y+Math.sin(fa)*58;
-  const df=Math.hypot(fx-m.x,fy-m.y);
-  if(df>26) steerTo(m,fx,fy,dt,df>220?1.25:0.95);
-  const sp=Math.hypot(m.vx,m.vy);
-  if(sp>0.3) m.angle=turnTo(m.angle,Math.atan2(m.vy,m.vx),0.12*dt);
+  // su sitio en la formación se mueve con suavidad (si no, al girar tú, el punto daba vueltas y el coche bailaba)
+  const fx0=anchor.x+Math.cos(fa)*58, fy0=anchor.y+Math.sin(fa)*58;
+  if(m.fx==null){ m.fx=fx0; m.fy=fy0; } m.fx=lerp(m.fx,fx0,0.04*dt); m.fy=lerp(m.fy,fy0,0.04*dt);
+  const fx=m.fx, fy=m.fy, df=Math.hypot(fx-m.x,fy-m.y);
+  if(df>30) steerTo(m,fx,fy,dt,df>220?1.25:0.95);
+  // CONDUCE COMO UN COCHE: gira hacia donde quiere ir y solo avanza hacia donde apunta (sin derrapar de lado);
+  // no gira parado: mientras gira avanza despacio; da marcha atrás solo si el sitio le queda detrás y cerca
+  let sp=Math.hypot(m.vx,m.vy);
+  if(m.goT===t&&df>30){
+    const want=Math.atan2(m.goY,m.goX); let diff=angDiff(m.angle,want), dir=1;
+    if(Math.abs(diff)>2.3&&df<110){ diff=angDiff(m.angle,want+Math.PI); dir=-1; }
+    m.angle+=clamp(diff,-0.1*dt,0.1*dt)*Math.min(1,0.35+sp/1.5);
+    const v=Math.min(sp,m.speedMax)*Math.max(0.3,Math.cos(diff))*dir*(dir<0?0.6:1);
+    m.vx=Math.cos(m.angle)*v; m.vy=Math.sin(m.angle)*v;
+  } else { m.vx*=Math.pow(0.86,dt); m.vy*=Math.pow(0.86,dt); }   // ya está en su sitio: frena suave
+  sp=Math.hypot(m.vx,m.vy);
   m.tread+=sp*dt*0.5;
   m.fireCd-=dt; if(m.lvl>=2) m.cannonCd-=dt;
   if(tg){
@@ -4295,28 +4333,51 @@ function drawVoids(){
 }
 
 /* ===================== ESCENARIO: BARCO, ORBE, NODOS ===================== */
+/* ISF-01: el barco de apoyo. Casco con proa, cubierta con helipuerto, puente de mando con radar, la GRÚA que lanza el
+   apoyo (se mueve cuando envía algo), catapulta, contenedores, luces de navegación y espuma alrededor. */
 function drawShip(){
   if(!ship||ship.hidden) return;
-  const bob=Math.sin(t*0.03)*2;
-  ctx.save(); ctx.translate(ship.x,ship.y+bob);
+  const bob=Math.sin(t*0.03)*2, roll=Math.sin(t*0.021)*0.012;
+  if(ship.craneT>0) ship.craneT-=1;
+  ctx.save(); ctx.translate(ship.x,ship.y+bob); ctx.rotate(roll);
+  // espuma alrededor y estela que se aleja por la popa
   ctx.globalAlpha=0.35; ctx.fillStyle='#ffffff';
-  for(let i=0;i<5;i++){ const w=(t*0.6+i*30)%150; ctx.fillRect(-130-w,-28+i*14,26,2); }
+  for(let i=0;i<6;i++){ const w=(t*0.5+i*26)%150; ctx.fillRect(-140-w,-26+i*10,24,2); }
+  for(let i=0;i<18;i++){ const a=i/18*Math.PI*2+t*0.01; ctx.fillRect(Math.cos(a)*136-1,Math.sin(a)*40,3,1); }
   ctx.globalAlpha=1;
-  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.moveTo(-118,-22); ctx.lineTo(96,-22); ctx.lineTo(132,6); ctx.lineTo(96,34); ctx.lineTo(-118,34); ctx.fill();
-  ctx.fillStyle='#2b313b'; ctx.beginPath(); ctx.moveTo(-124,-30); ctx.lineTo(92,-30); ctx.lineTo(128,0); ctx.lineTo(92,30); ctx.lineTo(-124,30); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#56606e'; ctx.beginPath(); ctx.moveTo(-118,-24); ctx.lineTo(88,-24); ctx.lineTo(118,0); ctx.lineTo(88,24); ctx.lineTo(-118,24); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#4a5260'; for(let x=-110;x<80;x+=16) ctx.fillRect(x,-24,1,48);
-  ctx.fillStyle='#ffd76e'; ctx.fillRect(-118,-2,206,4);
-  ctx.fillStyle='#38404c'; ctx.fillRect(-46,-18,56,36);
-  ctx.fillStyle='#6b7685'; ctx.fillRect(-44,-16,52,32);
-  ctx.fillStyle='#9fe8ff'; for(let i=0;i<5;i++) ctx.fillRect(-40+i*10,-14,6,4);
-  ctx.save(); ctx.translate(-18,0); ctx.rotate(t*0.05); ctx.fillStyle='#ddd'; ctx.fillRect(-14,-2,28,4); ctx.fillStyle='#ff4757'; ctx.fillRect(12,-2,2,4); ctx.restore();
-  ctx.fillStyle='#3a414c'; ctx.beginPath(); ctx.arc(62,0,11,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#22272f'; ctx.fillRect(62,-3,30,6);
-  ctx.fillStyle='#2a3038'; ctx.fillRect(-112,-14,44,28);
-  ctx.fillStyle='#1c2128'; ctx.fillRect(-108,-3,40,6);
-  if(!ship.launched){ glowCircle(-90,0,6,'#3ee67a'); }
-  ctx.fillStyle='#e8edf5'; ctx.font='bold 11px Rajdhani, monospace'; ctx.textAlign='left'; ctx.fillText('ISF-01',20,20);
+  // casco
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.moveTo(-126,-24); ctx.lineTo(96,-24); ctx.lineTo(138,8); ctx.lineTo(96,38); ctx.lineTo(-126,38); ctx.fill();
+  ctx.fillStyle='#1e2430'; ctx.beginPath(); ctx.moveTo(-130,-32); ctx.lineTo(94,-32); ctx.lineTo(136,0); ctx.lineTo(94,32); ctx.lineTo(-130,32); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#a8423a'; ctx.fillRect(-130,28,224,4);   // línea de flotación
+  ctx.fillStyle='#5d6876'; ctx.beginPath(); ctx.moveTo(-124,-26); ctx.lineTo(90,-26); ctx.lineTo(124,0); ctx.lineTo(90,26); ctx.lineTo(-124,26); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#525c69'; for(let x=-118;x<84;x+=12) ctx.fillRect(x,-26,1,52);
+  // helipuerto en la popa
+  ctx.fillStyle='#3a414c'; ctx.beginPath(); ctx.arc(-100,0,20,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#f5c518'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(-100,0,16,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#e8edf5'; ctx.fillRect(-106,-7,3,14); ctx.fillRect(-97,-7,3,14); ctx.fillRect(-106,-1,12,2);
+  // contenedores de suministros
+  const cc=['#a8442e','#2f5f8a','#3f7a3a','#c99a2e'];
+  for(let i=0;i<4;i++){ ctx.fillStyle=cc[i]; ctx.fillRect(-72+i*15,-22,13,10); ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(-72+i*15,-14,13,2); }
+  for(let i=0;i<3;i++){ ctx.fillStyle=cc[(i+2)%4]; ctx.fillRect(-72+i*15,12,13,10); }
+  // puente de mando con ventanas y radar
+  ctx.fillStyle='#38404c'; ctx.fillRect(-10,-18,40,36); ctx.fillStyle='#6b7685'; ctx.fillRect(-8,-16,36,32);
+  ctx.fillStyle='#9fe8ff'; for(let i=0;i<4;i++) ctx.fillRect(-4+i*8,-14,5,4);
+  ctx.save(); ctx.translate(10,4); ctx.rotate(t*0.06); ctx.fillStyle='#dfe4ea'; ctx.fillRect(-12,-2,24,4); ctx.fillStyle='#ff4757'; ctx.fillRect(10,-2,2,4); ctx.restore();
+  // catapulta de lanzamiento hacia la proa, con luces que se encienden en fila
+  ctx.fillStyle='#2a3038'; ctx.fillRect(34,-4,58,8);
+  for(let i=0;i<6;i++){ const on=Math.floor(t/6-i)%6===0; ctx.fillStyle=on?'#3ee6e6':'#1c4a50'; ctx.fillRect(38+i*9,-1,4,2); }
+  // GRÚA: gira hacia la isla y baja la pluma cuando envía apoyo
+  const k=ship.craneT>0?Math.sin((50-ship.craneT)/50*Math.PI):0, ca=-Math.PI/2-0.4-k*0.9;
+  ctx.save(); ctx.translate(-30,0);
+  ctx.fillStyle='#2a3038'; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+  ctx.rotate(ca); ctx.fillStyle='#f5c518'; ctx.fillRect(0,-3,46,6); ctx.fillStyle='#1a1a1a'; for(let x=4;x<46;x+=8) ctx.fillRect(x,-3,3,6);
+  ctx.strokeStyle='#cfd6df'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(44,0); ctx.lineTo(44,10+k*8); ctx.stroke();
+  ctx.fillStyle='#3a414c'; ctx.fillRect(40,10+k*8,8,6);
+  ctx.restore();
+  // luces de navegación (babor roja, estribor verde) y nombre
+  ctx.fillStyle=Math.floor(t/20)%2?'#ff4757':'#5a1a24'; ctx.fillRect(84,-27,4,4);
+  ctx.fillStyle=Math.floor(t/20)%2?'#3ee67a':'#1a4a2a'; ctx.fillRect(84,23,4,4);
+  ctx.fillStyle='#e8edf5'; ctx.font='bold 11px Rajdhani, monospace'; ctx.textAlign='left'; ctx.fillText('ISF-01',40,21);
   ctx.restore();
 }
 function drawOrb(){
@@ -5156,7 +5217,7 @@ function buildHome(){
   ship={x:47*TILE+TILE/2+30, y:(coast+7)*TILE+32, launched:true};
   // Taller militar y estación de mejora
   L.workshop={c0:27,r0:18,w:12,h:8}; rectT(27,18,38,25,BLD); rectT(27,26,38,28,FLOOR);
-  L.pad={c0:29,r0:33,w:8,h:6}; rectT(29,33,36,38,FLOOR); rectT(32,35,33,36,BLD);
+  L.pad={c0:29,r0:33,w:8,h:6}; rectT(29,33,36,38,FLOOR);   // garaje de vehículos (sin pedestal: las plazas se pisan)
   // Casa (zona reservada para que crezca) y su patio
   L.houseArea={c0:54,r0:19,w:9,h:7}; rectT(54,26,62,28,FLOOR);
   applyHouseFootprint(false);
@@ -5189,7 +5250,7 @@ function buildHomeSpots(){
   const L=homeL, f=houseFootprint();
   homeSpots=[
     {id:'shop', to:'workshop', x:(L.workshop.c0+6)*TILE, y:(L.workshop.r0+L.workshop.h)*TILE+20, label:'ENTRAR · TALLER MILITAR', r:54},
-    {id:'hangar', x:(L.pad.c0+4)*TILE, y:(L.pad.r0+L.pad.h)*TILE+16, label:'ESTACIÓN DE MEJORA · MÁQUINA Y ALIADO', r:52},
+    {id:'hangar', x:(L.pad.c0+4)*TILE, y:(L.pad.r0+L.pad.h)*TILE+16, label:'GARAJE · ELIGE VEHÍCULO Y ALIADO', r:52},
     {id:'house', to:'house', x:(f.c0+f.w/2)*TILE, y:(f.r0+f.h)*TILE+18, label:'ENTRAR · CASA · '+houseLv().name, r:48},
     {id:'heli', x:(L.heli.c0+3)*TILE, y:(L.heli.r0+3)*TILE, label:'HELIPUERTO · MAPA DE OPERACIONES', r:84},
   ];
@@ -5398,7 +5459,7 @@ function renderHouse(){
 /* ---------- guía de la base (la primera vez) ---------- */
 const HOME_GUIDE=[
   {t:'BIENVENIDO A LA BASE', txt:'Esta isla es tu hogar. Camina con W A S D y mantén SHIFT para correr.', target:null},
-  {t:'TALLER MILITAR', txt:'Ve al hangar grande y pulsa E en su puerta para comprar mejoras PERMANENTES. En la estación de mejora de delante (donde descansa tu máquina) eliges máquina y aliado.', target:'shop'},
+  {t:'TALLER MILITAR', txt:'Ve al hangar grande y pulsa E en su puerta para comprar mejoras PERMANENTES. En el garaje de delante (una plaza por vehículo) eliges vehículo y aliado.', target:'shop'},
   {t:'EL HUERTO', txt:'Pulsa E sobre una parcela del huerto para plantar patatas, zanahorias o trigo. Crecen con el tiempo real, incluso mientras estás en una misión.', target:'plot'},
   {t:'TU CASA', txt:'Pulsa E en la puerta de tu casa: ahí la mejoras, cocinas raciones para las misiones y vendes la cosecha a cambio de WORK.', target:'house'},
   {t:'¡A LA MISIÓN!', txt:'Sube al HELIPUERTO y pulsa E para abrir el mapa de operaciones. Si es tu primera vez, empieza por la ISLA DE ENTRENAMIENTO.', target:'heli'},
@@ -5521,37 +5582,48 @@ function drawWorkshop(){
     ctx.fillStyle='rgba(255,255,255,.4)'; ctx.fillRect(wx+3,y+rh+17,34,3);
   }
 }
+/* GARAJE DE VEHÍCULOS (antes «estación de mejora»): una plaza por vehículo con su nivel de mejoras. El que llevas está
+   iluminado, con los brazos de reparación encima; el JINETE aparece tapado con una lona hasta que capturas una moto. */
 function drawUpgradeStation(){
   const L=homeL.pad, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE;
-  for(let i=0;i<w;i+=16){ ctx.fillStyle=(i/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x+i,y,16,6); ctx.fillRect(x+i,y+h-6,16,6); }
-  for(let j=0;j<h;j+=16){ ctx.fillStyle=(j/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x,y+j,6,16); ctx.fillRect(x+w-6,y+j,6,16); }
-  const cx=x+w/2, cy=y+h/2+6;
-  ctx.fillStyle='#2a2f36'; ctx.beginPath(); ctx.arc(cx,cy,58,0,Math.PI*2); ctx.fill();
-  ctx.save(); ctx.strokeStyle='#3ee6e6'; ctx.lineWidth=2; ctx.globalAlpha=0.7;
-  ctx.beginPath(); ctx.arc(cx,cy,52,t*0.03,t*0.03+Math.PI*1.4); ctx.stroke(); ctx.restore();
-  const ch=CHARS[sel().char]||CHARS.mech;
-  const u={x:cx,y:cy,radius:ch.radius*1.8,body:Math.PI/2,aim:Math.PI/2+Math.sin(t*0.02)*0.6,walk:0,tread:0,angle:Math.PI/2};
-  if(ch.id==='mech') drawMech(u); else if(ch.id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else if(ch.id==='moto') drawPlayerMoto(u); else drawJeep(u,'#c9a74a');
-  for(const sd of [-1,1]){
-    const bx=cx+sd*(w/2-16), by=cy-34;
-    const tx=cx+sd*22+Math.sin(t*0.05+sd)*8, ty=cy+Math.cos(t*0.04+sd)*12;
-    const jx=(bx+tx)/2+sd*10, jy=Math.min(by,ty)-18+Math.sin(t*0.035+sd)*6;
-    ctx.lineCap='round';
-    ctx.strokeStyle='#4a5059'; ctx.lineWidth=8; ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(jx,jy); ctx.lineTo(tx,ty); ctx.stroke();
-    ctx.strokeStyle='#f5c518'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(jx,jy); ctx.lineTo(tx,ty); ctx.stroke();
-    ctx.lineCap='butt';
-    ctx.fillStyle='#2a2f36'; ctx.fillRect(bx-10,by-10,20,20); ctx.fillStyle='#ff6b3a'; ctx.fillRect(tx-3,ty-3,6,6);
-  }
-  const pct=Math.min(100,Math.floor((t*0.4)%160));
-  ctx.fillStyle='rgba(8,30,34,.88)'; ctx.fillRect(x+10,y+12,112,30);
-  ctx.strokeStyle='#3ee6e6'; ctx.strokeRect(x+10.5,y+12.5,111,29);
-  ctx.fillStyle='#3ee6e6'; ctx.font='bold 11px Rajdhani, monospace'; ctx.textAlign='left';
-  ctx.fillText(pct<100?'AUTORREPARACIÓN '+pct+'%':'MÁQUINA LISTA ✔',x+16,y+25);
-  ctx.fillStyle='#123'; ctx.fillRect(x+16,y+30,100,6); ctx.fillStyle='#3ee6e6'; ctx.fillRect(x+16,y+30,pct,6);
-  const mx=x+w-30, my=y+h-34, mk=sel().mate;
-  if(mk==='car') drawJeep({x:mx,y:my,radius:13,body:-Math.PI/2,aim:-Math.PI/2+Math.sin(t*0.03)*0.4,tread:0},'#2fb8a8');
-  else if(mk==='ninja') drawNinja({x:mx,y:my,angle:-Math.PI/2,aim:-Math.PI/2,walk:0,trail:[],lvl:1});
-  else drawTesla({x:mx,y:my-6,spin:t*0.3,lvl:1});
+  // suelo del garaje y borde de peligro
+  ctx.fillStyle='#2a2f36'; ctx.fillRect(x+4,y+4,w-8,h-8);
+  for(let i=0;i<w;i+=16){ ctx.fillStyle=(i/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x+i,y,16,5); ctx.fillRect(x+i,y+h-5,16,5); }
+  for(let j=0;j<h;j+=16){ ctx.fillStyle=(j/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x,y+j,5,16); ctx.fillRect(x+w-5,y+j,5,16); }
+  const ids=['mech','tank','jeep','moto'], bw=(w-16)/ids.length, cur=sel().char;
+  ids.forEach((id,i)=>{
+    const ch=CHARS[id], bx=x+8+i*bw, by=y+44, bh=h-56, cx=bx+bw/2, cy=by+bh/2+4, mine=id===cur, locked=ch.locked&&!save[ch.locked];
+    // plaza: líneas blancas y su número
+    ctx.fillStyle=mine?'rgba(62,230,230,.12)':'rgba(0,0,0,.18)'; ctx.fillRect(bx+3,by,bw-6,bh);
+    ctx.fillStyle='#cfd6df'; ctx.fillRect(bx+2,by,3,bh); ctx.fillRect(bx+bw-5,by,3,bh);
+    ctx.fillStyle='rgba(207,214,223,.5)'; ctx.font='bold 9px Rajdhani, monospace'; ctx.textAlign='center'; ctx.fillText('P'+(i+1),cx,by+bh-4);
+    if(mine){   // foco que ilumina el vehículo que llevas
+      const g=ctx.createRadialGradient(cx,cy,4,cx,cy,bw*0.6); g.addColorStop(0,'rgba(62,230,230,.28)'); g.addColorStop(1,'rgba(62,230,230,0)'); ctx.fillStyle=g; ctx.fillRect(bx,by,bw,bh);
+    }
+    if(locked){   // tapado con una lona
+      ctx.fillStyle='#4a4236'; ctx.beginPath(); ctx.ellipse(cx,cy,bw*0.34,bh*0.3,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#5e5444'; ctx.beginPath(); ctx.ellipse(cx-3,cy-4,bw*0.24,bh*0.18,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#2e2820'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(cx-bw*0.3,cy+2); ctx.lineTo(cx+bw*0.3,cy-2); ctx.stroke();
+      ctx.fillStyle='#ffd76e'; ctx.font='bold 13px Rajdhani, monospace'; ctx.fillText('?',cx,cy+5);
+    } else {
+      const sc=id==='tank'?1.25:1.4, u={x:cx,y:cy,radius:ch.radius*sc,body:-Math.PI/2,aim:-Math.PI/2+(mine?Math.sin(t*0.02)*0.5:0),walk:0,tread:0,angle:-Math.PI/2};
+      if(id==='mech') drawMech(u); else if(id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else if(id==='moto') drawPlayerMoto(u); else drawJeep(u,'#c9a74a');
+    }
+    // cartel con el nombre y el nivel de mejoras
+    ctx.fillStyle=mine?'rgba(8,40,44,.92)':'rgba(13,20,32,.85)'; ctx.fillRect(bx+3,y+8,bw-6,30);
+    ctx.strokeStyle=mine?'#3ee6e6':'#4a5059'; ctx.lineWidth=1; ctx.strokeRect(bx+3.5,y+8.5,bw-7,29);
+    ctx.fillStyle=mine?'#3ee6e6':'#cfd6df'; ctx.font='bold 9px Rajdhani, monospace'; ctx.fillText(locked?'???':ch.name,cx,y+20);
+    ctx.fillStyle='#ffd76e'; ctx.font='bold 10px Rajdhani, monospace'; ctx.fillText(locked?'🔒':'Nv '+vehLevel(id),cx,y+33);
+    if(mine){   // brazos de reparación sobre tu vehículo
+      for(const sd of [-1,1]){
+        const ax=cx+sd*(bw/2-4), ay=by+6, tx=cx+sd*10+Math.sin(t*0.05+sd)*5, ty=cy-6+Math.cos(t*0.04+sd)*6;
+        ctx.lineCap='round'; ctx.strokeStyle='#4a5059'; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(tx,ty); ctx.stroke();
+        ctx.strokeStyle='#f5c518'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(tx,ty); ctx.stroke(); ctx.lineCap='butt';
+        ctx.fillStyle='#ff6b3a'; ctx.fillRect(tx-2,ty-2,4,4);
+      }
+    }
+  });
+  ctx.textAlign='left';
 }
 function drawHouse(){
   const f=houseFootprint(), Lv=save.home.house, x=f.c0*TILE, y=f.r0*TILE, w=f.w*TILE, h=f.h*TILE;
@@ -7602,7 +7674,7 @@ function seedDepositsWorld(id){
    en todos los minerales. Están por ANILLOS: cuanto más al centro, mejores (y más lejos de tu base, que está en el borde).
    Es el único sitio donde salen los minerales que no son piedra. Al empezar cada oleada se reponen los agotados. */
 const CRATER_RINGS=[
-  {u:[0.62,0.92], list:['piedra','arena','calcita','yeso'], n:6},
+  {u:[0.62,0.92], list:['piedra','arena','calcita','yeso','salmuera'], n:6},   // la salmuera: salinas junto a la costa
   {u:[0.36,0.62], list:['hierro','cobre','estano','talco'], n:5},
   {u:[0,0.36],    list:['oro','fluorita','esmeralda','apatito'], n:4},
 ];
@@ -7639,22 +7711,22 @@ function oresHtml(o){ return MIN_ORDER.filter(k=>o[k]>0).map(k=>'<span style="co
 /* Taller: cada mejora pide su mineral desde el segundo nivel (w = cuántos por nivel) */
 const SHOP_ORE={ hp:{hierro:2}, dmg:{cobre:1,estano:1}, speed:{salmuera:2}, shield:{esmeralda:1}, ally:{hierro:2},
   regen:{apatito:1}, lives:{oro:2}, cloak:{fluorita:1}, mate:{cobre:2} };
-function shopOreCost(id,lvl){ const o={}, w=SHOP_ORE[id]||{}; if(lvl<1) return o; for(const k in w) if(inWorld(k)) o[k]=Math.ceil(w[k]*lvl); return o; }
+function shopOreCost(id,lvl){ const o={}, w=SHOP_ORE[id]||{}; if(lvl<1) return o; for(const k in w) o[k]=Math.ceil(w[k]*lvl); return o; }   // todos se consiguen en la isla cráter
 function hasOres(o){ return Object.keys(o).every(k=>(save.minerals[k]||0)>=o[k]); }
 function payOres(o){ for(const k in o) save.minerals[k]=(save.minerals[k]||0)-o[k]; }
 function oreCostHtml(o){ return Object.keys(o).map(k=>'<span style="color:'+((save.minerals[k]||0)>=o[k]?MINERALS[k].col:'#ff6b6b')+'">⛏ '+o[k]+' '+minName(k)+'</span>').join(' · '); }
 /* Almacén de minerales (se ve en el taller): icono con el trozo de cada mineral, cantidad y dónde encontrarlo */
-const ORE_WHERE={ piedra:'Isla de entrenamiento, Mundos 1, 3, 4 y 5, Archipiélago', arena:'Isla de entrenamiento, playa del Mundo 1, Archipiélago',
-  calcita:'Jungla del Mundo 1, Archipiélago', yeso:'Fuerte del Mundo 1', talco:'Fábrica (Mundo 2)', hierro:'Mundos 1 y 2, Archipiélago (abismo)',
-  cobre:'Mundos 1 y 2, Archipiélago', estano:'Fábrica (Mundo 2)', oro:'Fundición del Mundo 2, Archipiélago (núcleo)',
-  esmeralda:'Archipiélago', fluorita:'Fundición del Mundo 2, Archipiélago', apatito:'Archipiélago (islas profundas)', salmuera:'Salares del Archipiélago' };
+const ORE_WHERE={ piedra:'Isla de entrenamiento, Mundos 1, 3, 4 y 5, y el borde de la isla cráter', arena:'Borde de la isla cráter (Archipiélago)',
+  calcita:'Borde de la isla cráter (Archipiélago)', yeso:'Borde de la isla cráter (Archipiélago)', salmuera:'Salinas del borde de la isla cráter (Archipiélago)',
+  hierro:'Anillo medio de la isla cráter (Archipiélago)', cobre:'Anillo medio de la isla cráter (Archipiélago)', estano:'Anillo medio de la isla cráter (Archipiélago)', talco:'Anillo medio de la isla cráter (Archipiélago)',
+  oro:'Interior de la isla cráter (Archipiélago)', fluorita:'Interior de la isla cráter (Archipiélago)', esmeralda:'Interior de la isla cráter (Archipiélago)', apatito:'Interior de la isla cráter (Archipiélago)' };
 function oreIconUrl(min){ const ck='url|'+min; if(tileCache[ck]) return tileCache[ck]; return tileCache[ck]=oreChunk(min).toDataURL(); }
 function storeHtml(){
   let h='<p class="secTitle">ALMACÉN DE MINERALES</p><div class="oreGrid">';
   MIN_ORDER.forEach(k=>{ const n=save.minerals[k]||0, M=MINERALS[k];
-    const where=inWorld(k)?ORE_WHERE[k]:'aún no aparece en el mundo';
-    h+='<div class="oreCell'+(n?'':' none')+(inWorld(k)?'':' locked')+'" title="'+(M.veta?M.veta+' → '+M.name:M.name)+': '+where+'"><img src="'+oreIconUrl(k)+'" alt=""><b style="color:'+M.col+'">'+(inWorld(k)?n:'🔒')+'</b><small>'+M.name+'</small></div>'; });
-  return h+'</div><p class="subtitle" style="font-size:12px">Rompe los yacimientos a tiros en las misiones y recoge los trozos. Pasa el ratón por un mineral para ver dónde se encuentra. Los que aparecen con 🔒 todavía no están en el mundo.</p>';
+ const where=ORE_WHERE[k]||'';
+    h+='<div class="oreCell'+(n?'':' none')+'" title="'+(M.veta?M.veta+' → '+M.name:M.name)+': '+where+'"><img src="'+oreIconUrl(k)+'" alt=""><b style="color:'+M.col+'">'+n+'</b><small>'+M.name+'</small></div>'; });
+  return h+'</div><p class="subtitle" style="font-size:12px">Rompe los yacimientos a tiros en las misiones y recoge los trozos. Pasa el ratón por un mineral para ver dónde se encuentra: casi todos salen en la isla cráter del Archipiélago. Las mejoras del taller los piden desde su segundo nivel.</p>';
 }
 
 /* ===================== MUNDOS 3-5: PIEZAS COMUNES =====================
@@ -10968,6 +11040,7 @@ function drawMenuScene(){
 /* ===================== FLUJO DE PARTIDA ===================== */
 function newRun(){ resetRun(); wave=1; startStage(); }
 function startStage(){
+  supplyInbound=0;
   if(mission&&mission.type==='arch'&&wave>1) weatherMaybeChange('arch',0.45);   // cada isla puede traer otro tiempo
   if(mission&&mission.type==='arch') survApplyLevel();
   // SUPERVIVENCIA: tus torretas, soldados y drones vivos te acompañan a la siguiente isla
