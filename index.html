@@ -376,8 +376,9 @@
 
     <div id="scrShop" class="overlay top hidden">
       <h1 class="title" style="font-size:16px;">TALLER MILITAR</h1>
-      <p class="subtitle">Mejoras PERMANENTES para todas tus misiones (aparte de las anomalías que ganas en combate).</p>
+      <p class="subtitle">Mejoras PERMANENTES. Cada vehículo tiene las suyas: elige cuál mejoras. El Orbe Vital y el aliado son para todos.</p>
       <p class="workTag">◆ <span id="shopWork">0</span> WORK disponible</p>
+      <div class="row" id="shopVeh" style="flex-wrap:wrap;gap:6px;justify-content:center"></div>
       <div class="shopGrid" id="shopGrid"></div>
       <div id="shopStore" style="width:100%;max-width:700px"></div>
       <div class="row" style="margin-top:10px;">
@@ -453,6 +454,10 @@ const DEBUG = /[?&]debug/.test(location.search);
 /* ===================== PERSISTENCIA ===================== */
 const SAVE_KEY='omnialoya_save_v4', OLD_SAVE_KEY='omnialoya_save_v3';   // se mantienen para no perder la partida guardada
 const UP_KEYS=['hp','dmg','speed','shield','ally','regen','lives','cloak','mate'];
+/* Cada VEHÍCULO tiene sus propias mejoras (save.upV[vehículo]); el Orbe Vital y el aliado son de todos (save.up) */
+const VEH_UPS=['hp','dmg','speed','shield','ally','regen','cloak'], VEHICLE_IDS=['mech','tank','jeep','moto'];
+function upOf(id,ch){ return VEH_UPS.includes(id)?((save.upV[ch||sel().char]||{})[id]||0):(save.up[id]||0); }
+function vehLevel(ch){ return VEH_UPS.reduce((n,k)=>n+((save.upV[ch]||{})[k]||0),0); }
 const DEFAULT_SEL={char:'mech', mate:'car', mode:'robots', tutorial:true};
 function blankUp(){ const o={}; UP_KEYS.forEach(k=>o[k]=0); return o; }
 function defaultHome(){
@@ -460,6 +465,9 @@ function defaultHome(){
 }
 function defaultWorlds(){ const o={}; for(let i=1;i<=5;i++) o['w'+i]={best:1,cleared:false}; return o; }
 function normalizeSave(s){
+  // mejoras por vehículo: en las partidas anteriores cada vehículo empieza con las mejoras que ya tenías compradas
+  const uv=s.upV||{}; s.upV={};
+  for(const v of VEHICLE_IDS){ s.upV[v]={}; for(const k of VEH_UPS) s.upV[v][k]=uv[v]?(uv[v][k]||0):((s.up&&s.up[k])||0); }
   const h=Object.assign(defaultHome(),s.home||{});
   h.inv=Object.assign({potato:0,carrot:0,wheat:0},h.inv||{});
   const plots=Array.isArray(h.plots)?h.plots:[];
@@ -486,7 +494,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock, upV:p.upV });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -1509,7 +1517,7 @@ function stuckCheck(u,dt){
 
 /* ===================== JUGADOR ===================== */
 function makePlayer(){
-  const ch=CHARS[sel().char]||CHARS.mech, up=save.up;
+  const ch=CHARS[sel().char]||CHARS.mech, up={}; UP_KEYS.forEach(k=>up[k]=upOf(k,ch.id));   // las mejoras de ESTE vehículo
   const maxHp=ch.hp+up.hp*15;
   return { kind:'player', ch, x:0, y:0, vx:0, vy:0, radius:ch.radius, mass:ch.mass,
     body:-Math.PI/2, aim:-Math.PI/2,
@@ -9344,7 +9352,7 @@ function drawMoto(en,col){
    · TRANSFORMACIÓN al bajar de la mitad de vida: gira, no recibe daño un momento, suelta una onda que te lanza y sigue
      con un aura roja, más agresivo. */
 let bossDmgK=1;   // multiplicador de daño mientras actúa el jefe (lo leen damagePlayer, fireBullet y addLob)
-function bossGear(){ let n=0, m=0; for(const d of SHOP_DEFS){ n+=Math.min(d.max,save.up[d.id]||0); m+=d.max; } return m?n/m:0; }
+function bossGear(){ let n=0, m=0; for(const d of SHOP_DEFS){ n+=Math.min(d.max,upOf(d.id)); m+=d.max; } return m?n/m:0; }   // el equipo del vehículo con el que vas
 function bossInit(b){
   const g=bossGear(); b.gear=g; b.gearMsg=true;
   b.hp=b.maxHp=Math.round(b.maxHp*(1+1.2*g)); b.dmgK=1+0.6*g; b.aggr=1+0.5*g; b.speedMax*=1+0.2*g;
@@ -9759,7 +9767,7 @@ const INTERIORS={
   workshop:{name:'TALLER MILITAR', w:16, h:9, floor:'concrete',
     solid:[[2,0,5,2],[10,0,4,1],[0,4,1,3],[15,4,1,3]],
     spots:[
-      {id:'shop', c:4.5, r:2.6, label:'BANCO DE TRABAJO · MEJORAS PERMANENTES', act:()=>{ renderShop(); openHomeUI('scrShop'); guideEvent('shop'); }},
+      {id:'shop', c:4.5, r:2.6, label:'BANCO DE TRABAJO · MEJORAS PERMANENTES', act:()=>{ shopVeh=null; renderShop(); openHomeUI('scrShop'); guideEvent('shop'); }},
     ],
     paint:(g,o)=>{
       paintBlock(g,o,2,0,5,2,'#3a4048','#6a737d');                       // banco de trabajo
@@ -10963,18 +10971,27 @@ cv.addEventListener('touchend',()=>{ mouse.down=false; });
 
 /* ===================== TIENDA ===================== */
 function costFor(def,lvl){ return Math.round(def.base+def.step*lvl*1.15); }
+let shopVeh=null;   // vehículo que estás mejorando en el taller
 function renderShop(){
   document.getElementById('shopWork').textContent=save.work;
+  const vehs=Object.values(CHARS).filter(ch=>!ch.locked||save[ch.locked]);
+  if(!shopVeh||!vehs.some(v=>v.id===shopVeh)) shopVeh=sel().char;
+  const tabs=document.getElementById('shopVeh'); tabs.innerHTML='';
+  vehs.forEach(v=>{
+    const b=document.createElement('button'); b.className='btn small'; if(v.id!==shopVeh) b.style.opacity='0.55';
+    b.textContent=v.name+' · Nv '+vehLevel(v.id); b.onclick=()=>{ shopVeh=v.id; S.pickup(); renderShop(); };
+    tabs.appendChild(b);
+  });
   const grid=document.getElementById('shopGrid'); grid.innerHTML='';
   SHOP_DEFS.forEach(def=>{
-    const lvl=save.up[def.id]||0, maxed=lvl>=def.max, cost=costFor(def,lvl), ore=shopOreCost(def.id,lvl);
+    const own=VEH_UPS.includes(def.id), lvl=upOf(def.id,shopVeh), maxed=lvl>=def.max, cost=costFor(def,lvl), ore=shopOreCost(def.id,lvl);
     const ok=!maxed&&save.work>=cost&&hasOres(ore);
     const card=document.createElement('div'); card.className='shopCard';
-    card.innerHTML='<div class="icon">'+def.icon+'</div><div class="name">'+def.name+'</div><div class="lvl">'+def.desc(lvl)+'</div>'+
+    card.innerHTML='<div class="icon">'+def.icon+'</div><div class="name">'+def.name+'</div><div class="lvl">'+def.desc(lvl)+'<br><small style="opacity:.7">'+(own?'solo '+CHARS[shopVeh].name:'para todos')+'</small></div>'+
       '<div class="cost">'+(maxed?'MÁXIMO':'◆ '+cost+(Object.keys(ore).length?'<br><small>'+oreCostHtml(ore)+'</small>':''))+'</div><button class="btn small" '+(ok?'':'disabled')+'>MEJORAR</button>';
     card.querySelector('button').onclick=()=>{
       if(!ok) return;
-      save.work-=cost; payOres(ore); save.up[def.id]=lvl+1; saveSave(); S.upgrade(); renderShop();
+      save.work-=cost; payOres(ore); if(own) save.upV[shopVeh][def.id]=lvl+1; else save.up[def.id]=lvl+1; saveSave(); S.upgrade(); renderShop();
     };
     grid.appendChild(card);
   });
