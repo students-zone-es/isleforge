@@ -789,23 +789,28 @@ function carveLine(c0,r0,c1,r1){
   }
 }
 
+const ISLE_W=g=>84+Math.min(16,g*4), ISLE_H=g=>64+Math.min(12,g*3);   // tamaño de la isla según cuánto ha crecido
+let islandShape=null;   // silueta de la isla actual (para que en supervivencia pueda crecer sin rehacerla)
+function inIsland(S,c,r,g){
+  const rx=ISLE_W(g)*0.42, ry=ISLE_H(g)*0.40, dx=(c+0.5-S.cx)/rx, dy=(r+0.5-S.cy)/ry, th=Math.atan2(dy,dx);
+  let rr=1; for(const [k,a,ph] of S.harm) rr+=a*Math.sin(k*th+ph);
+  rr+=(hash2(c+S.seed,r)-0.5)*0.04;
+  return dx*dx+dy*dy<rr*rr && c>=3 && r>=3 && c<WC-3 && r<WR-9;
+}
 function buildIsland(){
   const grow=Math.floor((wave-1)/3);
-  WC=84+Math.min(16,grow*4); WR=64+Math.min(12,grow*3);
+  // supervivencia: el mapa ya tiene su tamaño máximo (mar alrededor) y la isla crece dentro con las oleadas
+  WC=survLvl?ISLE_W(99):ISLE_W(grow); WR=survLvl?ISLE_H(99):ISLE_H(grow);
   WW=WC*TILE; WH=WR*TILE;
   map=new Uint8Array(WC*WR).fill(WATER);
   tileHp=new Uint8Array(WC*WR);
   cageInfo=new Map();
   // Silueta de la isla: elipse deformada con armónicos (siempre una sola masa de tierra)
-  const cx=WC/2, cy=WR*0.45, rx=WC*0.42, ry=WR*0.40;
+  const cx=WC/2, cy=WR*0.45;
   const harm=[]; for(let k=2;k<=6;k++) harm.push([k,rand(0.02,0.065),rand(0,Math.PI*2)]);
   const seed=irand(1,99999);
-  for(let r=0;r<WR;r++) for(let c=0;c<WC;c++){
-    const dx=(c+0.5-cx)/rx, dy=(r+0.5-cy)/ry, th=Math.atan2(dy,dx);
-    let rr=1; for(const [k,a,ph] of harm) rr+=a*Math.sin(k*th+ph);
-    rr+=(hash2(c+seed,r)-0.5)*0.04;
-    if(dx*dx+dy*dy<rr*rr && c>=3 && r>=3 && c<WC-3 && r<WR-9) map[idx(c,r)]=G;
-  }
+  islandShape={cx,cy,harm,seed,grow};
+  for(let r=0;r<WR;r++) for(let c=0;c<WC;c++) if(inIsland(islandShape,c,r,grow)) map[idx(c,r)]=G;
   // Playa
   const sandList=[];
   for(let r=0;r<WR;r++) for(let c=0;c<WC;c++) if(map[idx(c,r)]===G && nearType(c,r,2,WATER)) sandList.push(idx(c,r));
@@ -1254,6 +1259,25 @@ function paintBuiltWall(kind,hp,x,y){
   }
   if(hp<=max*0.6){ g.strokeStyle='rgba(0,0,0,.6)'; g.lineWidth=1.5; g.beginPath(); g.moveTo(x+8,y+4); g.lineTo(x+14,y+14); g.lineTo(x+11,y+22); g.stroke(); }
   if(hp<=max*0.3){ g.beginPath(); g.moveTo(x+22,y+6); g.lineTo(x+18,y+16); g.lineTo(x+24,y+26); g.stroke(); }
+}
+/* SUPERVIVENCIA: la isla crece hacia el mar sin rehacerse. La tierra nueva trae su playa, árboles, maleza y sacos;
+   lo que ya había (tus muros, torres, el Orbe...) se queda donde estaba. */
+function growIslandInPlace(g){
+  const S=islandShape; if(!S||g<=S.grow) return 0;
+  S.grow=g; const fresh=[];
+  for(let r=0;r<WR;r++) for(let c=0;c<WC;c++){ const k=idx(c,r); if(map[k]===WATER&&inIsland(S,c,r,g)){ map[k]=G; tileHp[k]=0; fresh.push([c,r]); } }
+  for(let r=0;r<WR;r++) for(let c=0;c<WC;c++){   // la playa se mueve con la costa
+    const k=idx(c,r), v=map[k];
+    if(v===SAND&&!nearType(c,r,2,WATER)) map[k]=G;
+    else if(v===G&&nearType(c,r,2,WATER)) map[k]=SAND;
+  }
+  for(const [c,r] of fresh){
+    if(map[idx(c,r)]!==G) continue;
+    const q=Math.random();
+    if(q<0.07) setTile(c,r,TREE); else if(q<0.12) setTile(c,r,BUSH); else if(q<0.135) setTile(c,r,RUB);
+  }
+  buildMapCanvas(); buildMini();
+  return fresh.length;
 }
 function buildMapCanvas(){
   tileCache={};
@@ -10832,6 +10856,7 @@ function survApplyLevel(){
    aliados y el Orbe (que se repara un 30%), y la siguiente oleada cae sobre el mismo mapa. */
 function nextWaveInPlace(){
   wave++; survApplyLevel();
+  const grown=growIslandInPlace(Math.floor((wave-1)/3));   // cada 3 oleadas la isla gana tierra al mar
   bullets=[]; voids=[]; parasites=[]; enemies=enemies.filter(e=>e.alive&&e.static);
   squads={}; voidCharging=0; alarmT=0; endgameT=0; clearT=0;
   boss=null; bossDefeated=false; bossDelay=0; bossRelay=0; dropsInAir=0;
@@ -10850,7 +10875,7 @@ function nextWaveInPlace(){
   spawnTimer=Math.max(150,380-wave*16);
   if(!bossStage){ for(let i=0;i<3&&spawned<toKill;i++) spawnSquad(); }
   state='playing';
-  announce('OLEADA '+wave+' · NIVEL '+survLvl,'#f5c518',(bossStage?'¡Se acercan dos jefes! · ':'Sobrevive: '+toKill+' robots · ')+survTxt());
+  announce(grown?'🏝 LA ISLA CRECE · OLEADA '+wave:'OLEADA '+wave+' · NIVEL '+survLvl,'#f5c518',(bossStage?'¡Se acercan dos jefes! · ':'Sobrevive: '+toKill+' robots · ')+survTxt());
   S.wave();
 }
 function startIntro(){
