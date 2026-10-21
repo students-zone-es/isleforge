@@ -4971,6 +4971,7 @@ function houseFootprint(){
   return {c0:A.c0+Math.floor((A.w-w)/2), r0:A.r0+A.h-h, w, h};
 }
 function applyHouseFootprint(repaint){
+  if(interior) return;   // si mejoras la casa estando dentro, se verá al salir
   const A=homeL.houseArea;
   for(let r=A.r0;r<A.r0+A.h;r++) for(let c=A.c0;c<A.c0+A.w;c++) setTile(c,r,G);
   const f=houseFootprint();
@@ -5031,11 +5032,12 @@ function buildHome(){
   buildHomeSpots();
 }
 function buildHomeSpots(){
+  if(interior){ homeSpots=interiorSpots(); return; }   // dentro de un edificio (p9n_interiors.js)
   const L=homeL, f=houseFootprint();
   homeSpots=[
-    {id:'shop', x:(L.workshop.c0+6)*TILE, y:(L.workshop.r0+L.workshop.h)*TILE+20, label:'TALLER MILITAR · MEJORAS PERMANENTES', r:54},
+    {id:'shop', to:'workshop', x:(L.workshop.c0+6)*TILE, y:(L.workshop.r0+L.workshop.h)*TILE+20, label:'ENTRAR · TALLER MILITAR', r:54},
     {id:'hangar', x:(L.pad.c0+4)*TILE, y:(L.pad.r0+L.pad.h)*TILE+16, label:'ESTACIÓN DE MEJORA · MÁQUINA Y ALIADO', r:52},
-    {id:'house', x:(f.c0+f.w/2)*TILE, y:(f.r0+f.h)*TILE+18, label:'CASA · '+houseLv().name, r:48},
+    {id:'house', to:'house', x:(f.c0+f.w/2)*TILE, y:(f.r0+f.h)*TILE+18, label:'ENTRAR · CASA · '+houseLv().name, r:48},
     {id:'heli', x:(L.heli.c0+3)*TILE, y:(L.heli.r0+3)*TILE, label:'HELIPUERTO · MAPA DE OPERACIONES', r:84},
   ];
   L.plots.forEach((p,i)=>homeSpots.push({id:'plot',i,x:p.x,y:p.y,r:36,label:''}));
@@ -5048,7 +5050,7 @@ function randomBaseSpot(){
   return {x:47*TILE, y:30*TILE};
 }
 function enterHome(){
-  inHome=true; mission=null; world=null; boss=null; tut=null; cine=0; introHeli=false;
+  interior=null; inHome=true; mission=null; world=null; boss=null; tut=null; cine=0; introHeli=false;
   enemies=[]; bullets=[]; lobs=[]; voids=[]; particles=[]; popups=[]; bolts=[]; rings=[]; slashes=[];
   drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; helis=[]; escort=null;
   orb=null; mate=null; alarmT=0; flashFx=null; announceMsg=null; shake=0;
@@ -5095,7 +5097,7 @@ function stepHome(dt){
   const k=1-Math.pow(0.86,dt);
   cam.x+=(h.x-W/2-cam.x)*k; cam.y+=(h.y-H/2-cam.y)*k;
   cam.x=clamp(cam.x,0,WW-W); cam.y=clamp(cam.y,0,WH-H);
-  for(const r of residents){
+  if(!interior) for(const r of residents){
     if(r.wait>0){ r.wait-=dt; r.vx*=0.8; r.vy*=0.8; }
     else {
       const d=Math.hypot(r.tx-r.x,r.ty-r.y);
@@ -5112,7 +5114,7 @@ function stepHome(dt){
   }
   homeNear=null; let bd=1e9;
   for(const s of homeSpots){ const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<s.r&&d<bd){ bd=d; homeNear=s; } }
-  homeFx(dt);
+  if(!interior) homeFx(dt);
   updateParticles(dt);
   updateHomeGuide();
   updateHomeHud();
@@ -5139,6 +5141,8 @@ function homeFx(dt){
 /* ---------- interacción ---------- */
 function homeInteract(){
   const s=homeNear; if(!s) return;
+  if(s.to){ enterInterior(s.to); return; }   // puertas
+  if(s.act){ s.act(); return; }               // muebles y salida de los interiores
   S.pickup();
   switch(s.id){
     case 'shop': renderShop(); openHomeUI('scrShop'); guideEvent('shop'); break;
@@ -5521,6 +5525,7 @@ function drawAnnounceOnly(){
   ctx.globalAlpha=1;
 }
 function renderHome(){
+  if(interior){ renderInterior(); return; }
   const cx=Math.round(cam.x), cy=Math.round(cam.y);
   ctx.save(); ctx.translate(-cx,-cy);
   ctx.drawImage(mapCanvas,cx,cy,W,H,cx,cy,W,H);
@@ -9539,12 +9544,17 @@ function nightLights(){
 function drawNight(cx,cy){
   const k=nightAmt(), wm=warmAmt();
   if(k<0.02) return;
+  drawDark(cx,cy,k,nightLights());
+  if(wm>0.02){ ctx.fillStyle='rgba(255,130,60,'+(0.14*wm).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }   // luz anaranjada
+}
+/* Velo oscuro (k = 0..1) con agujeros de luz [x,y,radio,fuerza]: la noche y los interiores oscuros (minas) */
+function drawDark(cx,cy,k,lights){
   if(!nightCv||nightCv.width!==W||nightCv.height!==H){ nightCv=mkCanvas(W,H); nightG=nightCv.getContext('2d'); }
   const g=nightG;
   g.globalCompositeOperation='source-over'; g.clearRect(0,0,W,H);
-  g.fillStyle='rgba(6,10,30,'+(0.62*k).toFixed(3)+')'; g.fillRect(0,0,W,H);
+  g.fillStyle='rgba(6,10,30,'+(Math.min(0.97,0.62*k)).toFixed(3)+')'; g.fillRect(0,0,W,H);
   g.globalCompositeOperation='destination-out';   // cada luz "borra" la oscuridad a su alrededor
-  for(const [x,y,r,s] of nightLights()){
+  for(const [x,y,r,s] of lights){
     const sx=x-cx, sy=y-cy;
     if(sx<-r||sy<-r||sx>W+r||sy>H+r) continue;
     const gr=g.createRadialGradient(sx,sy,0,sx,sy,r);
@@ -9552,7 +9562,116 @@ function drawNight(cx,cy){
     g.fillStyle=gr; g.beginPath(); g.arc(sx,sy,r,0,Math.PI*2); g.fill();
   }
   ctx.drawImage(nightCv,0,0);
-  if(wm>0.02){ ctx.fillStyle='rgba(255,130,60,'+(0.14*wm).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }   // luz anaranjada
+}
+/* ===================== INTERIORES =====================
+   Al pulsar E en la puerta de un edificio entras en un mapa pequeño propio: paredes, suelo, muebles (sólidos) y
+   puntos de interacción. Al salir por la puerta vuelves a la base, delante del edificio.
+   Cada interior se describe en INTERIORS:
+     w,h     tamaño de la sala en casillas         floor  'wood' | 'concrete' | 'rock'
+     dark    true = sin luz salvo la tuya (minas)  solid  muebles que no se pueden atravesar [c,r,w,h]
+     spots   puntos de interacción {id,c,r,label,act}; un act que llame a enterInterior(otro) sirve de
+             escalera (pisos de una mina)
+     paint   dibuja los muebles una vez sobre el suelo
+   La sala se centra en un mapa al menos del tamaño de la pantalla; lo de fuera es negro. */
+const INTERIORS={
+  house:{name:'CASA', w:12, h:8, floor:'wood',
+    solid:[[1,0,3,2],[8,0,3,1],[5,3,2,2]],
+    spots:[
+      {id:'house', c:9.5, r:1.6, label:'COCINA Y DESPENSA · MEJORAR LA CASA', act:()=>{ renderHouse(); openHomeUI('scrHouse'); guideEvent('house'); }},
+      {id:'bed', c:2.5, r:2.6, label:'DORMIR', act:sleepInBed},
+    ],
+    paint:(g,o)=>{
+      paintBlock(g,o,1,0,3,2,'#6a3a1c','#b8423a');                       // cama con manta roja
+      g.fillStyle='#efe6d2'; g.fillRect((o.ox+1)*TILE+6,(o.oy)*TILE+5,TILE*3-12,12);   // almohada
+      paintBlock(g,o,8,0,3,1,'#4a3424','#8a6a4a');                       // encimera de la cocina
+      g.fillStyle='#2a2a2a'; g.fillRect((o.ox+9)*TILE+6,(o.oy)*TILE+8,18,14); g.fillStyle='#ff8a3a'; g.fillRect((o.ox+9)*TILE+9,(o.oy)*TILE+15,12,4);   // fogón
+      paintBlock(g,o,5,3,2,2,'#5a3a20','#9a6a3a');                       // mesa
+    }},
+  workshop:{name:'TALLER MILITAR', w:16, h:9, floor:'concrete',
+    solid:[[2,0,5,2],[10,0,4,1],[0,4,1,3],[15,4,1,3]],
+    spots:[
+      {id:'shop', c:4.5, r:2.6, label:'BANCO DE TRABAJO · MEJORAS PERMANENTES', act:()=>{ renderShop(); openHomeUI('scrShop'); guideEvent('shop'); }},
+    ],
+    paint:(g,o)=>{
+      paintBlock(g,o,2,0,5,2,'#3a4048','#6a737d');                       // banco de trabajo
+      g.fillStyle='#ffd76e'; g.fillRect((o.ox+3)*TILE,(o.oy)*TILE+12,10,4); g.fillStyle='#9aa0a8'; g.fillRect((o.ox+5)*TILE,(o.oy)*TILE+8,16,6);   // herramientas
+      paintBlock(g,o,10,0,4,1,'#2e353c','#4a5059');                      // estanterías
+      for(let i=0;i<4;i++){ g.fillStyle=['#b8672e','#9aa0a8','#3ee6e6','#d9a53a'][i]; g.fillRect((o.ox+10+i)*TILE+8,(o.oy)*TILE+6,14,10); }
+      paintBlock(g,o,0,4,1,3,'#2e353c','#4a5059'); paintBlock(g,o,15,4,1,3,'#2e353c','#4a5059');   // armeros
+    }},
+};
+let interior=null;   // {id, def, o, back:{x,y}} mientras estás dentro
+
+function paintBlock(g,o,c,r,w,h,dark,light){
+  const x=(o.ox+c)*TILE, y=(o.oy+r)*TILE;
+  g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(x+3,y+5,w*TILE-2,h*TILE-2);
+  g.fillStyle=dark; g.fillRect(x+1,y+1,w*TILE-2,h*TILE-2);
+  g.fillStyle=light; g.fillRect(x+3,y+3,w*TILE-6,h*TILE-10);
+}
+function enterInterior(id){
+  const def=INTERIORS[id]; if(!def) return;
+  const back=interior?interior.back:{x:human.x,y:human.y+10};   // de piso en piso conservas la salida a la base
+  const cw=Math.max(def.w+4,Math.ceil(W/TILE)+2), ch=Math.max(def.h+4,Math.ceil(H/TILE)+2);
+  WC=cw; WR=ch; WW=WC*TILE; WH=WR*TILE;
+  map=new Uint8Array(WC*WR).fill(WALL); tileHp=new Uint8Array(WC*WR); cageInfo=new Map(); wallKind=new Map();
+  const o={ox:Math.floor((WC-def.w)/2), oy:Math.floor((WR-def.h)/2)};
+  rectT(o.ox,o.oy,o.ox+def.w-1,o.oy+def.h-1,FLOOR);
+  for(const [c,r,w,h] of def.solid||[]) rectT(o.ox+c,o.oy+r,o.ox+c+w-1,o.oy+r+h-1,BLD);
+  buildMapCanvas();
+  paintInterior(def,o);
+  interior={id,def,o,back};
+  buildHomeSpots();
+  human.x=(o.ox+def.w/2)*TILE; human.y=(o.oy+def.h-1)*TILE+6; human.vx=human.vy=0; human.dir='up';
+  snapCamera(human.x,human.y); particles=[]; popups=[];
+  popup(human.x,human.y-40,def.name,'#f5c518',14); S.pickup();
+}
+function exitInterior(){
+  const back=interior.back; interior=null;
+  buildHome();   // la base siempre se construye igual: basta con rehacerla
+  human.x=back.x; human.y=back.y; human.vx=human.vy=0; human.dir='down';
+  snapCamera(human.x,human.y); particles=[]; S.pickup();
+}
+function interiorSpots(){
+  const {def,o}=interior;
+  const L=def.spots.map(s=>Object.assign({},s,{x:(o.ox+s.c)*TILE,y:(o.oy+s.r)*TILE,r:40}));
+  L.push({id:'exit',x:(o.ox+def.w/2)*TILE,y:(o.oy+def.h)*TILE-4,r:34,label:'SALIR',act:exitInterior});
+  return L;
+}
+/* Suelo, paredes y muebles: se dibujan una vez sobre el mapa */
+function paintInterior(def,o){
+  const g=mapG, x0=o.ox*TILE, y0=o.oy*TILE, w=def.w*TILE, h=def.h*TILE;
+  g.fillStyle='#05070a'; g.fillRect(0,0,WW,WH);
+  const FL={wood:['#7a5232','#6a4428'],concrete:['#5d646c','#545a62'],rock:['#3a3430','#2f2a26']}[def.floor]||['#555','#4a4a4a'];
+  for(let r=0;r<def.h;r++) for(let c=0;c<def.w;c++){
+    g.fillStyle=FL[(def.floor==='wood'?r:(r+c))%2]; g.fillRect(x0+c*TILE,y0+r*TILE,TILE,TILE);
+    g.fillStyle='rgba(0,0,0,.18)';
+    if(def.floor==='wood'){ g.fillRect(x0+c*TILE,y0+r*TILE+TILE-2,TILE,2); if((c+r)%3===0) g.fillRect(x0+c*TILE+TILE-2,y0+r*TILE,2,TILE); }
+    else g.fillRect(x0+c*TILE,y0+r*TILE,TILE,1);
+  }
+  // pared del fondo (la que se ve de frente) y marco de las demás
+  const wall={wood:'#4a2c14',concrete:'#2e353c',rock:'#1e1a17'}[def.floor]||'#333';
+  g.fillStyle=wall; g.fillRect(x0-TILE,y0-TILE*1.6,w+TILE*2,TILE*1.6);
+  g.fillStyle='rgba(255,255,255,.08)'; for(let c=-1;c<=def.w;c++) g.fillRect(x0+c*TILE,y0-TILE*1.6,2,TILE*1.6);
+  g.fillStyle=wall; g.fillRect(x0-10,y0,10,h); g.fillRect(x0+w,y0,10,h); g.fillRect(x0-10,y0+h,w+20,10);
+  // hueco de la puerta abajo, en el centro
+  g.fillStyle=def.dark?'#05070a':'#c9a35a'; g.fillRect(x0+w/2-TILE*0.6,y0+h,TILE*1.2,10);
+  if(def.paint) def.paint(g,o);
+}
+/* La cama: de noche duermes hasta el amanecer (06:00) */
+function sleepInBed(){
+  if(nightAmt()<0.2){ popup(human.x,human.y-40,'Aún no tienes sueño','#8ea0b8',13); return; }
+  save.clock=6/24; saveSave(); flashScreen('#000',0.9); S.pickup();
+  popup(human.x,human.y-40,'🌅 Duermes hasta el amanecer','#ffd76e',14);
+}
+function renderInterior(){
+  const cx=Math.round(cam.x), cy=Math.round(cam.y);
+  ctx.save(); ctx.translate(-cx,-cy);
+  ctx.drawImage(mapCanvas,cx,cy,W,H,cx,cy,W,H);
+  drawHuman(human.x,human.y,human.dir,human.walk,PILOT_PAL,2);
+  drawParticles(); drawPopups(); drawHomePrompt();
+  ctx.restore();
+  if(interior.def.dark) drawDark(cx,cy,1.5,[[human.x,human.y,110,1]]);   // minas: casi negro, solo ves lo que alumbras
+  drawAnnounceOnly();
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
