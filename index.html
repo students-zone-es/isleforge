@@ -686,7 +686,7 @@ let nodes=[], ship=null, orb=null, landing=null, arena=null;
 let player=null, enemies=[], bullets=[], lobs=[], voids=[], particles=[], popups=[], bolts=[], rings=[], slashes=[];
 let drones=[], soldiers=[], turrets=[], pows=[], pickups=[], parasites=[];
 let mate=null, mateTimer=0, mateLvl=1;
-let boss=null, bossStage=false, bossDelay=0, bossDefeated=false;
+let boss=null, bossStage=false, bossDelay=0, bossDefeated=false, bossRelay=0;   // bossRelay: 0 primer jefe, 1 el segundo (supervivencia)
 let score=0, wave=1, era=ERAS[0], toKill=0, spawned=0, killed=0, maxAlive=10, spawnTimer=0, failsafe=0;
 let squads={}, squadSeq=0, voidCharging=0;
 let combo=0, comboTimer=0, shake=0, t=0, runWork=0, lives=3;
@@ -886,7 +886,7 @@ function buildIsland(){
   // Nodos de hackeo: de aquí salen los robots
   refreshGrass();
   nodes=[];
-  const wantNodes=isBossWave(wave)?0:Math.min(6,3+Math.floor(wave/4));
+  const wantNodes=(isBossWave(wave)||survLvl)?0:Math.min(6,3+Math.floor(wave/4));   // supervivencia: sin nodos (los enemigos llegan en paracaídas)
   for(let tries=0;tries<500 && nodes.length<wantNodes;tries++){
     const p=randomLand(); if(!p) break; const [c,r]=p;
     const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
@@ -896,7 +896,7 @@ function buildIsland(){
     clearRadius(c,r,2);
     nodes.push({x,y,c,r,radius:20,pulse:0,phase:rand(0,6)});
   }
-  if(!nodes.length && !isBossWave(wave)){ const c=Math.floor(cx), r=Math.floor(WR*0.2); clearRadius(c,r,2); nodes.push({x:c*TILE+15,y:r*TILE+15,c,r,radius:20,pulse:0,phase:0}); }
+  if(!nodes.length && !isBossWave(wave) && !survLvl){ const c=Math.floor(cx), r=Math.floor(WR*0.2); clearRadius(c,r,2); nodes.push({x:c*TILE+15,y:r*TILE+15,c,r,radius:20,pulse:0,phase:0}); }
   // Arena del jefe
   bossStage=isBossWave(wave);
   const ac=Math.floor(cx), ar=Math.floor(cy);
@@ -2740,6 +2740,7 @@ function spawnSquad(){
     return true;
   }
   const ground=avail.filter(r=>r[0]!=='hawk');
+  if(survLvl) return survDropSquad(ground,size,sid);
   let node=null;
   const far=nodes.filter(n=>!player.alive||Math.hypot(n.x-player.x,n.y-player.y)>520);
   node=pick(far.length?far:nodes);
@@ -2755,6 +2756,29 @@ function spawnSquad(){
   }
   node.pulse=1; S.spawn();
   return true;
+}
+/* SUPERVIVENCIA: la escuadra cae en PARACAÍDAS lejos de ti (y del Orbe) y va directa a por ti. Se cuentan al soltarlos
+   (spawned) y la isla no se da por limpia mientras quede alguno en el aire (dropsInAir). */
+let dropsInAir=0;
+function survDropSquad(ground,size,sid){
+  let s=null;
+  for(let i=0;i<40&&!s;i++){
+    const a=rand(0,Math.PI*2), d=rand(460,720), q=randomWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,80);
+    if(q&&(!orb||Math.hypot(q.x-orb.x,q.y-orb.y)>320)&&Math.hypot(q.x-player.x,q.y-player.y)>400) s=q;
+  }
+  if(!s) return false;
+  let hasSpotter=false;
+  for(let i=0;i<size;i++){
+    const opts=ground.filter(r=>!(hasSpotter&&EDEFS[r[0]].role==='spotter')), id=weightedPick(opts.length?opts:ground);
+    if(EDEFS[id].role==='spotter') hasSpotter=true;
+    const p=randomWalkable(s.x,s.y,90)||s;
+    spawned++; dropsInAir++;
+    addLob({x0:p.x+rand(-40,40),y0:p.y-420,x1:p.x,y1:p.y,dur:70+i*8,h:30,owner:'n',kind:'drop',onLand:l=>{
+      dropsInAir=Math.max(0,dropsInAir-1);
+      const e=addEnemy(id,l.x1,l.y1,sid,true); e.noCount=false;   // ya se contó al soltarlo
+      e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=40; }});
+  }
+  S.spawn(); return true;
 }
 function updateSpawning(dt){
   if(bossStage||spawned>=toKill||tut) return;
@@ -3358,7 +3382,8 @@ function spawnBoss(){
   if(world&&world.id===2){ spawnForgeBoss(); return; }
   const wd=world&&WORLD_DEFS[world.id]; if(wd&&wd.spawnBoss){ wd.spawnBoss(); return; }
   const mk=Math.max(1,Math.floor(wave/5));
-  const tankMode=sel().mode==='tanks'&&!world;
+  let tankMode=sel().mode==='tanks'&&!world;
+  if(survLvl&&bossRelay===1) tankMode=!tankMode;   // supervivencia: el segundo jefe del relevo es el otro coloso
   const hp=Math.round((tankMode?800:850)+wave*70);
   const eraIdx=ERAS.indexOf(era);
   boss={kind:tankMode?'tankboss':'monger', mk, pattern:eraIdx,
@@ -3407,6 +3432,10 @@ function killBoss(){
   dropWork(b.x,b.y,10);
   boss=null; bossDefeated=true;
   document.getElementById('bossBarWrap').style.display='none';
+  if(survLvl&&bossRelay===0){   // SUPERVIVENCIA: relevo, cuando cae el primer jefe aterriza el segundo
+    bossRelay=1; bossDefeated=false; bossDelay=180;
+    setTimeout(()=>{ if(state==='playing'&&survLvl) announce('⚠ ¡LLEGA OTRO JEFE!','#ff4757','El relevo ya está en camino'); },1200);
+  }
 }
 function callEscorts(){
   const b=boss; b.escortCalls++;
@@ -10762,7 +10791,7 @@ function startStage(){
   enemies=[]; bullets=[]; lobs=[]; voids=[]; particles=[]; popups=[]; bolts=[]; rings=[]; slashes=[];
   drones=[]; soldiers=[]; turrets=[]; pows=[]; pickups=[]; parasites=[]; escort=null;
   squads={}; squadSeq=0; voidCharging=0; alarmT=0; endgameT=0; clearT=0; flashFx=null;
-  boss=null; bossDefeated=false; bossDelay=0;
+  boss=null; bossDefeated=false; bossDelay=0; bossRelay=0; dropsInAir=0;
   document.getElementById('bossBarWrap').style.display='none';
   world=null; helis=[];
   tut=(wave===1 && mission && mission.type==='tutorial')?{step:0,t:0,d:{},moved:0,wait:0,started:false}:null;
@@ -10861,7 +10890,7 @@ function checkStageClear(dt){
     if(clearT<=0){ if(mission&&mission.type==='tutorial') finishTutorial(); else openLevelUp(); }
     return;
   }
-  const done=bossStage?(bossDefeated&&enemies.length===0):(spawned>=toKill&&enemies.length===0&&toKill>0);
+  const done=bossStage?(bossDefeated&&enemies.length===0):(spawned>=toKill&&enemies.length===0&&toKill>0&&dropsInAir===0);
   if(done && player.alive){
     clearT=100;
     const follow=pows.filter(p=>p.alive&&p.follow);
