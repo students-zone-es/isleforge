@@ -9943,6 +9943,22 @@ function menuKey(k){
    si la pantalla es más alta, hay más cielo y más mar (OY baja la isla hasta el horizonte).
    Todo lo de la isla se dibuja en «coordenadas de diseño» (300x200, horizonte en 128). */
 function menuHex(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+/* Color de día (a) mezclado con el de noche (b) según n (0 = día, 1 = noche) */
+function menuMix(a,b,n){ const A=menuHex(a), B=menuHex(b); return 'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*n)).join(',')+')'; }
+/* El faro de día: franjas rojas y blancas con su volumen, balcón y barandilla metálicos, marco de la linterna y
+   cúpula roja (de noche todo eso es silueta) */
+function menuLighthouseDay(g,OX,OY,M){
+  g.drawImage(M.lhG,OX,OY);   // el suelo de la isla bajo el faro
+  const TD={r:['#8e2a22','#b8352b','#d8584a'],w:['#b9b4aa','#dcd7cc','#f4f0e6']};
+  for(let y=96;y<=121;y++){ const hw=3+Math.round((y-96)/25*2), pal=Math.floor((y-96)/4)%2?TD.w:TD.r;
+    for(let x=186-hw;x<=186+hw;x++){ const u=(x-(186-hw))/(hw*2); g.fillStyle=pal[u<0.35?0:u<0.75?1:2]; g.fillRect(x+OX,y+OY,1,1); } }
+  const P=(x,y,w,h,c)=>{ g.fillStyle=c; g.fillRect(x+OX,y+OY,w,h); };
+  P(185,117,2,4,'#3a2a22');                                                    // puerta
+  P(180,120,13,2,'#6a645a');                                                   // roca de la base
+  P(181,95,11,1,'#5d646c'); for(let x=181;x<=191;x+=2) P(x,93,1,2,'#7a828c'); // balcón y barandilla
+  P(183,88,1,5,'#4a5059'); P(189,88,1,5,'#4a5059');                            // marco de la linterna
+  P(183,87,7,1,'#8e2a22'); P(184,86,5,1,'#b8352b'); P(185,85,3,1,'#d8584a'); P(186,82,1,3,'#5d646c');   // cúpula y pararrayos
+}
 /* Fase de la luna de HOY (0 nueva · 0,25 cuarto creciente · 0,5 llena · 0,75 cuarto menguante), con el mes lunar de
    29,53 días contado desde una luna nueva conocida (6-ene-2000 18:14 UTC). menuMoonOverride la fija para probar. */
 let menuMoonOverride=null;
@@ -10053,7 +10069,11 @@ function menuBuildScene(){
   const silR=mkCanvas(300,H0), rq=silR.getContext('2d'); rq.drawImage(sil,0,0);   // reflejo: la torre de colores no debe pintar manchas en el agua
   rq.globalCompositeOperation='source-atop'; rq.fillStyle='rgba(10,8,22,0.7)'; rq.fillRect(0,0,300,H0);
   const lit=menuBuildLit(sil,H0);
-  menuScene={moonLit,silR,bgDay,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
+  // suelo bajo el faro, de día (esa zona no está en litC, que no ilumina al faro): la silueta en color roca
+  const lhG=mkCanvas(300,H0), lg=lhG.getContext('2d'); lg.drawImage(sil,176,80,20,48,176,80,20,48);
+  lg.globalCompositeOperation='source-in'; lg.fillStyle='#6a5470'; lg.fillRect(176,80,20,48);   // el mismo tono que el resto de la isla (litC)
+  lg.globalCompositeOperation='source-over'; lg.fillStyle='#5d5650'; for(let x=176;x<196;x++){ for(let y=80;y<128;y++){ if(lg.getImageData(x,y,1,1).data[3]){ lg.fillRect(x,y,1,1); break; } } }
+  menuScene={moonLit,silR,bgDay,lhG,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
     stars:Array.from({length:Math.round(90*FX)},(_,i)=>[(opsHash(i,1,5)*SW)|0,(opsHash(i,2,5)*(HOR-32))|0,opsHash(i,3,5)*6.28,opsHash(i,4,5)]),
     wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
     smoke:[], lastPuff:-1, embers:[], bubbles:[]};
@@ -10130,7 +10150,7 @@ function menuIslandLights(M,ts,beams,LX,LY,flash,H0){
   q.fillStyle='rgba(255,215,110,'+(fl*0.9).toFixed(2)+')'; q.fillRect(143,106,4,3);
   if((M.night??1)>0.3) M.wins.forEach(([x,y],i)=>{ if(Math.sin(ts*0.7+i*1.9)>-0.6){ q.fillStyle=i%3?'#ffcf6b':'#ffe9a8'; q.fillRect(x,y,2,2); } });
   q.fillStyle=Math.floor(ts*1.2)%2?'#ff3b3b':'#4a1218'; q.fillRect(150,76,1,1);   // luz de aviso de la chimenea
-  const rw=Math.round(Math.abs(Math.cos(ts*1.6))*5)+1; q.fillStyle='#120c1c'; q.fillRect(164-rw,98,rw*2,3);   // radar girando
+  const rw=Math.round(Math.abs(Math.cos(ts*1.6))*5)+1; q.fillStyle=menuMix('#9aa0a8','#120c1c',M.night??1); q.fillRect(164-rw,98,rw*2,3);   // radar girando
   q.fillStyle=Math.floor(ts*1.5)%2?'#ff4757':'#5a1a24'; q.fillRect(163,96,2,2);
   q.fillStyle='rgba(255,226,160,'+((0.55+flash*0.45)*(M.lamp??1)).toFixed(2)+')'; q.fillRect(184,88,5,5);   // lámpara del faro
 }
@@ -10205,7 +10225,8 @@ function drawMenuScene(){
   g.save(); g.translate(OX,OY);
   for(let j=0;j<40;j++){
     const wob=Math.round(Math.sin(ts*(2.2+chop*2)+j*0.9)*(0.4+j*0.05)*(1+chop*2)), fade=1-j/48;
-    g.globalAlpha=0.5; g.drawImage(M.silR,90,H0-1-j,120,1,90+wob,H0+j,120,1);
+    g.globalAlpha=0.5*(1-Dia*0.7); g.drawImage(M.silR,90,H0-1-j,120,1,90+wob,H0+j,120,1);
+    if(Dia>0.01){ g.globalAlpha=0.4*Dia*fade; g.drawImage(M.litC,90,H0-1-j,120,1,90+wob,H0+j,120,1); }   // de día el reflejo tiene color
     g.globalAlpha=0.5*fade; g.drawImage(M.islL,90,H0-1-j,120,1,90+wob,H0+j,120,1);
   }
   g.globalAlpha=1;
@@ -10227,7 +10248,7 @@ function drawMenuScene(){
   }
   g.globalAlpha=1;
   g.drawImage(M.sil,OX,OY);   // la isla queda delante de las nubes bajas
-  if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.litC,OX,OY); g.globalAlpha=1; }   // de día los edificios se ven con su color
+  if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.litC,OX,OY); menuLighthouseDay(g,OX,OY,M); g.globalAlpha=1; }   // de día los edificios y el faro se ven con su color
   // portal de la Luna: una lucecita en su superficie; cada 9 s un destello viaja hasta Marte (el salto cuántico)
   const pp=(0.5+0.5*Math.sin(ts*2.2))*M.night;
   g.fillStyle='rgba(62,230,230,'+(0.22*pp).toFixed(2)+')'; g.fillRect(249+RX,32,3,3);
@@ -10237,8 +10258,9 @@ function drawMenuScene(){
   // helicóptero patrullando (cruza todo el ancho)
   const hp=(ts%19)/19;
   if(hp<0.5){ const hx=Math.round(SW+30-hp/0.5*(SW+80)), hy=Math.round(62+Math.sin(ts*2.2)*2);
-    menuSpr(g,MENU_HELI,hx,hy,{k:'#140e20'});
-    g.fillStyle=Math.floor(ts*12)%2?'#140e20':'rgba(20,14,32,0.4)'; g.fillRect(hx-2,hy,14,1);
+    const hk=menuMix('#3c4652','#140e20',M.night);
+    menuSpr(g,MENU_HELI,hx,hy,{k:hk});
+    g.globalAlpha=Math.floor(ts*12)%2?1:0.4; g.fillStyle=hk; g.fillRect(hx-2,hy,14,1); g.globalAlpha=1;
     if(Math.floor(ts*2)%2){ g.fillStyle='#ff4757'; g.fillRect(hx+9,hy+3,1,1); } }
   menuWeatherSky(g,M,ts);   // nubarrones u oscuridad según el clima de tu base
   // --- la isla (coordenadas de diseño) ---
@@ -10356,16 +10378,16 @@ function drawMenuScene(){
   const fq=M.shipF.getContext('2d'); fq.clearRect(0,0,26,9);
   menuSpr(fq,MENU_SHIP,0,0,{k:'#7d6f8c',l:'#fff1c0'});
   fq.globalCompositeOperation='destination-in'; fq.drawImage(M.shipM,0,0); fq.globalCompositeOperation='source-over';
-  const shipLight=Math.floor(ts*3)%4?'#ffcf6b':'#a07a3a';
+  const shipLight=M.night>0.4?(Math.floor(ts*3)%4?'#ffcf6b':'#a07a3a'):'#c8d2dc', hull=menuMix('#56616f','#0a0812',M.night);   // de día: casco gris y ventanas sin luz
   // reflejo: el casco invertido y ondulado, con lo que esté iluminado
   g.globalAlpha=0.3;
   for(let j=0;j<MENU_SHIP.length;j++){
     const row=MENU_SHIP[MENU_SHIP.length-1-j], wob=Math.round(Math.sin(ts*2.4+j*1.1)*0.8);
-    for(let i=0;i<row.length;i++){ if(row[i]==='.') continue; g.fillStyle=row[i]==='l'?shipLight:'#0a0812'; g.fillRect(sxr+i+wob,sy+9+j,1,1); }
+    for(let i=0;i<row.length;i++){ if(row[i]==='.') continue; g.fillStyle=row[i]==='l'?shipLight:hull; g.fillRect(sxr+i+wob,sy+9+j,1,1); }
     g.drawImage(M.shipF,0,MENU_SHIP.length-1-j,26,1,sxr+wob,sy+9+j,26,1);
   }
   g.globalAlpha=1;
-  menuSpr(g,MENU_SHIP,sxr,sy,{k:'#0a0812',l:shipLight});
+  menuSpr(g,MENU_SHIP,sxr,sy,{k:hull,l:shipLight});
   g.drawImage(M.shipF,sxr,sy);
   g.fillStyle=Math.floor(ts*2)%2?'#3ee67a':'#ff4757'; g.fillRect(Math.round(sx)+25,sy+6,1,1);
   // LUNA: en luna nueva la noche es más negra; en luna llena se aclara un poco (la luz plateada lo baña todo)
@@ -10401,9 +10423,9 @@ function drawMenuScene(){
   g.fillStyle='rgba(255,255,255,'+((1-lf2)*lamp).toFixed(2)+')'; g.fillRect(l0,89+OY,1,3);
   if(lf2>0.01){ g.fillStyle='rgba(255,255,255,'+(lf2*lamp).toFixed(2)+')'; g.fillRect(l0+1,89+OY,1,3); }
   // primer plano: rocas a izquierda y derecha
-  g.fillStyle='#07060c';
-  for(let x=0;x<70;x++){ const h=Math.round(10+Math.sin(x*0.13)*5+Math.sin(x*0.5)*2-x*0.12); g.fillRect(x,SH-h,1,h); }
-  for(let x=226;x<300;x++){ const h=Math.round(16+Math.sin(x*0.11)*5+Math.sin(x*0.6)*2+(x-226)*0.1); g.fillRect(x+RX,SH-h,1,h); }
+  const rk=menuMix('#4a443c','#07060c',M.night), rt=menuMix('#7a7266','#07060c',M.night);   // de día: roca gris con el borde de arriba más claro
+  for(let x=0;x<70;x++){ const h=Math.round(10+Math.sin(x*0.13)*5+Math.sin(x*0.5)*2-x*0.12); g.fillStyle=rk; g.fillRect(x,SH-h,1,h); g.fillStyle=rt; g.fillRect(x,SH-h,1,1); }
+  for(let x=226;x<300;x++){ const h=Math.round(16+Math.sin(x*0.11)*5+Math.sin(x*0.6)*2+(x-226)*0.1); g.fillStyle=rk; g.fillRect(x+RX,SH-h,1,h); g.fillStyle=rt; g.fillRect(x+RX,SH-h,1,1); }
   menuWeatherFront(g,M,ts);   // lluvia, niebla y rayos
   // ampliar x3 + líneas de escaneo
   ctx.imageSmoothingEnabled=false;
