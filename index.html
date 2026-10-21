@@ -641,11 +641,11 @@ function isBossWave(w){ return w%5===0; }
 
 /* ===================== DEFINICIONES ===================== */
 const CHARS={
-  mech:{id:'mech', name:'MÁQUINA BÉLICA', desc:'Mecha bípedo equilibrado. Ametralladoras en ambos brazos (más cañones al subir el arma) y el camuflaje óptico más largo.',
+  mech:{id:'mech', name:'CENTINELA', desc:'Mecha bípedo equilibrado. Ametralladoras en ambos brazos (más cañones al subir el arma) y el camuflaje óptico más largo.',
     hp:100, speed:2.6, accel:0.32, friction:0.84, radius:13, mass:2.2, fireCd:10, dmg:6, cloakDur:480, cloakCd:900, nadeCd:140, nadeDmg:30},
   tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón letal con onda expansiva pero de recarga lenta; aplasta robots pequeños.',
     hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
-  jeep:{id:'jeep', name:'JACKAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
+  jeep:{id:'jeep', name:'CHACAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
     hp:60, speed:4.0, accel:0.46, friction:0.9, radius:12, mass:1.6, fireCd:11, dmg:4, twin:true, hurt:1.25, cloakDur:360, cloakCd:1000, nadeCd:70, nadeDmg:24},
   moto:{id:'moto', name:'JINETE', locked:'jinete', desc:'Moto bandida reprogramada. La más rápida y ágil, pero la más frágil (recibe +30% de daño). El jinete dispara una pistola rápida.',
     hp:55, speed:4.8, accel:0.55, friction:0.9, radius:11, mass:1.2, fireCd:8, dmg:3, hurt:1.3, cloakDur:420, cloakCd:900, nadeCd:80, nadeDmg:22},
@@ -1699,7 +1699,7 @@ function damagePlayer(amount,shieldPierce){
   const p=player;
   if(!p.alive||p.invuln>0||cine>0||god) return;
   amount*=bossDmgK*survK('enemigos');   // los golpes del jefe crecen con tu equipo; en supervivencia, con el nivel
-  amount*=p.ch.hurt||1;   // blindaje del vehículo (el Jackal es el más frágil)
+  amount*=p.ch.hurt||1;   // blindaje del vehículo (el Chacal es el más frágil)
   if(p.shield>0){ const direct=amount*(shieldPierce||0); p.hp-=direct; amount-=direct;   // parte atraviesa el escudo (vigía de nivel alto)
     p.shield-=amount; if(p.shield<0){ p.hp+=p.shield; p.shield=0; } }
   else p.hp-=amount;
@@ -3079,7 +3079,7 @@ function turretAI(en,dt){
 function meleeLvl(en){ return (world?world.id:1)+(en.vengeLvl||0)*2+(en.reinf&&world?Math.floor((world.reinfLvl||0)/2):0); }
 function crushZone(en){ const L=meleeLvl(en); return en.def.crushMini?{L,R:50,inner:18}:{L,R:80+10*(L-1),inner:26+2*(L-1)}; }
 /* MINI-APLASTAMIENTO (mini-androide): el daño y el aturdimiento dependen de tu vehículo
-   (el Jackal, ligero, vuelca y queda aturdido más rato pero apenas se daña; el tanque, pesado, casi ni se inmuta) */
+   (el Chacal, ligero, vuelca y queda aturdido más rato pero apenas se daña; el tanque, pesado, casi ni se inmuta) */
 const MINI_CRUSH={mech:[0.05,50],tank:[0.03,15],jeep:[0.02,70]};
 function crushBlow(en){
   const {L,R,inner}=crushZone(en), x=en.cx, y=en.cy, p=player;
@@ -3355,7 +3355,7 @@ function updateVacio(en,dt){
 
 /* ===================== JEFES ===================== */
 function spawnBoss(){
-  if(world&&world.id===2){ spawnCraneBoss(); return; }
+  if(world&&world.id===2){ spawnForgeBoss(); return; }
   const wd=world&&WORLD_DEFS[world.id]; if(wd&&wd.spawnBoss){ wd.spawnBoss(); return; }
   const mk=Math.max(1,Math.floor(wave/5));
   const tankMode=sel().mode==='tanks'&&!world;
@@ -6377,6 +6377,7 @@ function buildWorld2(){
 /* ---------- cintas, metal fundido y prensas ---------- */
 function onScreen(u,m){ m=m||0; return u.x>cam.x-m&&u.x<cam.x+W+m&&u.y>cam.y-m&&u.y<cam.y+H+m; }
 function factoryForces(dt){
+  forgeCleanup(dt);
   const ground=[];
   if(player.alive) ground.push(player);
   for(const en of enemies) if(en.alive&&!en.air&&!en.static) ground.push(en);
@@ -6458,7 +6459,8 @@ function spawnerAI(en,dt){
   }
 }
 
-/* ---------- JEFE: GRÚA TITÁN ---------- */
+/* ---------- GRÚA TITÁN: ya NO es el jefe del Mundo 2 (ahora es la Forja Viva). Su código se guarda porque sus ataques
+   (imán, lanzar contenedores, barrido) servirán para el futuro jefe CAPATAZ, un robot de carga gigante. ---------- */
 function craneTip(b){ return {x:b.x+Math.cos(b.boom)*b.boomLen, y:b.y+Math.sin(b.boom)*b.boomLen}; }
 function spawnCraneBoss(){
   const hp=1350;
@@ -6550,6 +6552,153 @@ function craneStates(b,dt,tgt,dd,toA,p){
       return true; }
   }
   return false;
+}
+
+/* ===================== JEFE DEL MUNDO 2: LA FORJA VIVA =====================
+   La IA de la cadena de montaje de la fábrica hackeada: una fundición sobre orugas con un crisol al rojo y dos brazos
+   de montaje. No pelea sola: usa la fábrica entera.
+     · ENSAMBLA robots por su compuerta (máx. 4 vivos).
+     · PRENSAS: marca 2-4 zonas a tu alrededor (parpadean en rojo) y baja prensas que aplastan lo que haya debajo.
+     · VIERTE METAL FUNDIDO: lanza coladas que dejan charcos que queman ~6 s y luego se enfrían.
+     · Dispara chispas de metal (3 proyectiles) y, de cerca, golpea el suelo o embiste (estados comunes de los jefes).
+   Con poca vida (fase 2) todo va más rápido y vierte y prensa más. */
+function spawnForgeBoss(){
+  const hp=1350;
+  boss={kind:'forge', mk:2, pattern:0, name:'LA FORJA VIVA · IA DE LA CADENA DE MONTAJE',
+    x:arena.x,y:arena.y,radius:40,mass:90,hp,maxHp:hp,alive:true,
+    vx:0,vy:0,accel:0.18,speedMax:0.9,friction:0.85,angle:Math.PI/2,aim:Math.PI/2,
+    state:'intro',st:0,z:420,atkCd:120,stunMeter:0,stunMax:320,stunDur:0,phase2:false,
+    escortCalls:0,escortSid:0,purpleReady:false,purpleCd:0,walk:0,flash:0,mgAngle:0,spin:0,chargeHits:null,
+    fireT:80,fired:false,windT:45,tread:0,spiral:0,arm:0,kids:[],
+    escortIds:['brawler','gunner','minidroid','brawler','gunner'],
+    states:forgeStates, post:forgePost, draw:drawForge};
+  if(player.alive) boss.y=clamp(player.y-260,8*TILE,26*TILE);   // que aterrice a la vista
+  world.molten=[];
+  document.getElementById('bossBarWrap').style.display='block';
+  document.getElementById('bossName').textContent=boss.name;
+  S.boss();
+  announce('⚠ LA FORJA VIVA','#ff8c2a','Fabrica robots, baja las prensas sobre ti y vierte metal fundido · se aturde si choca contra el acero');
+}
+function forgeStates(b,dt,tgt,dd,toA,p){
+  const spK=b.phase2?1.35:1;
+  switch(b.state){
+    case 'walk': {
+      b.aim=turnTo(b.aim,toA,0.05*dt); b.angle=turnTo(b.angle,toA,0.03*dt);
+      if(dd>300) accelerate(b,tgt.x-b.x,tgt.y-b.y,dt); else if(dd<170) accelerate(b,b.x-tgt.x,b.y-tgt.y,dt,0.6); else { b.vx*=0.95; b.vy*=0.95; }
+      b.fireT-=dt;
+      if(b.fireT<=0&&lineClear(b.x,b.y,tgt.x,tgt.y)){   // chispas de metal
+        for(const s of [-0.18,0,0.18]) fireBullet(b.x+Math.cos(toA)*44,b.y+Math.sin(toA)*44,toA+s,'e',{speed:5.5,dmg:9,radius:5,life:100,kind:'shell',splash:22});
+        b.fireT=b.phase2?65:90; S.cannon();
+      }
+      b.atkCd-=dt*spK;
+      if(dd<110&&b.atkCd<70){ setBossState('slamWind'); return true; }
+      if(b.atkCd<=0){
+        b.kids=b.kids.filter(k=>k.alive);
+        const r=Math.random();
+        if(r<0.3) setBossState('pressWind');
+        else if(r<0.58) setBossState('pour');
+        else if(r<0.8&&b.kids.length<4) setBossState('assemble');
+        else { setBossState('chargeWind'); b.windT=b.phase2?36:48; }
+      }
+      return true; }
+    case 'pressWind': {   // levanta los brazos y marca las zonas: las prensas bajan del techo
+      b.vx*=0.85; b.vy*=0.85; b.arm=Math.min(1,b.arm+0.06*dt);
+      if(!b.fired&&b.st>12){
+        b.fired=true; popup(b.x,b.y-70,'¡PRENSAS!','#ff4757',16); S.alarm();
+        const n=b.phase2?4:3, spots=[[0,0]];
+        for(let i=1;i<n;i++){ const a=rand(0,Math.PI*2), d=rand(70,150); spots.push([Math.cos(a)*d,Math.sin(a)*d]); }
+        for(const [ox,oy] of spots){
+          const c=Math.floor((tgt.x+ox)/TILE)-1, r=Math.floor((tgt.y+oy)/TILE)-1;
+          if(c<5||c>32||r<4||r>33) continue;
+          world.presses.push({x:c*TILE,y:r*TILE,w:3*TILE,h:3*TILE,period:120,t:120-56,temp:true,age:0});
+        }
+      }
+      if(b.st>=40){ b.arm=0; setBossState('walk'); b.atkCd=rand(60,100); }
+      return true; }
+    case 'pour': {   // vierte coladas de metal fundido hacia ti y alrededor
+      b.vx*=0.85; b.vy*=0.85; b.aim=turnTo(b.aim,toA,0.06*dt);
+      if(Math.random()<0.4) particles.push({x:b.x+rand(-14,14),y:b.y-20,vx:rand(-0.6,0.6),vy:rand(-2,-0.6),life:22,maxLife:22,color:pick(['#ffd04a','#ff8c2a','#ff4a1a']),size:3});
+      if(!b.fired&&b.st>24){
+        b.fired=true; popup(b.x,b.y-70,'¡METAL FUNDIDO!','#ff8c2a',16); S.launch();
+        const n=b.phase2?6:4;
+        for(let i=0;i<n;i++){
+          const lx=tgt.x+(i?rand(-110,110):0), ly=tgt.y+(i?rand(-110,110):0);
+          addLob({x0:b.x,y0:b.y-20,x1:lx,y1:ly,dur:40+i*5,h:130,owner:'n',kind:'molten',
+            draw:(x,y)=>{ ctx.fillStyle='#ff8c2a'; ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ffe28a'; ctx.fillRect(x-2,y-2,3,3); },
+            onLand:l=>forgeMolten(l.x1,l.y1)});
+        }
+      }
+      if(b.st>=60){ setBossState('walk'); b.atkCd=rand(70,110); }
+      return true; }
+    case 'assemble': {   // abre la compuerta y fabrica robots
+      b.vx*=0.8; b.vy*=0.8; b.arm=Math.min(1,b.arm+0.05*dt);
+      if(!b.fired&&b.st>30){
+        b.fired=true; popup(b.x,b.y-70,'ENSAMBLANDO...','#ff3df0',15); S.spawn();
+        const sid=newSquad(), n=b.phase2?3:2;
+        for(let i=0;i<n;i++){
+          const a=b.angle+(i-(n-1)/2)*0.6, x=b.x+Math.cos(a)*(b.radius+20), y=b.y+Math.sin(a)*(b.radius+20);
+          const k=addEnemy(pick(['brawler','gunner','minidroid']),x,y,sid,true);
+          k.ai='hunt'; k.lastKnown={x:tgt.x,y:tgt.y}; k.spawnGrace=30; unstick(k);
+          b.kids.push(k); spawnDebris(k.x,k.y,10,'#ff3df0');
+        }
+      }
+      if(b.st>=55){ b.arm=0; setBossState('walk'); b.atkCd=rand(80,120); }
+      return true; }
+  }
+  return false;
+}
+/* Charco de metal fundido: casillas MOLTEN (queman con las reglas de la fábrica) que se enfrían a los ~6 s */
+function forgeMolten(x,y){
+  const c0=Math.floor(x/TILE), r0=Math.floor(y/TILE), M=world.molten||(world.molten=[]);
+  for(const [dc,dr] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
+    const c=c0+dc, r=r0+dr; if(tileAtC(c,r)!==FLOOR) continue;
+    setTile(c,r,MOLTEN); paintTile(c,r); M.push({c,r,life:rand(330,400)});
+  }
+  shake=Math.max(shake,4); S.stomp(); spawnDebris(x,y,8,'#ff8c2a'); miniDirty=true;
+}
+/* Charcos que se enfrían y prensas de la Forja que se recogen tras aplastar (desde factoryForces: sigue aunque muera el jefe) */
+function forgeCleanup(dt){
+  for(const m of world.molten||[]) if((m.life-=dt)<=0){ setTile(m.c,m.r,FLOOR); paintTile(m.c,m.r); m.done=true; miniDirty=true; }
+  if(world.molten) world.molten=world.molten.filter(m=>!m.done);
+  for(const p of world.presses) if(p.temp) p.age+=dt;
+  world.presses=world.presses.filter(p=>!p.temp||p.age<120);
+}
+function forgePost(b,dt){
+  b.arm=Math.max(0,b.arm-0.02*dt);
+  if(Math.random()<0.2) particles.push({x:b.x+rand(-8,8)-Math.cos(b.angle)*26,y:b.y+rand(-8,8)-Math.sin(b.angle)*26-20,vx:rand(-0.3,0.3),vy:-0.6,life:40,maxLife:40,color:'#555',size:6,smoke:true});
+}
+function drawForge(b){
+  const z=b.z||0;
+  if(z>0){ ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(b.x,b.y,44,32,0,0,Math.PI*2); ctx.fill(); }
+  ctx.save(); ctx.translate(b.x,b.y-z);
+  if(b.state==='stun') ctx.rotate(Math.sin(t*0.5)*0.04);
+  ctx.rotate(b.angle);
+  const fl=b.flash>0, glow=0.6+0.4*Math.sin(t*0.15);
+  // orugas
+  for(const s of [-1,1]){ ctx.fillStyle='#1a1d22'; ctx.fillRect(-40,s*28-8,80,16); ctx.fillStyle='#3a3f46'; for(let i=-38;i<38;i+=8) ctx.fillRect(i+((b.tread||0)%8),s*28-6,4,12); }
+  // cuerpo de la fundición
+  ctx.fillStyle=fl?'#fff':'#2e3238'; ctx.fillRect(-34,-24,68,48);
+  ctx.fillStyle='#4a5059'; ctx.fillRect(-30,-20,60,40);
+  for(let i=-30;i<30;i+=10){ ctx.fillStyle=(i/10)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(i,16,10,4); }   // franjas de peligro
+  // chimeneas
+  ctx.fillStyle='#2a2e34'; ctx.fillRect(-30,-26,8,8); ctx.fillRect(-30,18,8,8);
+  // brazos de montaje (se levantan al prensar o ensamblar)
+  for(const s of [-1,1]){
+    const a=s*(0.9-b.arm*0.7);
+    ctx.save(); ctx.translate(16,s*20); ctx.rotate(a);
+    ctx.fillStyle='#6b717a'; ctx.fillRect(0,-4,34,8); ctx.fillStyle='#8a929c'; ctx.fillRect(0,-4,34,2);
+    ctx.fillStyle='#2a2e34'; ctx.fillRect(30,-7,8,14); ctx.fillStyle='#ff8c2a'; ctx.fillRect(36,-2,4,4);
+    ctx.restore();
+  }
+  // crisol al rojo (el núcleo de la IA)
+  const core=b.state==='stun'?(Math.floor(t/4)%2?'#fff':'#666'):b.state==='vacio'?'#c77dff':'#ff8c2a';
+  ctx.fillStyle='#1a1d22'; ctx.beginPath(); ctx.arc(-4,0,15,0,Math.PI*2); ctx.fill();
+  ctx.shadowColor=core; ctx.shadowBlur=14*glow; ctx.fillStyle=core; ctx.beginPath(); ctx.arc(-4,0,10,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle='#ffe28a'; ctx.globalAlpha=glow; ctx.beginPath(); ctx.arc(-6,-2,4,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+  // compuerta de ensamblaje (se abre al fabricar)
+  ctx.fillStyle=b.state==='assemble'?'#ff3df0':'#1a1d22'; ctx.fillRect(28,-8,6,16);
+  ctx.restore();
+  if(b.state==='stun') drawStars(b.x,b.y-b.radius-10);
 }
 
 /* ===================== MAPA DE OPERACIONES DIBUJADO POR CÓDIGO =====================
