@@ -1772,13 +1772,6 @@ function killPlayer(reason){
   if(reason) popup(p.x,p.y-46,reason,'#c77dff',16);
   onPlayerDeath();
 }
-/* SUPERVIVENCIA: sin Orbe no hay quien rearme tu máquina: se acaba la partida */
-function baseLost(){
-  spawnBlast(orb.x,orb.y,120); shake=Math.max(shake,22); flashScreen('#ff4757',0.4);
-  announce('¡EL ORBE VITAL HA CAÍDO!','#ff4757','Ya nadie puede rearmar tu máquina');
-  lives=0; gameOverT=150;
-  if(player.alive){ player.alive=false; spawnBlast(player.x,player.y,60); }
-}
 function onPlayerDeath(){
   const p=player;
   lives--; S.death(); shake=Math.max(shake,16);
@@ -1789,9 +1782,9 @@ function onPlayerDeath(){
   if(lives<=0){ popup(p.x,p.y-30,'SIN VIDAS','#ff4757',22); gameOverT=110; }
   else {
     respawnTimer=150; popup(p.x,p.y-30,'MÁQUINA DESTRUIDA','#ff4757',18);
-    if(world){   // en la campaña el helicóptero trae el Orbe Vital a la pantalla actual
-      const s=worldDeathRespawn(); world.pendingOrb=s;   // si caíste retrocediendo, al frente (p9_campaign.js)
-      callHeli(s.x,s.y,'orb',()=>{ orb={x:s.x,y:s.y,r:14,pulse:24}; if(world) world.pendingOrb=null; });
+    if(world){   // en la campaña el portal se abre en la pantalla actual
+      const s=worldDeathRespawn(); world.pendingOrb=null;   // si caíste retrocediendo, al frente (p9_campaign.js)
+      setTimeout(()=>{ if(state==='playing'&&!player.alive&&lives>0) portalOpen(s.x,s.y); },700);
     }
   }
 }
@@ -1799,9 +1792,10 @@ function respawnPlayer(){
   const p=player;
   if(world&&world.pendingOrb){ const s=world.pendingOrb; orb={x:s.x,y:s.y,r:14,pulse:24}; world.pendingOrb=null; }
   if(!orb) return;
-  p.x=orb.x; p.y=orb.y-36; p.vx=p.vy=0; unstick(p);
+  p.x=orb.x; p.y=orb.y+4; p.vx=p.vy=0; unstick(p);
   p.hp=p.maxHp; p.shield=Math.floor(p.shieldMax*0.6);
   p.alive=true; p.invuln=120; p.cloak=0; p.cloakCd=0; p.nadeCd=0;
+  portalEmerge();   // sale del portal (y los enemigos cercanos lo notan)
   orb.pulse=24; S.respawn();
   rings.push({x:orb.x,y:orb.y,r:10,max:120,life:40,maxLife:40,color:'#3ee67a'});
   popup(orb.x,orb.y-56,'◈ MÁQUINA REARMADA','#3ee67a',16);
@@ -1914,7 +1908,6 @@ function landLob(l){
 /* ===================== EXPLOSIONES Y EFECTOS ===================== */
 function friendlies(){
   const a=[];
-  if(baseOrb()) a.push(orb);   // supervivencia: el Orbe Vital también recibe golpes
   if(mate&&mate.alive) a.push(mate);
   for(const s of soldiers) if(s.alive) a.push(s);
   for(const tu of turrets) if(tu.alive) a.push(tu);
@@ -1922,9 +1915,7 @@ function friendlies(){
   for(const pw of pows) if(pw.alive) a.push(pw);
   return a;
 }
-function baseOrb(){ return survLvl&&orb&&orb.alive?orb:null; }
 function hitFriendly(x,y,r){
-  if(baseOrb()&&(x-orb.x)**2+(y-orb.y)**2<(r+orb.radius)**2) return orb;
   if(mate&&mate.alive&&(x-mate.x)**2+(y-mate.y)**2<(r+mate.radius)**2) return mate;
   for(const u of soldiers) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
   for(const u of turrets) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
@@ -1939,12 +1930,10 @@ function hurtFriendly(u,dmg){
     if(en&&en!==boss) escortDetected(en,u); else { escort.detected=true; escort.pathT=0; }
   }
   u.hp-=dmg*survK('enemigos')/survK('aliados'); u.flash=5; spawnDebris(u.x,u.y,2,'#9ff');   // supervivencia: nivel de quien pega contra el de tus aliados
-  if(u===orb&&u.hp>0&&(orb.warnT||0)<t){ orb.warnT=t+300; announce('¡ATACAN EL ORBE VITAL!','#ff4757','Defiéndelo: si cae, se acaba la partida'); S.alarm(); }
   if(u.hp<=0){
     u.alive=false; spawnBlast(u.x,u.y,u.radius*2); spawnDebris(u.x,u.y,10,'#9ff');
     if(u===mate){ mateTimer=900; popup(u.x,u.y-20,MATES[u.mk].name+' DESTRUIDO','#ff6b6b',14); popup(u.x,u.y-4,'el barco enviará otro en 15 s','#8ea0b8',11); }
     if(u.kind==='pow') popup(u.x,u.y-14,'REHÉN PERDIDO','#ff6b6b',12);
-    if(u===orb) baseLost();
   }
 }
 function explode(x,y,radius,dmg,owner,o){
@@ -2761,7 +2750,7 @@ function makeEnemy(id,x,y,sid){
     home:{x,y},wp:null,wpT:0,path:null,pathT:0,
     fireCd:rand(50,100),burst:0,burstT:0,windup:0,lunge:0,atkCd:0,strafe:Math.random()<0.5?1:-1,strafeT:rand(60,120),
     stun:0,flash:0,squad:sid,spawnGrace:50,z:def.air?1:0,
-    carrier:wave>=2&&Math.random()<(def.purple||0)*(world?0.5:1),vacio:null,vacioUsed:false,raid:survLvl>0&&!world&&Math.random()<0.35,
+    carrier:wave>=2&&Math.random()<(def.purple||0)*(world?0.5:1),vacio:null,vacioUsed:false,
     alarmCd:0,glitch:0,ramT:0,ramA:0,ramHits:null,crushCd:0,walk:0,tread:0,orbitA:null,bombCd:rand(200,320),dish:0,recoil:0};
   en.aim=en.angle;
   if(def.look==='tank'){ en.speedMax*=0.6; en.accel*=0.55; }   // tanque de verdad: lento y pesado (al embestir no: va a 5,4)
@@ -2933,10 +2922,6 @@ function pickTarget(en){
   let best=null, bd=170*170;
   for(const s of soldiers){ if(!s.alive) continue; const d=dist2(en,s); if(d<bd){ bd=d; best=s; } }
   for(const tu of turrets){ if(!tu.alive) continue; const d=dist2(en,tu); if(d<bd){ bd=d; best=tu; } }
-  if(baseOrb()){   // SUPERVIVENCIA: el Orbe Vital es un objetivo; los asaltantes van a por él salvo que te tengan encima
-    if(en.raid&&!(en.seen&&dist2(en,player)<160*160)) return {x:orb.x,y:orb.y,u:orb};
-    const d=dist2(en,orb); if(d<bd*1.7){ bd=d; best=orb; }
-  }
   if(mate&&mate.alive){ const d=dist2(en,mate); if(d<bd*1.4 && (en.air||lineClear(en.x,en.y,mate.x,mate.y))){ bd=d; best=mate; } }
   if(best && (!en.seen || bd<dist2(en,player)*0.6)) return {x:best.x,y:best.y,u:best};
   if(en.seen) return {x:player.x,y:player.y,u:player};
@@ -2959,7 +2944,7 @@ function updateEnemies(dt){
     survHuntT=180;
     for(const en of enemies){
       const r=en.def.role;
-      if(!en.alive||en.raid||en.ai==='combat'||en.static||r==='turret'||r==='structure'||r==='spawner'||r==='dummy') continue;
+      if(!en.alive||en.ai==='combat'||en.static||r==='turret'||r==='structure'||r==='spawner'||r==='dummy') continue;
       en.ai='hunt'; en.lastKnown={x:player.x+rand(-60,60),y:player.y+rand(-60,60)}; en.searchT=0; en.revealed=true; en.aware=1;
     }
   }
@@ -2970,10 +2955,6 @@ function updateEnemies(dt){
     endgameT-=dt;
     if(endgameT<=0){
       endgameT=240;
-      if(baseOrb()){   // SUPERVIVENCIA: los últimos se lanzan todos a por el Orbe
-        if(enemies.some(en=>!en.raid)) announce('¡VAN A POR EL ORBE!','#ff4757','Los últimos enemigos asaltan tu base');
-        for(const en of enemies){ en.revealed=true; en.raid=true; }
-      } else
       for(const en of enemies){ en.revealed=true; if(en.ai==='patrol'||en.ai==='search'){ en.ai='hunt'; en.lastKnown={x:player.x+rand(-80,80),y:player.y+rand(-80,80)}; en.searchT=0; } }
     }
   }
@@ -3005,10 +2986,6 @@ function updateEnemy(en,dt){
   if(en.stun>0){ en.stun-=dt; moveUnit(en,dt); return; }
   if(en.vacio){ updateVacio(en,dt); moveUnit(en,dt); return; }
   perceive(en,dt);
-  if(en.raid&&baseOrb()&&d.role!=='turret'){   // ASALTANTE: marcha hacia el Orbe y, al llegar, lo ataca
-    if(dist2(en,orb)<240*240){ en.ai='combat'; en.lastSeen=t; }
-    else if(en.ai!=='combat'){ en.ai='hunt'; en.lastKnown={x:orb.x,y:orb.y}; }
-  }
   if(d.role==='turret'){ turretAI(en,dt); return; }
   checkPurpleTrigger(en);
   if(en.vacio){ moveUnit(en,dt); return; }
@@ -4344,8 +4321,8 @@ function drawShip(){
 }
 function drawOrb(){
   if(!orb||orb.alive===false) return;
-  if(orb.maxHp&&orb.hp<orb.maxHp) hpBar(orb.x,orb.y-44,48,orb.hp/orb.maxHp,orb.hp<orb.maxHp*0.3?'#ff4757':'#3ee67a');   // vida del Orbe (supervivencia)
-  const r=orb.r;
+  const r=orb.r, k=orb.t0==null?1:clamp((t-orb.t0)/40,0,1), e=1-Math.pow(1-k,3);   // e: cuánto se ha abierto el portal
+  drawPortal(orb,e);
   ctx.save(); ctx.translate(orb.x,orb.y);
   ctx.globalAlpha=0.08; ctx.fillStyle='#3ee67a'; ctx.beginPath(); ctx.arc(0,0,95,0,Math.PI*2); ctx.fill();
   ctx.globalAlpha=0.35; ctx.strokeStyle='#3ee67a'; ctx.setLineDash([6,8]); ctx.lineDashOffset=t*0.3; ctx.lineWidth=1.5;
@@ -4363,6 +4340,25 @@ function drawOrb(){
     const a=-Math.PI/2+i*(Math.PI*2/Math.max(6,lives))+t*0.01;
     ctx.fillStyle='#3ee67a'; ctx.fillRect(Math.cos(a)*(r+16)-2,fy+Math.sin(a)*(r+16)-2,5,5);
   }
+  ctx.restore();
+}
+/* PORTAL de llegada: un anillo de energía que gira, espirales hacia dentro, el núcleo verde al fondo y, al abrirse o
+   cuando sale tu máquina, una columna de luz */
+function drawPortal(o,e){
+  if(e<=0) return;
+  const R=34*e, x=o.x, y=o.y;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  const g=ctx.createRadialGradient(x,y,0,x,y,R*1.6); g.addColorStop(0,'rgba(200,255,240,0.5)'); g.addColorStop(0.5,'rgba(62,230,170,0.25)'); g.addColorStop(1,'rgba(62,230,170,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(x,y,R*1.6,R*1.1,0,0,Math.PI*2); ctx.fill();
+  for(let i=0;i<3;i++){   // espirales que giran hacia dentro
+    ctx.strokeStyle=i%2?'rgba(62,230,230,0.7)':'rgba(62,230,122,0.7)'; ctx.lineWidth=2; ctx.beginPath();
+    for(let s=0;s<=20;s++){ const u=s/20, a=t*0.08+i*Math.PI*2/3+u*4, rr=R*(1-u); const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr*0.7; s?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+    ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(200,255,240,0.9)'; ctx.lineWidth=3; ctx.setLineDash([10,6]); ctx.lineDashOffset=-t*0.8;   // anillo exterior
+  ctx.beginPath(); ctx.ellipse(x,y,R,R*0.7,0,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+  const since=o.burst!=null?t-o.burst:999, beam=Math.max(1-e,since<40?1-since/40:0);   // columna de luz al abrirse y al salir
+  if(beam>0.02){ const bg=ctx.createLinearGradient(x,y,x,y-240); bg.addColorStop(0,'rgba(200,255,240,'+(0.6*beam).toFixed(2)+')'); bg.addColorStop(1,'rgba(200,255,240,0)'); ctx.fillStyle=bg; ctx.fillRect(x-R*0.5,y-240,R,240); }
   ctx.restore();
 }
 function drawNode(n){
@@ -4880,7 +4876,7 @@ function drawScreenFx(){
     ctx.fillText('Clic o Espacio para saltar',W-16,H-18);
     { const WX=WEATHERS[weather.id]; ctx.textAlign='left'; ctx.fillStyle='#8ae7ff'; ctx.fillText(WX.icon+' Clima: '+WX.name+(WX.tip?' — '+WX.tip:''),16,28); }
     ctx.textAlign='left'; ctx.fillStyle='#3ee67a';
-    ctx.fillText(cinePhase<2?(introHeli?'Helicóptero de apoyo: trayendo el Orbe Vital...':'ISF-01: lanzando el Orbe Vital...'):'Orbe Vital: armando la máquina...',16,H-18);
+    ctx.fillText(cinePhase<2?'El núcleo de Abyssalita abre un portal...':'Portal abierto: tu máquina sale...',16,H-18);
   }
   if(p && !p.alive && respawnTimer>0 && cine<=0){
     ctx.textAlign='center'; ctx.font='bold 20px Rajdhani, monospace'; ctx.fillStyle='#3ee67a';
@@ -6281,7 +6277,7 @@ function missionFailed(){
   } else if(m.type==='tutorial'){
     showResults({title:'ENTRENAMIENTO FALLIDO', html:stats, buttons:[['↻ REINTENTAR',()=>startMission({type:'tutorial'}),true],home]});
   } else {
-    showResults({title:orb&&orb.alive===false?'EL ORBE VITAL HA CAÍDO':'SIN VIDAS RESTANTES', html:'<span style="color:var(--text-dim)">Sobreviviste hasta el nivel '+wave+' del Archipiélago.</span><br><br>'+stats+
+    showResults({title:'SIN VIDAS RESTANTES', html:'<span style="color:var(--text-dim)">Sobreviviste hasta el nivel '+wave+' del Archipiélago.</span><br><br>'+stats+
       '<br><span style="color:var(--text-dim)">Récord: '+save.bestScore+' pts · Isla máxima: '+save.bestWave+'</span>',
       buttons:[['↻ OTRA VEZ',()=>startMission({type:'arch'}),true],home]});
   }
@@ -11031,7 +11027,6 @@ function nextWaveInPlace(){
   squads={}; voidCharging=0; alarmT=0; endgameT=0; clearT=0;
   boss=null; bossDefeated=false; bossDelay=0; bossRelay=0; dropsInAir=0;
   document.getElementById('bossBarWrap').style.display='none';
-  if(orb&&orb.maxHp) orb.hp=Math.min(orb.maxHp,orb.hp+orb.maxHp*0.3);
   bossStage=isBossWave(wave);
   if(bossStage){   // el jefe aterriza lejos de ti y del Orbe
     let s=null;
@@ -11048,41 +11043,48 @@ function nextWaveInPlace(){
   announce(grown?'🏝 LA ISLA CRECE · OLEADA '+wave:'OLEADA '+wave+' · NIVEL '+survLvl,'#f5c518',(bossStage?'¡Se acercan dos jefes! · ':'Sobrevive: '+toKill+' robots · ')+survTxt());
   S.wave();
 }
+/* LLEGADA ÉPICA: el núcleo de Abyssalita (el Orbe Vital) abre un PORTAL en el suelo y tu máquina sale de él.
+   El portal no se puede dañar, pero los enemigos que hay cerca notan la llegada y van a por ti mientras sales. */
 function startIntro(){
-  cine=1; cineT=0; cinePhase=0; orb=null; ship.launched=false;
+  cine=1; cineT=0; cinePhase=0; orb=null; ship.launched=true;
   player.alive=false; player.vx=player.vy=0;
-  if(introHeli){ ship.launched=true; cineFocus={x:landing.x,y:landing.y-60}; }
-  else cineFocus={x:ship.x,y:ship.y-120};
+  cineFocus={x:landing.x,y:landing.y-30};
   snapCamera(cineFocus.x,cineFocus.y);
   if(world) world.camFloor=null;
   S.horn();
 }
 function updateIntro(dt){
   cineT+=dt;
-  if(introHeli){
-    if(cinePhase===0){ cinePhase=1; callHeli(landing.x,landing.y,'orb',()=>orbLanded({x1:landing.x,y1:landing.y})); }
-    if(cinePhase===1){ const h=helis[helis.length-1]; if(h) cineFocus={x:h.x,y:h.y+20}; }
-  }
-  else if(cinePhase===0 && cineT>40){
-    cinePhase=1; ship.launched=true;
-    addLob({x0:ship.x-90,y0:ship.y,x1:landing.x,y1:landing.y,dur:62,h:200,owner:'n',kind:'orb'});
-    S.launch();
-  }
-  if(cinePhase===1){ const l=lobs.find(l=>l.kind==='orb'); if(l){ const p=lobPos(l); cineFocus={x:p.x,y:p.y-p.z*0.4}; } }
-  if(cinePhase===2 && cineT-orbLandT>55){ cinePhase=3; assemblePlayer(); }
-  if(cinePhase===3 && cineT-orbLandT>85) endIntro();
+  if(cinePhase===0 && cineT>25){ cinePhase=2; orbLandT=cineT; portalOpen(landing.x,landing.y); }
+  if(cinePhase===2 && cineT-orbLandT>65){ cinePhase=3; assemblePlayer(); portalEmerge(); }
+  if(cinePhase===3 && cineT-orbLandT>95) endIntro();
 }
-function orbLanded(l){
-  orb={x:l.x1,y:l.y1,r:14,pulse:24};
-  if(survLvl) Object.assign(orb,{kind:'orb',alive:true,hp:400,maxHp:400,radius:18,static:true});   // la base que hay que defender
-  cinePhase=2; orbLandT=cineT; cineFocus={x:orb.x,y:orb.y-40};
-  shake=Math.max(shake,8); S.respawn();
-  rings.push({x:orb.x,y:orb.y,r:10,max:110,life:30,maxLife:30,color:'#3ee67a'});
-  for(let i=0;i<20;i++){ const a=rand(0,Math.PI*2); particles.push({x:orb.x,y:orb.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,life:30,maxLife:30,color:'#3ee67a',size:3}); }
+function orbLanded(l){ portalOpen(l.x1,l.y1); cinePhase=2; orbLandT=cineT; }   // (por compatibilidad con quien lo llame)
+/* El portal se abre: anillos de energía, el suelo tiembla y se levanta una columna de luz */
+function portalOpen(x,y){
+  orb={x,y,r:14,pulse:24,t0:t};
+  shake=Math.max(shake,10); S.respawn(); S.purpleCharge();
+  for(let i=0;i<3;i++) rings.push({x,y,r:6+i*8,max:120+i*30,life:34+i*10,maxLife:34+i*10,color:i===1?'#3ee6e6':'#3ee67a'});
+  for(let i=0;i<30;i++){ const a=rand(0,Math.PI*2), d=rand(40,90); particles.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d,vx:-Math.cos(a)*2.4,vy:-Math.sin(a)*2.4,life:34,maxLife:34,color:pick(['#3ee67a','#3ee6e6','#c8fff0']),size:3}); }
+}
+/* Tu máquina sale del portal: destello, onda, y los enemigos cercanos notan tu llegada y vienen a por ti */
+function portalEmerge(){
+  if(!orb) return;
+  const p=player; orb.burst=t;
+  flashScreen('#c8fff0',0.35); shake=Math.max(shake,14); S.boom();
+  rings.push({x:p.x,y:p.y,r:10,max:150,life:26,maxLife:26,color:'#c8fff0'});
+  for(let i=0;i<24;i++){ const a=rand(0,Math.PI*2); particles.push({x:p.x,y:p.y,vx:Math.cos(a)*4,vy:Math.sin(a)*4,life:26,maxLife:26,color:pick(['#3ee67a','#3ee6e6','#ffffff']),size:3}); }
+  let n=0;
+  for(const en of enemies){
+    if(!en.alive||en.static||Math.hypot(en.x-p.x,en.y-p.y)>650) continue;
+    const r=en.def.role; if(r==='turret'||r==='structure'||r==='spawner'||r==='dummy') continue;
+    if(en.ai!=='combat'){ en.ai='hunt'; en.lastKnown={x:p.x,y:p.y}; en.aware=1; en.searchT=0; n++; }
+  }
+  if(n) popup(p.x,p.y-48,'¡HAN NOTADO TU LLEGADA!','#ff8a3a',13);
 }
 function assemblePlayer(){
   const p=player;
-  p.x=orb.x; p.y=orb.y-36; p.vx=p.vy=0; p.alive=true; p.invuln=90;
+  p.x=orb.x; p.y=orb.y+4; p.vx=p.vy=0; p.alive=true; p.invuln=90;   // sale del centro del portal
   p.body=p.aim=-Math.PI/2;
   p.hp=Math.min(p.maxHp,p.hp<=0?p.maxHp:p.hp+p.maxHp*0.25);
   if(mate&&mate.alive){ mate.x=orb.x+44; mate.y=orb.y-20; mate.vx=mate.vy=0; mate.path=null; mate.trail=[]; }
@@ -11090,8 +11092,8 @@ function assemblePlayer(){
   spawnDebris(p.x,p.y,14,'#3ee67a');
 }
 function endIntro(){
-  if(!orb) orbLanded({x1:landing.x,y1:landing.y});
-  if(!player.alive) assemblePlayer();
+  if(!orb) portalOpen(landing.x,landing.y);
+  if(!player.alive){ assemblePlayer(); portalEmerge(); }
   cine=0; cineFocus=null;
   lobs=lobs.filter(l=>l.kind!=='orb');
   if(tut){ announce('ISLA DE ENTRENAMIENTO','#f5c518','Sigue las instrucciones del panel de arriba'); return; }
@@ -11202,7 +11204,7 @@ function updateHUD(){
   setText('allyV',drones.length); setText('turV',turrets.length); setText('solV',soldiers.length);
   const following=pows.filter(pw=>pw.follow&&!pw.escort).length, escorted=pows.filter(pw=>pw.escort).length;
   setText('powLbl',survLvl?'🛡 SUPERVIVENCIA NIVEL':'⛓ REHENES A SALVO:');
-  setText('powV',survLvl?(survLvl+' ('+survTxt()+')'+(orb&&orb.maxHp?' · ORBE '+Math.max(0,Math.ceil(orb.hp/orb.maxHp*100))+'%':'')):rescued+(following?(' · +'+following+' siguiéndote'):'')+(escorted?(' · +'+escorted+' con la escolta'):''));
+  setText('powV',survLvl?(survLvl+' ('+survTxt()+')'):rescued+(following?(' · +'+following+' siguiéndote'):'')+(escorted?(' · +'+escorted+' con la escolta'):''));
   setText('wlV',weaponLvl);
   setText('comboV',combo>1?('COMBO x'+combo):'');
   setStyle('hpBar','width',clamp(p.hp/p.maxHp*100,0,100).toFixed(1)+'%');
