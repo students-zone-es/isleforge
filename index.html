@@ -824,7 +824,10 @@ function buildIsland(){
     for(let r=WR-1;r>=0;r--){ if(map[idx(c,r)]!==WATER){ if(r>lr){ lr=r; lc=c; } break; } }
   }
   const shipY=(lr+1)*TILE+105;
-  if(survLvl){ lc=Math.floor(cx); lr=Math.floor(cy)+(isBossWave(wave)?12:0)+2; }   // supervivencia: el helicóptero te deja en el centro (lejos del jefe)
+  if(survLvl){   // supervivencia: el helicóptero te deja en el BORDE SUR del cráter
+    lc=Math.floor(cx); lr=Math.floor(cy+ISLE_H(grow)*0.40*0.78)+2;
+    while(lr>Math.floor(cy)+4&&map[idx(lc,lr-2)]!==G) lr--;   // sobre tierra firme (no en la playa)
+  }
   landing={c:lc, r:lr-2, x:lc*TILE+TILE/2, y:(lr-2)*TILE+TILE/2};
   ship={x:landing.x, y:shipY, launched:false, hidden:!!survLvl};
 
@@ -846,7 +849,7 @@ function buildIsland(){
     const p=randomLand(); if(!p) break; const [c,r]=p, n=irand(4,12);
     for(let j=0;j<n;j++){ const x=c+irand(-3,3), y=r+irand(-3,3); if(free(x,y)) setTile(x,y,TREE); }
   }
-  if(survLvl) placeLavaFlows(4+Math.min(3,grow));   // la isla cráter es volcánica (p9o_lava.js)
+  if(survLvl){ buildCrater(); placeLavaFlows(4+Math.min(3,grow)); }   // la isla cráter es volcánica (p9o_lava.js)
   // Búnkeres de acero con dos entradas
   const bunkers=[];
   const nB=survLvl?0:6+(wave>3?2:0);   // supervivencia: sin búnkeres (ya no hay rehenes que guardar)
@@ -1273,6 +1276,16 @@ function paintBuiltWall(kind,hp,x,y){
 }
 /* SUPERVIVENCIA: la isla crece hacia el mar sin rehacerse. La tierra nueva trae su playa, árboles, maleza y sacos;
    lo que ya había (tus muros, torres, el Orbe...) se queda donde estaba. */
+/* CRÁTER: anillo de escombros (con 6 entradas) que separa el interior, y el fondo del cráter con tierra removida */
+function buildCrater(){
+  const gaps=[0,1,2,3,4,5].map(i=>i*Math.PI/3+Math.PI/2+0.25);
+  for(let r=0;r<WR;r++) for(let c=0;c<WC;c++){
+    const k=idx(c,r); if(map[k]!==G) continue;
+    const u=craterU(c-0.5,r-0.5), a=Math.atan2(r-islandShape.cy,c-islandShape.cx);
+    if(u>0.6&&u<0.66&&!gaps.some(g=>Math.abs(angDiff(a,g))<0.16)&&Math.hypot(c-landing.c,r-landing.r)>6) setTile(c,r,RUB);
+    else if(u<0.36&&hash2(c,r+islandShape.seed)<0.45) map[k]=SOIL;   // fondo del cráter: tierra removida
+  }
+}
 function growIslandInPlace(g){
   const S=islandShape; if(!S||g<=S.grow) return 0;
   S.grow=g; const fresh=[];
@@ -7510,15 +7523,20 @@ function addDeposit(c,r,min){
 function placeDeposits(list,o){
   depState();
   for(const min of list){
-    if(!inWorld(min)) continue;   // aún no está en el mundo
+    if(!o.any&&!inWorld(min)) continue;   // aún no está en el mundo (salvo en la isla cráter)
     const ground=o.ground||[G];
     const gr=min==='salmuera'&&ground.includes(G)?[G,SAND]:ground;
     for(let t=0;t<400;t++){
-      const c=irand(o.c0,o.c1-1), r=irand(o.r0,o.r1-1);
+      let c=irand(o.c0,o.c1-1), r=irand(o.r0,o.r1-1);
+      if(o.ring&&islandShape){   // en el cráter: busca directamente dentro de su anillo
+        const S=islandShape, a=rand(0,Math.PI*2), u=rand(o.ring[0],o.ring[1]);
+        c=Math.round(S.cx+Math.cos(a)*u*ISLE_W(S.grow)*0.42)-1; r=Math.round(S.cy+Math.sin(a)*u*ISLE_H(S.grow)*0.40)-1;
+      }
       if(!canDeposit(c,r,gr)) continue;
       if(o.avoid&&o.avoid.some(a=>Math.hypot((c+1)*TILE-a.x,(r+1)*TILE-a.y)<a.d)) continue;
       if(o.avoidRect&&c+1>=o.avoidRect[0]&&c<=o.avoidRect[2]&&r+1>=o.avoidRect[1]&&r<=o.avoidRect[3]) continue;
       if(depList.some(q=>Math.abs(q.c-c)<5&&Math.abs(q.r-r)<5)) continue;
+      if(o.ring){ const u=craterU(c,r); if(u<o.ring[0]||u>o.ring[1]) continue; }
       const d=addDeposit(c,r,min);
       if(mapG) for(let y=r;y<=r+1;y++) for(let x=c;x<=c+1;x++) paintTile(x,y);
       break;
@@ -7526,7 +7544,7 @@ function placeDeposits(list,o){
   }
   miniDirty=true;
 }
-function depositGroundKey(d){ return d.ground===FLOOR?'fl0':d.ground===SAND?'s0':'g0'; }
+function depositGroundKey(d){ return d.ground===FLOOR?'fl0':d.ground===SAND?'s0':d.ground===SOIL?(SHEET_GRASS_ERAS[era.id]?'dirt':'soil'):'g0'; }
 function hitDeposit(d,n){
   if(!d.alive) return;
   d.hp-=n; d.flash=6;
@@ -7584,8 +7602,26 @@ function seedDepositsWorld(id){
     DEPOSIT_TABLES['w'+id].forEach((list,i)=>placeDeposits(list,{r0:world.secRows[i][0],r1:world.secRows[i][1],c0:3,c1:35,ground:world.depGround||[G,FLOOR],avoid:world.starts.map(s=>({x:s.x,y:s.y,d:160}))}));
   }
 }
+/* ISLA CRÁTER (supervivencia): un fragmento del meteorito de la Abyssalita cayó aquí y su imitación convirtió la roca
+   en todos los minerales. Están por ANILLOS: cuanto más al centro, mejores (y más lejos de tu base, que está en el borde).
+   Es el único sitio donde salen los minerales que no son piedra. Al empezar cada oleada se reponen los agotados. */
+const CRATER_RINGS=[
+  {u:[0.62,0.92], list:['piedra','arena','calcita','yeso'], n:6},
+  {u:[0.36,0.62], list:['hierro','cobre','estano','talco'], n:5},
+  {u:[0,0.36],    list:['oro','fluorita','esmeralda','apatito'], n:4},
+];
+function craterU(c,r){ const S=islandShape; if(!S) return 0; const rx=ISLE_W(S.grow)*0.42, ry=ISLE_H(S.grow)*0.40; return Math.hypot((c+1-S.cx)/rx,(r+1-S.cy)/ry); }
+function seedCraterDeposits(){
+  depState();
+  for(const R of CRATER_RINGS){
+    const have=depList.filter(d=>d.alive&&R.list.includes(d.min)).length, sel=[];
+    for(let i=have;i<R.n;i++) sel.push(pick(R.list));
+    if(sel.length) placeDeposits(sel,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G,SAND,SOIL],any:true,ring:R.u,avoid:[{x:landing.x,y:landing.y,d:160}]});
+  }
+}
 function seedDepositsStage(){
   if(!mission) return;
+  if(survLvl){ seedCraterDeposits(); return; }
   const av=[{x:landing.x,y:landing.y,d:220}];
   if(mission.type==='tutorial'){
     placeDeposits(DEPOSIT_TABLES.tutorial,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],avoid:av,avoidRect:[landing.c-12,landing.r-19,landing.c+12,landing.r+1]});
@@ -10990,6 +11026,7 @@ function survApplyLevel(){
 function nextWaveInPlace(){
   wave++; survApplyLevel();
   const grown=growIslandInPlace(Math.floor((wave-1)/3));   // cada 3 oleadas la isla gana tierra al mar
+  seedCraterDeposits();   // se reponen los yacimientos agotados del cráter
   bullets=[]; voids=[]; parasites=[]; enemies=enemies.filter(e=>e.alive&&e.static);
   squads={}; voidCharging=0; alarmT=0; endgameT=0; clearT=0;
   boss=null; bossDefeated=false; bossDelay=0; bossRelay=0; dropsInAir=0;
