@@ -580,9 +580,10 @@ const G=0, RUB=1, WALL=2, WATER=3, SAND=4, BUSH=5, TREE=6, SCORCH=7, CAGE=8;
 const FLOOR=9, SOIL=10, BLD=11, DOOR=12, BRIDGE=13, ROCK=14;   // hormigón, tierra de cultivo, edificio, compuerta, puente, roca
 const BELT=15, MOLTEN=16, CONT=17;                              // cinta transportadora, metal fundido, contenedor
 const QSAND=18, WIRE=19, FIRE=20;                               // arenas movedizas, alambrada, fuego (Mundos 3-5)
-//                 G     RUB   WALL  WATER SAND  BUSH  TREE  SCOR  CAGE  FLOOR SOIL  BLD   DOOR  BRIDG ROCK  BELT  MOLT  CONT  QSAND WIRE  FIRE
-const SOLID    =[false,true, true, true, false,false,true, false,true, false,false,true, true, false,true, false,false,true, false,false,false];   // bloquea a las unidades de tierra
-const BLOCKSHOT=[false,true, true, false,false,false,true, false,true, false,false,true, true, false,true, false,false,true, false,false,false];  // bloquea balas y visión
+const LAVA=21;                                                  // lava volcánica (p9o_lava.js); no es el metal fundido
+//                 G     RUB   WALL  WATER SAND  BUSH  TREE  SCOR  CAGE  FLOOR SOIL  BLD   DOOR  BRIDG ROCK  BELT  MOLT  CONT  QSAND WIRE  FIRE  LAVA
+const SOLID    =[false,true, true, true, false,false,true, false,true, false,false,true, true, false,true, false,false,true, false,false,false,false];   // bloquea a las unidades de tierra
+const BLOCKSHOT=[false,true, true, false,false,false,true, false,true, false,false,true, true, false,true, false,false,true, false,false,false,false];  // bloquea balas y visión
 const TILE_HP={1:3,6:4,8:6,19:2};
 const DIRS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 
@@ -798,6 +799,7 @@ function inIsland(S,c,r,g){
   return dx*dx+dy*dy<rr*rr && c>=3 && r>=3 && c<WC-3 && r<WR-9;
 }
 function buildIsland(){
+  lavaOn=false;
   const grow=Math.floor((wave-1)/3);
   // supervivencia: el mapa ya tiene su tamaño máximo (mar alrededor) y la isla crece dentro con las oleadas
   WC=survLvl?ISLE_W(99):ISLE_W(grow); WR=survLvl?ISLE_H(99):ISLE_H(grow);
@@ -844,6 +846,7 @@ function buildIsland(){
     const p=randomLand(); if(!p) break; const [c,r]=p, n=irand(4,12);
     for(let j=0;j<n;j++){ const x=c+irand(-3,3), y=r+irand(-3,3); if(free(x,y)) setTile(x,y,TREE); }
   }
+  if(survLvl) placeLavaFlows(4+Math.min(3,grow));   // la isla cráter es volcánica (p9o_lava.js)
   // Búnkeres de acero con dos entradas
   const bunkers=[];
   const nB=survLvl?0:6+(wave>3?2:0);   // supervivencia: sin búnkeres (ya no hay rehenes que guardar)
@@ -1169,10 +1172,17 @@ function tileSpr(key){
       if(vert){ pr(g,0,0,1,10,'#f5c518'); pr(g,9,0,1,10,'#f5c518'); for(let y=0;y<10;y+=4){ pr(g,0,y,1,2,'#1a1a1a'); pr(g,9,y+2,1,2,'#1a1a1a'); } }
       else { pr(g,0,0,10,1,'#f5c518'); pr(g,0,9,10,1,'#f5c518'); for(let x=0;x<10;x+=4){ pr(g,x,0,2,1,'#1a1a1a'); pr(g,x+2,9,2,1,'#1a1a1a'); } }
       break; }
-    case 'molten0': case 'molten1': {   // metal fundido con costra
-      pr(g,0,0,10,10,'#c8420a');
-      (key==='molten0'?[[1,1,3,2],[6,4,3,2],[2,7,2,2]]:[[5,1,3,2],[1,5,2,3],[6,7,3,2]]).forEach(([x,y,w,h])=>pr(g,x,y,w,h,'#5a1a08'));
-      (key==='molten0'?[[5,2],[3,5],[8,8],[1,9]]:[[2,2],[8,4],[4,8]]).forEach(([x,y])=>pr(g,x,y,1,1,'#ffd04a'));
+    case 'molten0': case 'molten1': {   // METAL FUNDIDO: líquido brillante, amarillo-naranja, con reflejos claros
+      pr(g,0,0,10,10,'#ff8a1a');
+      (key==='molten0'?[[1,1,4,2],[5,5,4,2],[1,7,3,2]]:[[4,1,4,2],[1,4,3,2],[5,7,4,2]]).forEach(([x,y,w,h])=>pr(g,x,y,w,h,'#ffc24a'));
+      (key==='molten0'?[[2,1,2,1],[6,5,2,1],[2,7,1,1]]:[[5,1,2,1],[2,4,1,1],[6,7,2,1]]).forEach(([x,y,w,h])=>pr(g,x,y,w,h,'#fff0b0'));
+      (key==='molten0'?[[0,4,3,1],[7,0,3,1],[4,9,4,1]]:[[0,9,3,1],[7,3,3,1],[3,0,2,1]]).forEach(([x,y,w,h])=>pr(g,x,y,w,h,'#d4520a'));
+      break; }
+    case 'lava0': case 'lava1': {   // LAVA: costra de roca negra con grietas al rojo vivo
+      pr(g,0,0,10,10,'#2a1210');
+      (key==='lava0'?[[0,0,4,3],[5,1,5,3],[1,5,4,4],[6,6,4,3]]:[[0,1,5,3],[6,0,4,4],[0,6,3,4],[4,5,5,4]]).forEach(([x,y,w,h])=>pr(g,x,y,w,h,'#3a1a14'));
+      (key==='lava0'?[[4,0,1,5],[0,4,6,1],[5,4,1,6],[5,5,5,1]]:[[5,0,1,5],[0,4,10,1],[3,5,1,5]]).forEach(([x,y,w,h])=>pr(g,x,y,w,h,'#d8320a'));
+      (key==='lava0'?[[4,2],[2,4],[5,7],[8,5]]:[[5,2],[7,4],[3,7]]).forEach(([x,y])=>pr(g,x,y,1,1,'#ff8c2a'));
       break; }
     case 'cont0': case 'cont1': case 'cont2': case 'cont3': {   // contenedor de carga
       const cc=CONT_COLS[+key[4]];
@@ -1207,6 +1217,7 @@ function tileKey(c,r){
     case ROCK: { const dp=depState().at.get(k); key=dp?depositGroundKey(dp):(h<0.5?'rock0':'rock1'); break; }   // bajo un yacimiento: el suelo (la roca se dibuja aparte)
     case BELT: key='belt'+((world&&world.belt&&world.belt[k])||1); break;
     case MOLTEN: key=h<0.5?'molten0':'molten1'; break;
+    case LAVA: key=h<0.5?'lava0':'lava1'; break;
     case CONT: key='cont'+((world&&world.contCol&&world.contCol[k])||0); break;
     default: key=extraTileKey(v,c,r,h);
   }
@@ -1292,7 +1303,7 @@ function buildMini(){
   const cols={}; const put=(k,hex)=>cols[k]=hexRgb(hex);
   put(G,e.grass[1]); put(SAND,e.sand); put(WATER,e.waterDeep); put(BUSH,e.bush); put(TREE,shade(e.tree,-0.2));
   put(RUB,e.rubble); put(WALL,'#9aa0a8'); put(SCORCH,'#7a3aa8'); put(CAGE,'#ffd76e');
-  put(BELT,'#8a7a3a'); put(MOLTEN,'#ff6a1a'); put(CONT,'#b0503a'); put(QSAND,'#b08a50'); put(WIRE,'#6a6a6a'); put(FIRE,'#ff7a2a');
+  put(BELT,'#8a7a3a'); put(MOLTEN,'#ff6a1a'); put(CONT,'#b0503a'); put(QSAND,'#b08a50'); put(WIRE,'#6a6a6a'); put(FIRE,'#ff7a2a'); put(LAVA,'#8a1a08');
   put(FLOOR,e.floor||'#8f949b'); put(SOIL,e.soil||'#6b4a2b'); put(BLD,'#d8d0c0'); put(DOOR,'#f5c518'); put(BRIDGE,'#8a5a2b'); put(ROCK,e.rock||'#77706a');
   for(let k=0;k<WC*WR;k++){ const cc=cols[map[k]]; d[k*4]=cc[0]; d[k*4+1]=cc[1]; d[k*4+2]=cc[2]; d[k*4+3]=255; }
   for(const [k,dp] of depState().at){ if(!dp.alive) continue; const cc=hexRgb(MINERALS[dp.min].col); d[k*4]=cc[0]; d[k*4+1]=cc[1]; d[k*4+2]=cc[2]; }   // yacimientos en el minimapa
@@ -1414,9 +1425,9 @@ function lineClear(x0,y0,x1,y1){
   return true;
 }
 function lineHasTile(x0,y0,x1,y1,type){
-  if(!world||(!world.belt&&!world.haz)) return false;   // metal fundido (Mundo 2), fuego y arenas movedizas (Mundos 3-4)
+  if(!lavaOn&&(!world||(!world.belt&&!world.haz))) return false;   // metal fundido (Mundo 2), fuego y arenas movedizas (Mundos 3-4), lava
   const d=Math.hypot(x1-x0,y1-y0), n=Math.ceil(d/12);
-  for(let i=1;i<=n;i++){ const k=i/n, v=tileAt(x0+(x1-x0)*k,y0+(y1-y0)*k); if(v===type||(type===MOLTEN&&(v===FIRE||v===QSAND))) return true; }
+  for(let i=1;i<=n;i++){ const k=i/n, v=tileAt(x0+(x1-x0)*k,y0+(y1-y0)*k); if(v===type||(type===MOLTEN&&(v===FIRE||v===QSAND||(v===LAVA&&!pfLegs)))) return true; }
   return false;
 }
 function pathClear(x0,y0,x1,y1,r){
@@ -1479,8 +1490,8 @@ function findPath(sx,sy,tx,ty,maxIter,extra){   // extra: coste añadido por cas
       if(nc<0||nr<0||nc>=WC||nr>=WR) continue;
       const ni=nr*WC+nc;
       if(SOLID[map[ni]]||PF.closed[ni]===st) continue;
-      if(dc&&dr&&(SOLID[map[cr*WC+nc]]||SOLID[map[nr*WC+cc]])) continue;
-      const ng=PF.g[cur]+(dc&&dr?1.414:1)+(map[ni]===BUSH?0.15:0)+(map[ni]===MOLTEN||map[ni]===FIRE||map[ni]===QSAND?8:0)+(map[ni]===WIRE?3:0)+(extra?extra[ni]:0);
+      if(dc&&dr&&(SOLID[map[cr*WC+nc]]||SOLID[map[nr*WC+cc]]||(!pfLegs&&(map[cr*WC+nc]===LAVA||map[nr*WC+cc]===LAVA)))) continue;   // sin cortar esquinas pegadas a muros (ni a la lava, si no salta)
+      const ng=PF.g[cur]+(dc&&dr?1.414:1)+(map[ni]===BUSH?0.15:0)+(map[ni]===MOLTEN||map[ni]===FIRE||map[ni]===QSAND?8:0)+(map[ni]===LAVA?(pfLegs?2.5:40):0)+(map[ni]===WIRE?3:0)+(extra?extra[ni]:0);
       if(PF.seen[ni]!==st||ng<PF.g[ni]){
         PF.seen[ni]=st; PF.g[ni]=ng; PF.came[ni]=cur;
         heapPush(hn,hf,ni,ng+octile(nc,nr,tc,tr));
@@ -1494,10 +1505,20 @@ function findPath(sx,sy,tx,ty,maxIter,extra){   // extra: coste añadido por cas
   return path;
 }
 /* Mueve una unidad hacia (tx,ty): en línea recta si puede, si no, sigue un camino A* */
+let pfLegs=false;
+/* ¿Hay peligro (metal fundido, fuego, arenas, lava) en el camino de u hasta (x1,y1)? Mira el centro y los dos costados */
+function bodyHazard(u,x1,y1){
+  const a=Math.atan2(y1-u.y,x1-u.x), ox=-Math.sin(a)*u.radius*0.85, oy=Math.cos(a)*u.radius*0.85;
+  return lineHasTile(u.x,u.y,x1,y1,MOLTEN)||lineHasTile(u.x+ox,u.y+oy,x1+ox,y1+oy,MOLTEN)||lineHasTile(u.x-ox,u.y-oy,x1-ox,y1-oy,MOLTEN);
+}   // mientras busca camino una unidad con piernas: la lava estrecha se puede saltar
 function steerTo(u,tx,ty,dt,k){
+  pfLegs=u.kind==='enemy'&&hasLegs(u)&&!(u.lavaAvoidT>0);
+  const r=steerTo0(u,tx,ty,dt,k); pfLegs=false; return r;
+}
+function steerTo0(u,tx,ty,dt,k){
   const d=Math.hypot(tx-u.x,ty-u.y);
   if(d<8) return true;
-  if(u.air || (d<460 && pathClear(u.x,u.y,tx,ty,u.radius) && !lineHasTile(u.x,u.y,tx,ty,MOLTEN))){ u.path=null; accelerate(u,tx-u.x,ty-u.y,dt,k); return false; }
+  if(u.air || (d<460 && pathClear(u.x,u.y,tx,ty,u.radius) && !bodyHazard(u,tx,ty))){ u.path=null; accelerate(u,tx-u.x,ty-u.y,dt,k); return false; }
   u.pathT=(u.pathT||0)-dt;
   const moved=Math.hypot((u.pathTX||-9999)-tx,(u.pathTY||-9999)-ty)>60;
   if((!u.path||u.pathT<=0||moved) && pfBudget>0){
@@ -1508,7 +1529,7 @@ function steerTo(u,tx,ty,dt,k){
     let look=0;
     while(u.pathI<u.path.length-1 && look<3){
       const nx=u.path[u.pathI+1];
-      if(pathClear(u.x,u.y,nx.x,nx.y,u.radius)) u.pathI++; else break;
+      if(pathClear(u.x,u.y,nx.x,nx.y,u.radius)&&!bodyHazard(u,nx.x,nx.y)) u.pathI++; else break;   // no ataja por encima de peligros (ni rozándolos)
       look++;
     }
     const wp=u.path[u.pathI];
@@ -1521,7 +1542,7 @@ function randomWalkable(cx,cy,R){
   for(let i=0;i<16;i++){
     const a=rand(0,Math.PI*2), d=rand(R*0.25,R);
     const c=Math.floor((cx+Math.cos(a)*d)/TILE), r=Math.floor((cy+Math.sin(a)*d)/TILE);
-    if(!inB(c,r)||SOLID[map[idx(c,r)]]||map[idx(c,r)]===MOLTEN||map[idx(c,r)]===FIRE||map[idx(c,r)]===QSAND) continue;
+    if(!inB(c,r)||SOLID[map[idx(c,r)]]||map[idx(c,r)]===MOLTEN||map[idx(c,r)]===FIRE||map[idx(c,r)]===QSAND||map[idx(c,r)]===LAVA) continue;
     return {x:c*TILE+TILE/2, y:r*TILE+TILE/2};
   }
   return null;
@@ -1530,7 +1551,7 @@ function stuckCheck(u,dt){
   u.stT=(u.stT||0)+dt;
   if(u.stT>60){
     const mv=Math.hypot(u.x-(u.stX||0),u.y-(u.stY||0));
-    if(mv<4 && u.wantMove){
+    if(mv<4 && u.wantMove && !u.turnInPlace){
       u.path=null; u.pathT=0;
       const a=rand(0,Math.PI*2); u.vx+=Math.cos(a)*1.6; u.vy+=Math.sin(a)*1.6;
       if(u.ai==='patrol'||u.ai==='search') u.wp=null;
@@ -2994,8 +3015,11 @@ function updateEnemy(en,dt){
         const want=Math.atan2(en.goY,en.goX); let diff=angDiff(en.angle,want), dir=1;
         if(Math.abs(diff)>2.4){ diff=angDiff(en.angle,want+Math.PI); dir=-1; }
         const turn=(d.look==='tank'?0.045:0.08)*dt; en.angle+=clamp(diff,-turn,turn);
-        const v=Math.min(sp,en.speedMax)*Math.max(0,Math.cos(diff))*dir*(dir<0?0.6:1);
+        let v=Math.min(sp,en.speedMax)*Math.max(0,Math.cos(diff))*dir*(dir<0?0.6:1);
+        const fa=en.angle+(dir<0?Math.PI:0), ahead=en.radius+12;
+        if(tileAt(en.x+Math.cos(fa)*ahead,en.y+Math.sin(fa)*ahead)===LAVA) v=0;   // lava justo delante: frena y gira sobre sí mismo
         en.vx=Math.cos(en.angle)*v; en.vy=Math.sin(en.angle)*v;
+        en.turnInPlace=Math.abs(v)<0.05;   // girando en el sitio: no está atascado
       } else { const fx0=Math.cos(en.angle), fy0=Math.sin(en.angle), al=en.vx*fx0+en.vy*fy0; en.vx=fx0*al; en.vy=fy0*al; }
     }
     const fx=Math.cos(en.angle), fy=Math.sin(en.angle), along=en.vx*fx+en.vy*fy;
@@ -3008,6 +3032,8 @@ function updateEnemy(en,dt){
     if(en.ai!=='combat') en.aim=en.angle;
   }
   en.walk+=sp*dt*0.13;
+  if(en.lavaAvoidT>0) en.lavaAvoidT-=dt;
+  if(lavaJumpUpdate(en,dt)) return;   // saltando un río de lava (p9o_lava.js)
   const hit=moveUnit(en,dt);
   if(en.ramT>0 && hit){
     if(hit.tv===RUB||hit.tv===TREE||hit.tv===CAGE) destroyTile(hit.c,hit.r,false);
@@ -3321,6 +3347,7 @@ function startRam(en,windup){ en.windup=windup; S.rev(); }
 function updateRam(en,tg,dt){
   // devuelve true mientras está ocupado embistiendo
   if(en.ramT>0){
+    if(lavaRamBrake(en)) return true;   // ¡freno de mano antes de caer en la lava! (pocas veces)
     en.ramT-=dt;
     en.vx=Math.cos(en.ramA)*5.4; en.vy=Math.sin(en.ramA)*5.4; en.angle=en.ramA;
     if(Math.random()<0.5) particles.push({x:en.x-Math.cos(en.ramA)*14,y:en.y-Math.sin(en.ramA)*14,vx:0,vy:0,life:26,maxLife:26,color:'#666',size:4,smoke:true});
@@ -3341,7 +3368,7 @@ function updateRam(en,tg,dt){
     en.windup-=dt; en.vx*=0.85; en.vy*=0.85;
     en.angle=turnTo(en.angle,Math.atan2(tg.y-en.y,tg.x-en.x),0.09*dt); en.aim=en.angle;
     if(Math.random()<0.4) particles.push({x:en.x-Math.cos(en.angle)*14,y:en.y-Math.sin(en.angle)*14,vx:rand(-0.5,0.5),vy:rand(-0.5,0.5),life:20,maxLife:20,color:'#555',size:4,smoke:true});
-    if(en.windup<=0){ en.ramA=en.angle; en.ramT=55; en.ramHits=[]; }
+    if(en.windup<=0){ en.ramA=en.angle; en.ramT=55; en.ramHits=[]; en.ramBrake=null; }
     return true;
   }
   return false;
@@ -4701,6 +4728,7 @@ function render(){
   ctx.drawImage(mapCanvas,srcX,srcY,W,H,srcX,srcY,W,H);
   drawWaterFx(cx,cy);
   drawFactoryFx(cx,cy);
+  drawLavaFx(cx,cy);
   drawWorldGround(cx,cy);
   nodes.forEach(drawNode);
   drawShip();
@@ -5924,7 +5952,7 @@ function spawnEncounter(e){
 function worldDropSpot(px,py){
   const c=Math.floor((px!=null?px:cam.x+W/2)/TILE), r=Math.floor((py!=null?py:cam.y+H-120)/TILE);
   let nb=[c,r];
-  const bad=(cc,rr)=>{ const v=tileAtC(cc,rr); return SOLID[v]||v===BRIDGE||v===MOLTEN||v===BELT||v===FIRE||v===QSAND||v===WIRE; };
+  const bad=(cc,rr)=>{ const v=tileAtC(cc,rr); return SOLID[v]||v===BRIDGE||v===MOLTEN||v===BELT||v===FIRE||v===QSAND||v===WIRE||v===LAVA; };
   if(bad(c,r)){
     nb=null;
     for(let d=1;d<=10&&!nb;d++) for(let y=-d;y<=d&&!nb;y++) for(let x=-d;x<=d&&!nb;x++){
@@ -7466,7 +7494,7 @@ function canDeposit(c,r,ground){
     if(!inB(x,y)) return false;
     const v=map[idx(x,y)], inner=x>=c&&x<=c+1&&y>=r&&y<=r+1;
     if(inner){ if(!ground.includes(v)||depAt.has(idx(x,y))) return false; }
-    else if(SOLID[v]||v===MOLTEN||v===BELT) return false;   // alrededor tiene que quedar sitio para pasar
+    else if(SOLID[v]||v===MOLTEN||v===BELT||v===LAVA) return false;   // alrededor tiene que quedar sitio para pasar
   }
   return true;
 }
@@ -9868,6 +9896,7 @@ function nightLights(){
   for(const tu of turrets) if(tu.alive) L.push([tu.x,tu.y,50,0.7]);
   for(const d of drones) if(d.alive) L.push([d.x,d.y,40,0.6]);
   if(boss&&boss.alive) L.push([boss.x,boss.y,90,0.6]);   // el reactor del jefe brilla
+  lavaLights(L);   // la lava alumbra de noche
   return L;
 }
 /* Se dibuja en coordenadas de pantalla, encima del mundo y del clima */
@@ -10071,6 +10100,110 @@ function renderInterior(){
   ctx.restore();
   if(interior.def.dark){ drawDark(cx,cy,1.5,[[human.x,human.y,110*dreadLightK(),1]]); drawWatchers(cx,cy); }   // minas: casi negro, solo ves lo que alumbras
   drawAnnounceOnly();
+}
+/* ===================== LAVA =====================
+   Casilla LAVA (volcánica): costra negra de roca con grietas al rojo que laten despacio. No es el METAL FUNDIDO de la
+   fábrica (MOLTEN: metal líquido brillante). Quema más fuerte que el metal y de noche da luz.
+   · Los enemigos con PIERNAS saltan ríos de lava de hasta 2 casillas; si son más anchos, buscan otro camino.
+   · Los VEHÍCULOS (tanques, motos, embestidores) la esquivan al buscar ruta.
+   · Si embisten y ven que van a caer en lava, a veces (pocas: 15%) tiran del freno de mano; si no, se la comen.
+   En supervivencia la isla tiene coladas de lava (placeLavaFlows); en el resto de mapas, solo si alguien la pone. */
+const LAVA_JUMP_MAX=2, LAVA_BRAKE_P=0.15;
+let lavaTickT=0, lavaWarnT=0, lavaOn=false;   // lavaOn: este mapa tiene lava (activa la comprobación de caminos)
+
+function isVehicle(d){ return !!(d.tank||d.drive||d.role==='ram'||d.role==='raider'||d.look==='car'); }
+function hasLegs(en){ const d=en.def; return !d.air&&!isVehicle(d)&&!en.static&&!['turret','structure','spawner','dummy','sniper'].includes(d.role); }
+
+/* Coladas de lava (supervivencia): ríos serpenteantes de 1, 2 o 3 casillas de ancho, lejos de donde aterrizas */
+function placeLavaFlows(n){
+  lavaOn=true;
+  for(let i=0;i<n;i++){
+    for(let tries=0;tries<30;tries++){
+      let c=irand(6,WC-7), r=irand(6,WR-10);
+      if(Math.hypot(c-landing.c,r-landing.r)<14||map[idx(c,r)]!==G) continue;
+      const w=pick([1,1,2,2,3]), len=irand(10,20); let a=rand(0,Math.PI*2);
+      for(let s=0;s<len;s++){
+        for(let y=0;y<w;y++) for(let x=0;x<w;x++){
+          const cc=c+x, rr=r+y; if(!inB(cc,rr)) continue;
+          const v=map[idx(cc,rr)];
+          if((v===G||v===BUSH||v===TREE||v===SCORCH)&&Math.hypot(cc-landing.c,rr-landing.r)>=12) setTile(cc,rr,LAVA);
+        }
+        a+=rand(-0.6,0.6); c=Math.round(c+Math.cos(a)); r=Math.round(r+Math.sin(a));
+        if(!inB(c,r)||map[idx(c,r)]===WATER) break;
+      }
+      break;
+    }
+  }
+}
+
+/* Daño de la lava a lo que pisa el suelo (no a lo que vuela ni a quien va saltando) */
+function updateLava(dt){
+  if(lavaWarnT>0) lavaWarnT-=dt;
+  if((lavaTickT-=dt)>0) return;
+  lavaTickT=8;
+  const onLava=u=>tileAt(u.x,u.y)===LAVA;
+  const fx=u=>{ for(let i=0;i<3;i++) particles.push({x:u.x+rand(-8,8),y:u.y+rand(-4,6),vx:rand(-0.5,0.5),vy:rand(-2.2,-0.6),life:20,maxLife:20,color:pick(['#ff4a1a','#ff8c2a','#2a0f0a']),size:3}); };
+  const p=player;
+  if(p.alive&&!(p.launchT>0)&&onLava(p)){ damagePlayer(7); fx(p); if(lavaWarnT<=0){ popup(p.x,p.y-30,'¡LAVA!','#ff4a1a',16); lavaWarnT=120; } }
+  for(const en of enemies) if(en.alive&&!en.air&&!en.static&&!(en.leapZ>0)&&onLava(en)){ en.hp-=6; en.flash=4; en.hurtT=t; fx(en); if(en.hp<=0) killEnemy(en,{}); }
+  for(const u of friendlies()) if(!u.air&&u!==orb&&onLava(u)){ hurtFriendly(u,5); fx(u); }
+}
+
+/* SALTO de lava para los enemigos con piernas. Devuelve true mientras están en el aire (no se mueven por sí mismos). */
+function lavaJumpUpdate(en,dt){
+  const J=en.lavaJ;
+  if(J){
+    J.t+=dt; const k=Math.min(1,J.t/J.dur);
+    en.x=lerp(J.sx,J.ex,k); en.y=lerp(J.sy,J.ey,k); en.leapZ=Math.sin(k*Math.PI)*(18+J.n*8); en.vx=en.vy=0;
+    if(k>=1){ en.lavaJ=null; en.leapZ=0; spawnDebris(en.x,en.y,4,'#6a5a4a'); }
+    return true;
+  }
+  if(!hasLegs(en)) return false;
+  const sp=Math.hypot(en.vx,en.vy); if(sp<0.4) return false;
+  const a=Math.atan2(en.vy,en.vx), ux=Math.cos(a), uy=Math.sin(a);
+  if(tileAt(en.x+ux*(en.radius+8),en.y+uy*(en.radius+8))!==LAVA) return false;
+  // mide el río en pasos cortos (en diagonal una casilla puede medir más de 30 px)
+  const d0=en.radius+8; let d=d0;
+  while(d-d0<=LAVA_JUMP_MAX*TILE*1.45&&tileAt(en.x+ux*d,en.y+uy*d)===LAVA) d+=5;
+  const width=d-d0, n=Math.ceil(width/TILE), land=d+en.radius+4, lx=en.x+ux*land, ly=en.y+uy*land, lv=tileAt(lx,ly);
+  const safe=v=>!SOLID[v]&&v!==LAVA&&v!==WATER;
+  if(width<=LAVA_JUMP_MAX*TILE*1.42&&safe(lv)&&safe(tileAt(lx+ux*8,ly+uy*8))){
+    en.lavaJ={sx:en.x,sy:en.y,ex:lx,ey:ly,t:0,dur:16+n*6,n}; S.rev();
+    return true;
+  }
+  // demasiado ancha para saltar: se para y busca otro camino (durante un rato evita la lava como los vehículos)
+  en.vx*=0.2; en.vy*=0.2; en.path=null; en.pathT=0; en.lavaAvoidT=180;
+  return false;
+}
+
+/* EMBESTIDA hacia la lava: decide al empezar si este embestidor frenará (pocas veces) y lo comprueba cada fotograma */
+function lavaRamBrake(en){
+  if(en.ramBrake==null) en.ramBrake=Math.random()<LAVA_BRAKE_P;
+  const ux=Math.cos(en.ramA), uy=Math.sin(en.ramA);
+  let ahead=false; for(const d of [en.radius+10,en.radius+30,en.radius+50]) if(tileAt(en.x+ux*d,en.y+uy*d)===LAVA) ahead=true;
+  if(!ahead||!en.ramBrake) return false;
+  en.ramT=0; en.ramBrake=null; en.atkCd=160; en.vx*=0.1; en.vy*=0.1; en.stun=Math.max(en.stun||0,25);
+  popup(en.x,en.y-26,'¡FRENAZO!','#ffd76e',13); S.stomp();
+  for(let i=0;i<10;i++) particles.push({x:en.x-ux*12+rand(-10,10),y:en.y-uy*12+rand(-10,10),vx:-ux*rand(0.5,1.5),vy:-uy*rand(0.5,1.5),life:30,maxLife:30,color:'#555',size:5,smoke:true});
+  return true;
+}
+
+/* Brillo de la lava: las grietas laten y saltan burbujas de vez en cuando (coordenadas del mundo) */
+function drawLavaFx(cx,cy){
+  const c0=Math.max(0,Math.floor(cx/TILE)), c1=Math.min(WC-1,Math.floor((cx+W)/TILE));
+  const r0=Math.max(0,Math.floor(cy/TILE)), r1=Math.min(WR-1,Math.floor((cy+H)/TILE));
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    if(map[r*WC+c]!==LAVA) continue;
+    ctx.fillStyle='rgba(255,70,20,'+(0.12+0.1*Math.sin(t*0.03+c*0.9+r*1.7)).toFixed(3)+')'; ctx.fillRect(c*TILE,r*TILE,TILE,TILE);
+    if(hash2(c,r+Math.floor(t/26))<0.06){ ctx.fillStyle='#ff8c2a'; ctx.beginPath(); ctx.arc(c*TILE+hash2(r,c)*24+3,r*TILE+hash2(c+5,r)*24+3,2+hash2(c,r)*2,0,Math.PI*2); ctx.fill(); }
+  }
+}
+/* De noche la lava alumbra: luces débiles sobre las casillas de lava cercanas a la pantalla (máx. 40) */
+function lavaLights(L){
+  const c0=Math.max(0,Math.floor(cam.x/TILE)-2), c1=Math.min(WC-1,Math.floor((cam.x+W)/TILE)+2);
+  const r0=Math.max(0,Math.floor(cam.y/TILE)-2), r1=Math.min(WR-1,Math.floor((cam.y+H)/TILE)+2);
+  let n=0;
+  for(let r=r0;r<=r1&&n<40;r+=2) for(let c=c0;c<=c1&&n<40;c+=2) if(map[r*WC+c]===LAVA){ L.push([c*TILE+15,r*TILE+15,46,0.55]); n++; }
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
@@ -11107,6 +11240,7 @@ function step(dt){
   updatePlayer(dt);
   updateSpawning(dt);
   updateEnemies(dt);
+  updateLava(dt);
   if(world) updateWorld(dt);
   updateHelis(dt);
   if(boss){ bossDmgK=boss.dmgK||1; updateBoss(dt); bossDmgK=1; }
