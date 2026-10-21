@@ -3083,8 +3083,10 @@ function turretAI(en,dt){
     // si no te ve pero le han disparado, gira hacia donde vino el disparo y contesta
     const tx=en.seen?player.x:en.lastKnown.x, ty=en.seen?player.y:en.lastKnown.y, want=Math.atan2(ty-en.y,tx-en.x);
     en.aim=turnTo(en.aim,want,(en.seen?0.07:0.1)*dt);
-    if(Math.abs(angDiff(en.aim,want))<0.2 && en.fireCd<=0 && canAttack(en)){ en.burst=4; en.burstT=0; en.fireCd=rand(80,115); }
-  } else en.aim+=0.012*dt;
+    en.clearShot=lineClear(en.x,en.y,tx,ty);   // sabe dónde estás, pero si hay una pared en medio no malgasta balas contra ella
+    if(en.clearShot && Math.abs(angDiff(en.aim,want))<0.2 && en.fireCd<=0 && canAttack(en)){ en.burst=4; en.burstT=0; en.fireCd=rand(80,115); }
+  } else { en.aim+=0.012*dt; en.clearShot=false; }
+  if(en.burst>0&&!en.clearShot) en.burst=0;   // perdió la línea de tiro a mitad de ráfaga
   if(en.burst>0){
     en.burstT-=dt;
     if(en.burstT<=0){
@@ -10778,11 +10780,7 @@ function drawMenuScene(){
 function newRun(){ resetRun(); wave=1; startStage(); }
 function startStage(){
   if(mission&&mission.type==='arch'&&wave>1) weatherMaybeChange('arch',0.45);   // cada isla puede traer otro tiempo
-  if(mission&&mission.type==='arch'){   // SUPERVIVENCIA: tu máquina sube de nivel con la isla (el arma, cada 3 islas: ya no hay rehenes)
-    survLvl=wave; const k=survK('tu')/(player.survK||1); player.survK=survK('tu');
-    player.maxHp=Math.round(player.maxHp*k); player.hp*=k; player.dmgMul*=k;
-    weaponLvl=Math.max(weaponLvl,Math.min(4,1+Math.floor((wave-1)/3)));
-  }
+  if(mission&&mission.type==='arch') survApplyLevel();
   // SUPERVIVENCIA: tus torretas, soldados y drones vivos te acompañan a la siguiente isla
   const keep=(mission&&mission.type==='arch'&&wave>1)?[...turrets,...soldiers,...drones].filter(u=>u.alive):[];
   era=eraForWave(wave);
@@ -10823,6 +10821,37 @@ function carryDefenses(keep){
     (u.kind==='turret'?turrets:u.kind==='drone'?drones:soldiers).push(u);
   });
   if(keep.length) setTimeout(()=>{ if(state==='playing') popup(landing.x,landing.y-60,'🛡 '+keep.length+' DEFENSAS TE SIGUEN','#3ee6e6',13); },2500);
+}
+/* SUPERVIVENCIA: tu máquina sube de nivel con la oleada (el arma, cada 3 oleadas: ya no hay rehenes) */
+function survApplyLevel(){
+  survLvl=wave; const k=survK('tu')/(player.survK||1); player.survK=survK('tu');
+  player.maxHp=Math.round(player.maxHp*k); player.hp*=k; player.dmgMul*=k;
+  weaponLvl=Math.max(weaponLvl,Math.min(4,1+Math.floor((wave-1)/3)));
+}
+/* SUPERVIVENCIA CONTINUA: al superar una oleada NO se rehace la isla. Sigues donde estabas, con tus muros, torres,
+   aliados y el Orbe (que se repara un 30%), y la siguiente oleada cae sobre el mismo mapa. */
+function nextWaveInPlace(){
+  wave++; survApplyLevel();
+  bullets=[]; voids=[]; parasites=[]; enemies=enemies.filter(e=>e.alive&&e.static);
+  squads={}; voidCharging=0; alarmT=0; endgameT=0; clearT=0;
+  boss=null; bossDefeated=false; bossDelay=0; bossRelay=0; dropsInAir=0;
+  document.getElementById('bossBarWrap').style.display='none';
+  if(orb&&orb.maxHp) orb.hp=Math.min(orb.maxHp,orb.hp+orb.maxHp*0.3);
+  bossStage=isBossWave(wave);
+  if(bossStage){   // el jefe aterriza lejos de ti y del Orbe
+    let s=null;
+    for(let i=0;i<40&&!s;i++){ const a=rand(0,Math.PI*2), d=rand(380,520), q=randomWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,60); if(q&&(!orb||Math.hypot(q.x-orb.x,q.y-orb.y)>300)) s=q; }
+    if(s) arena={x:s.x,y:s.y,c:Math.floor(s.x/TILE),r:Math.floor(s.y/TILE)};
+    bossDelay=150;
+  }
+  toKill=bossStage?0:Math.min(40,7+wave*2);
+  maxAlive=Math.min(18,8+wave);
+  spawned=0; killed=0; failsafe=0;
+  spawnTimer=Math.max(150,380-wave*16);
+  if(!bossStage){ for(let i=0;i<3&&spawned<toKill;i++) spawnSquad(); }
+  state='playing';
+  announce('OLEADA '+wave+' · NIVEL '+survLvl,'#f5c518',(bossStage?'¡Se acercan dos jefes! · ':'Sobrevive: '+toKill+' robots · ')+survTxt());
+  S.wave();
 }
 function startIntro(){
   cine=1; cineT=0; cinePhase=0; orb=null; ship.launched=false;
@@ -10897,13 +10926,14 @@ function checkStageClear(dt){
     if(follow.length){ follow.forEach(p=>p.alive=false); rescued+=follow.length; save.rescuedTotal+=follow.length; score+=300*follow.length; runWork+=3*follow.length; }
     while(weaponLvl<4 && Math.floor(rescued/4)>=weaponLvl) weaponLvl++;
     if(tut){ tut=null; renderTutBox(); announce('¡ENTRENAMIENTO SUPERADO!','#3ee67a','Vuelves a la base...'); }
+    else if(survLvl) announce('¡OLEADA SUPERADA!','#3ee67a','Prepárate: la siguiente cae aquí mismo');
     else announce('¡ISLA LIBERADA!','#3ee67a',follow.length?('+'+follow.length+' rehenes evacuados'):'');
     S.upgrade();
   }
 }
 function openLevelUp(){
   state='levelup';
-  document.getElementById('luStats').textContent=survLvl?('Superviviste al nivel '+survLvl+' · Arma nivel '+weaponLvl+' · Elige una anomalía para el nivel '+(survLvl+1)):('Rehenes rescatados: '+rescued+' · Arma nivel '+weaponLvl+' · Elige una anomalía para la siguiente isla');
+  document.getElementById('luStats').textContent=survLvl?('Superaste la oleada '+survLvl+' · Arma nivel '+weaponLvl+' · Elige una anomalía para la oleada '+(survLvl+1)):('Rehenes rescatados: '+rescued+' · Arma nivel '+weaponLvl+' · Elige una anomalía para la siguiente isla');
   const row=document.getElementById('cardRow'); row.innerHTML='';
   let pool=[...RUN_UPGRADE_POOL];
   if(mate&&mate.alive&&mate.lvl>=2&&mate.hp>=mate.maxHp) pool=pool.filter(o=>o.id!=='mate');
@@ -10914,7 +10944,8 @@ function openLevelUp(){
     div.onclick=()=>{
       o.apply(player); S.upgrade();
       document.getElementById('scrLevelUp').classList.add('hidden');
-      wave++; state='playing'; startStage();
+      if(survLvl) nextWaveInPlace();   // supervivencia: sigue en el mismo mapa
+      else { wave++; state='playing'; startStage(); }
     };
     row.appendChild(div);
   });
