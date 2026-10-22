@@ -460,15 +460,24 @@ function upOf(id,ch){ return VEH_UPS.includes(id)?((save.upV[ch||sel().char]||{}
 function vehLevel(ch){ return VEH_UPS.reduce((n,k)=>n+((save.upV[ch]||{})[k]||0),0); }
 /* NIVEL DEL VEHÍCULO (1-10, save.vtier): como las tropas de Clash of Clans, cada nivel cambia su DISEÑO y sus HABILIDADES.
    VEH_TIERS[vehículo][nivel] dice qué tiene ese nivel (los que no aparecen usan el diseño y armas de siempre). */
+const MECH_STEPS=[   // CENTINELA: lo construye a mano el constructor que rescatas en el Mundo 1; el nivel 10 es el modelo de fábrica
+  {d:'Chatarra: cañón en el brazo derecho (ráfaga «. . .») y linterna en el izquierdo', shot:'burst', burst:3, cdMul:3, cloak:false, nade:false, lamp:true},
+  {d:'Coraza de acero en el pecho: recarga más rápida', cdMul:2.2},
+  {d:'Lanzador en la espalda: vuelve el ataque en arco (G)', nade:true},
+  {d:'Cañón largo de acero: ráfaga de 4 balas', burst:4, cdMul:2.4},
+  {d:'Placas que cambian de color: vuelve el camuflaje (F)', cloak:true},
+  {d:'Puntas de energía: las balas atraviesan a un enemigo', pierce:1},
+  {d:'Pintura nueva y blindaje: +30 de vida', hp:30},
+  {d:'Doble cañón y núcleo de luz en el pecho (alumbra a tu alrededor)', shot:null, burst:0, cdMul:0, lamp:false},
+  {d:'Tres tubos lanzagranadas: el arco lanza 3 granadas', nades:3},
+  {d:'Modelo de fábrica: el Centinela definitivo, dispara más rápido', cdMul:0.85},
+];
 const VEH_TIERS={
-  mech:{   // CENTINELA, hecho a mano con chatarra: cañón en el brazo derecho (ráfaga «. . .»), linterna en el izquierdo
-    1:{shot:'burst', cdMul:3, cloak:false, nade:false, map:'t1', lamp:true},
-    2:{shot:'burst', cdMul:2.2, cloak:false, nade:false, map:'t2', lamp:true},   // coraza en el pecho y recarga más rápida
-  },
+  mech:Object.fromEntries(MECH_STEPS.map((s,i)=>[i+1,Object.assign({},...MECH_STEPS.slice(0,i+1),{d:s.d,map:'t'+(i+1)})])),
 };
 function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
 function tierInfo(id,tier){ const T=VEH_TIERS[id]; return (T&&T[tier||vehTier(id)])||{}; }
-const DEFAULT_SEL={char:'mech', mate:'car', mode:'robots', tutorial:true};
+const DEFAULT_SEL={char:'jeep', mate:'car', mode:'robots', tutorial:true};
 function blankUp(){ const o={}; UP_KEYS.forEach(k=>o[k]=0); return o; }
 function defaultHome(){
   return { house:1, plots:Array.from({length:16},()=>({c:null,at:0})), inv:{potato:0,carrot:0,wheat:0}, pack:[], guide:0 };
@@ -478,6 +487,7 @@ function normalizeSave(s){
   // mejoras por vehículo: en las partidas anteriores cada vehículo empieza con las mejoras que ya tenías compradas
   s.vtier=Object.assign({},s.vtier||{});
   s.forge=Object.assign({built:false,q:0,next:0},s.forge||{});
+  if(s.sel&&((s.sel.char==='mech'&&!s.builder)||(s.sel.char==='moto'&&!s.jinete))) s.sel.char='jeep';   // vehículo aún sin desbloquear (CHARS aún no existe aquí)
   if(s.infl==null){ let n=0; for(const k in s.up||{}) n+=s.up[k]||0; for(const v in s.upV||{}) for(const k in s.upV[v]) n+=s.upV[v][k]||0; s.infl=+Math.pow(1.08,n).toFixed(4); }   // partidas viejas: la inflación de lo ya comprado
   const uv=s.upV||{}; s.upV={};
   for(const v of VEHICLE_IDS){ s.upV[v]={}; for(const k of VEH_UPS) s.upV[v][k]=uv[v]?(uv[v][k]||0):((s.up&&s.up[k])||0); }
@@ -507,7 +517,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -655,7 +665,7 @@ function isBossWave(w){ return w%5===0; }
 
 /* ===================== DEFINICIONES ===================== */
 const CHARS={
-  mech:{id:'mech', name:'CENTINELA', desc:'Mecha bípedo equilibrado. Ametralladoras en ambos brazos (más cañones al subir el arma) y el camuflaje óptico más largo.',
+  mech:{id:'mech', name:'CENTINELA', locked:'builder', desc:'Mecha bípedo que el constructor del Mundo 1 montó con chatarra. Empieza con un cañón y una linterna; al subir de nivel gana coraza, armas y camuflaje.',
     hp:100, speed:2.6, accel:0.32, friction:0.84, radius:13, mass:2.2, fireCd:10, dmg:6, cloakDur:480, cloakCd:900, nadeCd:140, nadeDmg:30},
   tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón letal con onda expansiva pero de recarga lenta; aplasta robots pequeños.',
     hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
@@ -1355,7 +1365,7 @@ function destroyTile(c,r,toScorch){
   if(v===WATER) return;
   if(v===ROCK){ const dp=depState().at.get(k); if(dp) breakDeposit(dp,false); }   // el Hollow Boom se traga el yacimiento
   const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
-  if(v===CAGE){ const n=cageInfo.get(k)||1; cageInfo.delete(k); freePows(x,y,n); }
+  if(v===CAGE){ const n=cageInfo.get(k)??1; cageInfo.delete(k); if(cageInfo.builder===k) freeBuilder(x,y); else freePows(x,y,n); }
   if(v===WIRE) spawnDebris(x,y,5,'#9a9a9a');
   if(v===RUB||v===TREE||v===CAGE||v===WALL) spawnDebris(x,y,6, v===TREE?era.tree:v===WALL?'#9aa0a8':era.rubble);
   if(v===TREE&&!toScorch) stumpSet().add(k); else stumpSet().delete(k);
@@ -1590,7 +1600,7 @@ function stuckCheck(u,dt){
 /* ===================== JUGADOR ===================== */
 function makePlayer(){
   const ch=CHARS[sel().char]||CHARS.mech, up={}; UP_KEYS.forEach(k=>up[k]=upOf(k,ch.id));   // las mejoras de ESTE vehículo
-  const maxHp=ch.hp+up.hp*15;
+  const maxHp=ch.hp+up.hp*15+(tierInfo(ch.id).hp||0);
   return { kind:'player', ch, x:0, y:0, vx:0, vy:0, radius:ch.radius, mass:ch.mass,
     body:-Math.PI/2, aim:-Math.PI/2,
     hp:maxHp, maxHp, shield:up.shield*20, shieldMax:Math.max(20,up.shield*20),
@@ -1603,7 +1613,9 @@ function makePlayer(){
 }
 /* Lo que da el nivel del vehículo: tipo de disparo y si tiene camuflaje y ataque en arco */
 function tierLoadout(ch){
-  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp};
+  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp, burst:T.burst||0};
+  if(T.pierce) o.pierce=T.pierce;
+  if(T.nades) o.nadeCount=T.nades;
   if(T.cdMul) o.fireCdBase=Math.round(ch.fireCd*T.cdMul);   // la ráfaga de 3 balas recarga más despacio (mismo daño total)
   return o;
 }
@@ -1712,7 +1724,7 @@ function firePlayerWeapon(follow){
       fireBullet(p.x+Math.cos(p.aim)*muzzle+ox, p.y+Math.sin(p.aim)*muzzle+oy, p.aim+da+(exact?0:rand(-0.03,0.03)),'p',
         {speed:9, dmg:dmg*(mul||1), radius:3, life:55, kind:'mg'});
     };
-    if(p.shot==='burst'){ shoot(p.radius*2/17*4.5,0,1,true); if(!follow){ p.burstN=2; p.burstT=BURST_GAP; } }   // cañón del brazo derecho: 3 balas seguidas en línea
+    if(p.shot==='burst'){ shoot(p.radius*2/17*4.5,0,1,true); if(!follow){ p.burstN=p.burst-1; p.burstT=BURST_GAP; } }   // cañón del brazo derecho: balas seguidas en línea
     else if(ch.twin){ shoot(-4,0); shoot(4,0); }
     else { p.armAlt=!p.armAlt; shoot(p.armAlt?7:-7,0); }
     if(!p.shot) for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
@@ -2589,6 +2601,15 @@ function freePows(x,y,n){
     speedMax:2.8,accel:0.4,friction:0.82,wave:rand(0,6),flash:0,walk:0});
   popup(x,y-22,'¡REHENES LIBERADOS! Llévalos al Orbe Vital','#ffd76e',13);
 }
+/* EL CONSTRUCTOR (Mundo 1): un rehén especial; si lo llevas al Orbe te monta el CENTINELA con chatarra */
+function freeBuilder(x,y){
+  pows.push({kind:'pow',builder:true,x,y,vx:0,vy:0,radius:7,mass:0.5,hp:30,maxHp:30,alive:true,follow:false,speedMax:2.8,accel:0.4,friction:0.82,wave:0,flash:0,walk:0});
+  popup(x,y-26,'¡EL CONSTRUCTOR! Llévalo al Orbe Vital','#ffd76e',14);
+}
+function builderSaved(){
+  save.builder=true; saveSave();
+  announce('🔧 ¡CONSTRUCTOR RESCATADO!','#ffd76e','Con la chatarra de la isla te ha montado el CENTINELA: elígelo en el hangar');
+}
 function updatePows(dt){
   let lead=player.alive?player:null, elead=escortLeader();
   const stealth=escort&&!escort.detected;
@@ -2612,6 +2633,7 @@ function updatePows(dt){
       pw.alive=false; rescued++; save.rescuedTotal=(save.rescuedTotal||0)+1; score+=300; runWork+=3;
       if(pw.escort&&escort) escort.saved++;
       popup(pw.x,pw.y-18,'+1 REHÉN A SALVO','#ffd76e',14); S.rescue();
+      if(pw.builder) builderSaved();
       rings.push({x:dp.x,y:dp.y,r:10,max:70,life:20,maxLife:20,color:'#ffd76e'});
       if(dp!==orb && !helis.some(h=>h.state!=='out')) callHeli(dp.x,dp.y,'pickup',null);
       if(rescued%4===0 && weaponLvl<4){ weaponLvl++; announce('¡ARMA NIVEL '+weaponLvl+'!','#ffd76e','4 rehenes a salvo'); S.upgrade(); }
@@ -3783,29 +3805,21 @@ const MAP_MECH=[
 ".....kgggggkkkkkkk",
 ".....kghhhgk......",
 "......kkkkk......."];
-/* CENTINELA: lo construyó a mano un superviviente de la primera isla con chatarra. Chapas desparejas (azul de
-   desguace, óxido), cinta adhesiva atando la linterna (brazo izquierdo) y el tubo del cañón (brazo derecho). */
-const MAP_MECH_T1=[
-"......kkkkk.......",
-".....kooggokkkkkk.",
-".....kgwgggkmmmyyk",
-".....kgwsogkmwmyyk",
-"......kkkkkkkkkkk.",
-"..kkk.kmmnmk......",
-".knnnkkgggoook....",
-".knMnkgggggogk....",
-".knnnkgmMmgcCk....",
-".knnnkgmmmgcCk....",
-".knMnkggwgggok....",
-".knnnkksssssk.....",
-"..kkk.kmmmmkkkkkkk",
-"......kkkkkkMwMMMb",
-".....kgoosgkMwMMMb",
-".....kgggggkkkkkkk",
-".....kgssogk......",
-"......kkkkk......."];
-/* NIVEL 2: le atornilla una coraza de acero al pecho */
-const MAP_MECH_T2=MAP_MECH_T1.map((row,i)=>({6:".knnnkkMMMMMk.....",7:".knMnkMbMMMbMk....",8:".knnnkMgggMcCk....",9:".knnnkMgggMcCk....",10:".knMnkMbMMMbMk...."})[i]||row);
+/* CENTINELA, NIVELES 1-10. Lo construye a mano el constructor del Mundo 1 con chatarra (óxido, cinta adhesiva, chapas
+   azules de desguace) y lo va mejorando: coraza (2), lanzador (3), cañón de acero (4), placas camaleón (5), puntas de
+   energía (6), pintura nueva (7), doble cañón y núcleo de luz (8), tres tubos (9) y el modelo de fábrica (10). */
+const MECH_MAPS={
+  t1:["......kkkkk.......",".....kooggokkkkkk.",".....kgwgggkmmmyyk",".....kgwsogkmwmyyk","......kkkkkkkkkkk.","..kkk.kmmnmk......",".knnnkkgggoook....",".knMnkgggggogk....",".knnnkgmMmgbbk....",".knnnkgmmmgbbk....",".knMnkggwgggok....",".knnnkksssssk.....","..kkk.kmmmmkkkkkkk","......kkkkkkMwMMMb",".....kgoosgkMwMMMb",".....kgggggkkkkkkk",".....kgssogk......","......kkkkk......."],
+  t2:["......kkkkk.......",".....kooggokkkkkk.",".....kgwgggkmmmyyk",".....kgwsogkmwmyyk","......kkkkkkkkkkk.","..kkk.kmmnmk......",".knnnkkMMMMMk.....",".knMnkMbMMMbMk....",".knnnkMgggMbbk....",".knnnkMgggMbbk....",".knMnkMbMMMbMk....",".knnnkksssssk.....","..kkk.kmmmmkkkkkkk","......kkkkkkMwMMMb",".....kgoosgkMwMMMb",".....kgggggkkkkkkk",".....kgssogk......","......kkkkk......."],
+  t3:["......kkkkk.......",".....kooggokkkkkk.",".....kgwgggkmmmyyk",".....kgwsogkmwmyyk","......kkkkkkkkkkk.","..kkk.kmmnmk......",".knnnkkMMMMMk.....","bMMMnkMbMMMbMk....",".knnnkMgggMbbk....","bMMMnkMgggMbbk....",".knMnkMbMMMbMk....",".knnnkksssssk.....","..kkk.kmmmmkkkkkkk","......kkkkkkMwMMMb",".....kgoosgkMwMMMb",".....kgggggkkkkkkk",".....kgssogk......","......kkkkk......."],
+  t4:["......kkkkk.......",".....kooggokkkkkk.",".....kgwgggkmmmyyk",".....kgwsogkmwmyyk","......kkkkkkkkkkk.","..kkk.kmmnmk......",".knnnkkMMMMMk.....","bMMMnkMbMMMbMk....",".knnnkMgggMbbk....","bMMMnkMgggMbbk....",".knMnkMbMMMbMk....",".knnnkksssssk.....","..kkk.kmmmmkkkkkbb","......kkkkkkMMMMMM",".....kgoosgkMMMMMM",".....kgggggkkkkkbb",".....kgssogk......","......kkkkk......."],
+  t5:["......kkkkk.......",".....kccggckkkkkk.",".....kgwgggkmmmyyk",".....kgwsogkmwmyyk","......kkkkkkkkkkk.","..kkk.kmmnmk......",".kncnkkMMMMMk.....","bMMMnkMbMMMbMk....",".kncnkMgggMbbk....","bMMMnkMgggMbbk....",".kncnkMbMMMbMk....",".knnnkksssssk.....","..kkk.kmmmmkkkkkbb","......kkkkkkMMMMMM",".....kgoosgkMMMMMM",".....kgggggkkkkkbb",".....kgccogk......","......kkkkk......."],
+  t6:["......kkkkk.......",".....kccggckkkkkk.",".....kgwgggkmmmyyk",".....kgwsogkmwmyyk","......kkkkkkkkkkk.","..kkk.kmmnmk......",".kncnkkMMMMMk.....","bMMMnkMbMMMbMk....",".kncnkMgggMbbk....","bMMMnkMgggMbbk....",".kncnkMbMMMbMk....",".knnnkksssssk.....","..kkk.kmmmmkkkkkbb","......kkkkkkMMMMCC",".....kgoosgkMMMMCC",".....kgggggkkkkkbb",".....kgccogk......","......kkkkk......."],
+  t7:["......kkkkk.......",".....kghhhgkkkkkk.",".....kgggggkmmmyyk",".....kgsssgkmmmyyk","......kkkkkkkkkkk.","..kkk.kmmmmk......",".kmcmkkMMMMMk.....","bMMMmkMbMMMbMk....",".kmcmkMgggMbbk....","bMMMmkMgggMbbk....",".kmcmkMbMMMbMk....",".kmmmkksssssk.....","..kkk.kmmmmkkkkkbb","......kkkkkkMMMMCC",".....kgsssgkMMMMCC",".....kgggggkkkkkbb",".....kghhhgk......","......kkkkk......."],
+  t8:["......kkkkk.......",".....kghhhgkkkkkbb",".....kgggggkMMMMCC",".....kgsssgkMMMMCC","......kkkkkkkkkkbb","..kkk.kmmmmk......",".kmcmkkMMMMMk.....","bMMMmkMbMMMbMk....",".kmcmkMgggMcCk....","bMMMmkMgggMcCk....",".kmcmkMbMMMbMk....",".kmmmkksssssk.....","..kkk.kmmmmkkkkkbb","......kkkkkkMMMMCC",".....kgsssgkMMMMCC",".....kgggggkkkkkbb",".....kghhhgk......","......kkkkk......."],
+  t9:["......kkkkk.......",".....kghhhgkkkkkbb",".....kgggggkMMMMCC",".....kgsssgkMMMMCC","......kkkkkkkkkkbb","..kkk.kmmmmk......","bMMMmkkMMMMMk.....",".kmrmkMbMMMbMk....","bMMMmkMgggMcCk....",".kmrmkMgggMcCk....","bMMMmkMbMMMbMk....",".kmmmkksssssk.....","..kkk.kmmmmkkkkkbb","......kkkkkkMMMMCC",".....kgsssgkMMMMCC",".....kgggggkkkkkbb",".....kghhhgk......","......kkkkk......."],
+  t10:["......kkkkk.......",".....khhhhhk......",".....kgggggkkkkkkk",".....kgsssgkMMMMCk","......kkkkkkmmmmck","..kkk.kmmmmkkkkkk.",".kmmmkkgggggk.....",".kmrmkghhhhggkk...",".kmmmkghgggcCCk...",".kmmmkghgggcCCk...",".kmrmkgsgggggkk...",".kmmmkksssssk.....","..kkk.kmmmmkkkkkk.","......kkkkkkmmmmck",".....kgsssgkMMMMCk",".....kgggggkkkkkkk",".....khhhhhk......","......kkkkk......."],
+};
 const MAP_BRAWLER=[
 "....kkkk........",
 "...kOOOOk.kk....",
@@ -3882,7 +3896,6 @@ function robotSprite(look,color){
   return null;
 }
 const MECH_PAL={k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff',y:'#fff3a0',o:'#8a4b2a',w:'#c9c2a8',n:'#4f6a7a'};
-const MECH_MAPS={t1:MAP_MECH_T1, t2:MAP_MECH_T2};
 function mechSprite(tier){ const m=tierInfo('mech',tier).map; return m?pixSprite('mech_'+m,MECH_MAPS[m],MECH_PAL):pixSprite('mech',MAP_MECH,MECH_PAL); }
 function tankHullSpr(col,dark,frame){
   const key='hull|'+col+'|'+dark+'|'+frame;
@@ -4012,7 +4025,11 @@ function drawPow(pw){
   ctx.fillStyle='#ffb060'; ctx.fillRect(-3,-3,7,2);
   ctx.fillStyle='#ffd0a0'; ctx.fillRect(-2,-8,5,5);
   ctx.fillStyle='#ff8c2a'; ctx.fillRect(-6,-4+(pw.follow?0:-wv),3,2); ctx.fillRect(4,-4+(pw.follow?0:wv),3,2);
-  if(!pw.follow){ ctx.fillStyle='#ffd76e'; ctx.font='bold 10px Rajdhani, monospace'; ctx.textAlign='center'; ctx.fillText('¡AYUDA!',1,-12); }
+  if(pw.builder){   // el constructor: casco amarillo y llave inglesa
+    ctx.fillStyle='#ffd23a'; ctx.fillRect(-3,-10,7,3); ctx.fillRect(-4,-8,9,1);
+    ctx.fillStyle='#a9b0b8'; ctx.fillRect(5,-6,2,7); ctx.fillRect(4,-7,4,2);
+  }
+  if(!pw.follow){ ctx.fillStyle='#ffd76e'; ctx.font='bold 10px Rajdhani, monospace'; ctx.textAlign='center'; ctx.fillText(pw.builder?'¡SACADME DE AQUÍ!':'¡AYUDA!',1,-14); }
   ctx.restore();
 }
 function hitFlashOn(u){ if(u.flash>0) ctx.filter='brightness(2.6)'; }
@@ -5947,6 +5964,11 @@ function buildWorld1(){
   ground(10,95,30,100,G); ground(14,143,30,147,G);
   ground(8,123,11,125,G); ground(8,117,11,119,G);
   cage(8,136,2); cage(33,108,3);
+  if(!save.builder){   // CHATARRERÍA: el constructor está encerrado entre chatarra (cuando lo rescatas, desaparece)
+    bunker(27,100,7,6,'w');
+    [[25,99],[25,103],[24,106],[35,99],[29,107]].forEach(([c,r])=>{ if(land(c,r)) set(c,r,RUB); });
+    placeCage(31,103); cageInfo.set(idx(31,103),0); cageInfo.builder=idx(31,103);
+  }
   helipad(27,141);
   gate(93,[[13,97],[26,97]]);
   world.starts.push({x:20*TILE+15, y:145*TILE+15});
@@ -6021,6 +6043,7 @@ function startWorldRun(id,section){
   document.body.className='era-'+def.era;
   introHeli=section>1||world.id!==1;
   startIntro();
+  if(world.id===1&&!save.builder&&section<=2) announce('🔧 MISIÓN: EL CONSTRUCTOR','#ffd76e','Lo tienen preso en una chatarrería de la jungla. Rompe su jaula y llévalo al Orbe');
   S.wave();
 }
 function openGate(g,silent){
@@ -10042,7 +10065,7 @@ function nightLights(){
     return L;
   }
   const p=player;
-  if(p&&p.alive) L.push([p.x,p.y,140*dreadLightK(),1]);
+  if(p&&p.alive&&!p.lamp) L.push([p.x,p.y,140*dreadLightK(),1]);   // halo de luz (el Centinela con linterna no lo tiene)
   if(p&&p.alive&&p.lamp) for(const [x,y,r] of lampBeam(p)) L.push([x,y,r*dreadLightK(),0.95]);
   if(orb) L.push([orb.x,orb.y,110,0.95]);
   if(mate&&mate.alive) L.push([mate.x,mate.y,70,0.8]);
@@ -10119,7 +10142,7 @@ function updateDread(dt){
 /* LINTERNA del Centinela: haz de luz hacia delante desde el brazo izquierdo; los ojos que alumbra huyen */
 function lampBeam(p){
   const a=p.body, ox=p.x+Math.cos(a-Math.PI/2)*p.radius*0.5, oy=p.y+Math.sin(a-Math.PI/2)*p.radius*0.5;
-  return [[70,40],[140,55],[220,72]].map(([d,r])=>[ox+Math.cos(a)*d,oy+Math.sin(a)*d,r]);
+  return [[34,28],[100,46],[190,68]].map(([d,r])=>[ox+Math.cos(a)*d,oy+Math.sin(a)*d,r]);
 }
 function lampScare(u){
   for(const w of dread.watchers){
@@ -10410,7 +10433,7 @@ function ecoHtml(veh){
   let h='<p class="secTitle">NIVEL DE '+CHARS[veh].name+'</p><div class="shopCard" style="margin:6px 0"><div class="name">NIVEL '+tier+(mx?' / '+mx:'')+'</div>';
   if(tier<mx){
     const c=tierCost(tier), ok=save.work>=c.work&&ing>=c.lingote;
-    h+='<div class="lvl">Sube a nivel '+(tier+1)+': nuevo diseño y armas</div><div class="cost">'+col(save.work>=c.work,'◆ '+c.work)+' · '+col(ing>=c.lingote,'▬ '+c.lingote+' lingotes')+'</div><button class="btn small" data-eco="tier" '+(ok?'':'disabled')+'>SUBIR NIVEL</button>';
+    h+='<div class="lvl">Sube a nivel '+(tier+1)+': '+(tierInfo(veh,tier+1).d||'nuevo diseño y armas')+'</div><div class="cost">'+col(save.work>=c.work,'◆ '+c.work)+' · '+col(ing>=c.lingote,'▬ '+c.lingote+' lingotes')+'</div><button class="btn small" data-eco="tier" '+(ok?'':'disabled')+'>SUBIR NIVEL</button>';
   } else h+='<div class="lvl">'+(mx?'Nivel máximo por ahora':'Sus niveles aún no están diseñados')+' · PRÓXIMAMENTE</div>';
   h+='</div><p class="secTitle">FORJA</p><div class="shopCard" style="margin:6px 0">';
   if(!F.built){
