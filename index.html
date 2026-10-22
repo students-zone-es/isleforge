@@ -4616,7 +4616,6 @@ function drawShadows(){
     ctx.fillStyle='rgba(0,0,0,.3)';
     ctx.beginPath(); ctx.ellipse(p.x,p.y,6*(1-p.z/(l.h*1.6+1))+2,3,0,0,Math.PI*2); ctx.fill();
   }
-  for(const d of drones){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(d.x+8,d.y+12,7,4,0,0,Math.PI*2); ctx.fill(); }
 }
 function drawLobs(){
   for(const l of lobs){
@@ -4937,6 +4936,7 @@ function render(){
   drawOrb();
   drawGroundMarks();
   drawPickups();
+  drawSunShadows(cx,cy,shadowUnits());   // sombras según el sol (p9m_daynight.js)
   pows.forEach(drawPow);
   drawShadows();
   drawDeposits();
@@ -5688,7 +5688,6 @@ function drawCrop(kind,st,x,y,sw){
 }
 function drawWorkshop(){
   const L=homeL.workshop, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE, fh=56, rh=h-fh;
-  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fillRect(x+10,y+10,w,h);
   ctx.fillStyle='#55606b'; ctx.fillRect(x,y,w,rh);
   ctx.fillStyle='#64707c'; for(let i=0;i<w;i+=14) ctx.fillRect(x+i,y,7,rh);
   ctx.fillStyle='#3e4750'; ctx.fillRect(x,y+rh/2-3,w,6);
@@ -5765,7 +5764,6 @@ function drawHouse(){
     {wall:'#d8d2c4',roof:'#9a3a2a',roofL:'#b04a36',trim:'#5a2418'},
     {wall:'#f0ead8',roof:'#2f4a8a',roofL:'#3d5ca6',trim:'#f5c518'}][Lv];
   const fh=Math.min(42,Math.round(h*0.34)), rh=h-fh;
-  ctx.fillStyle='rgba(0,0,0,.26)'; ctx.fillRect(x+8,y+8,w,h);
   ctx.fillStyle=pal.roofL; ctx.fillRect(x-4,y,w+8,rh/2);
   ctx.fillStyle=pal.roof; ctx.fillRect(x-4,y+rh/2,w+8,rh/2);
   ctx.fillStyle='rgba(0,0,0,.15)'; for(let yy=y+6;yy<y+rh;yy+=8) ctx.fillRect(x-4,yy,w+8,2);
@@ -5886,6 +5884,7 @@ function renderHome(){
   ctx.save(); ctx.translate(-cx,-cy);
   ctx.drawImage(mapCanvas,cx,cy,W,H,cx,cy,W,H);
   drawWaterFx(cx,cy);
+  drawSunShadows(cx,cy,residents.map(r=>[r.x,r.y,8,0]).concat(human?[[human.x,human.y,8,0]]:[]));   // sombras según el sol
   drawShip();
   drawHomeFarm();
   drawHelipadHome();
@@ -7964,10 +7963,6 @@ function extraPaint(v,c,r,x,y,h){
     return;
   }
   if(v===WATER) return;
-  // sombra que proyectan los edificios (sol desde arriba a la izquierda)
-  g.fillStyle='rgba(0,0,0,.28)';
-  if(tileAtC(c,r-1)===BLD) g.fillRect(x,y,TILE,6);
-  if(tileAtC(c-1,r)===BLD) g.fillRect(x,y,6,TILE);
   if(v===G&&era.id==='ruinas'){
     if(h>0.82){ g.fillStyle='rgba(20,20,22,.55)'; const rnd=mulberry32(k); let px=x+rnd()*24, py=y+rnd()*10; for(let i=0;i<6;i++){ g.fillRect(Math.round(px),Math.round(py),2,2); px+=(rnd()-0.4)*6; py+=rnd()*4; } }
     if(world.lanes.has(k)&&r%4<2){ g.fillStyle='#d8c060'; g.fillRect(x-2,y+4,4,TILE-8); }
@@ -10348,6 +10343,69 @@ function drawWatchers(cx,cy){
     if(w.water){ ctx.globalAlpha=0.18*a; ctx.strokeStyle='#8fc8ff'; ctx.lineWidth=1; ctx.beginPath(); ctx.ellipse(sx,sy+6,9+Math.sin(w.t*0.08)*2,2.5,0,0,Math.PI*2); ctx.stroke(); }
   }
   ctx.restore();
+}
+
+/* ===================== SOMBRAS DEL SOL =====================
+   Cada cosa alta (paredes, edificios, árboles, rocas, contenedores) y cada unidad proyecta su sombra en el suelo
+   hacia el lado contrario al sol, y más larga cuanto más bajo está: al mediodía cortas y hacia el norte (arriba), al
+   atardecer largas hacia el este (derecha) y al amanecer hacia el oeste (izquierda). De noche, si hay luna en el cielo,
+   la luna da sombras débiles. Las sombras se pintan juntas en una capa (así dos sombras que se cruzan no se oscurecen
+   el doble) y la casilla alta no se oscurece a sí misma (su techo está al sol). El mapa mira al norte (arriba). */
+const SHADOW_H={[WALL]:34,[DOOR]:34,[BLD]:60,[TREE]:52,[ROCK]:24,[RUB]:10,[CAGE]:18,[CONT]:40};   // altura en píxeles
+const SHADOW_MAXLEN=3.2;   // con el sol muy bajo la sombra mide como mucho 3,2 veces la altura
+let shCv=null, shG=null;
+function sunShadow(){
+  const S=skyNow();
+  let src=S.sun, a=clamp((S.sun.alt+1)/9,0,1)*0.32;
+  if(a<0.02){ src=S.moon; a=clamp(S.moon.alt/10,0,1)*(1-Math.cos(S.phase*Math.PI*2))/2*0.14; }   // de noche, la luna
+  if(a<0.02) return null;
+  const A=src.az/DEG;
+  return {dx:Math.sin(A), dy:-Math.cos(A), len:Math.min(SHADOW_MAXLEN,1/Math.tan(Math.max(3,src.alt)/DEG)), a};
+}
+/* units: [x, y, radio, altura de vuelo] */
+function drawSunShadows(cx,cy,units){
+  if(interior) return;
+  const s=sunShadow(); if(!s) return;
+  if(!shCv||shCv.width!==W||shCv.height!==H){ shCv=mkCanvas(W,H); shG=shCv.getContext('2d'); }
+  const g=shG, ang=Math.atan2(s.dy,s.dx), m=Math.ceil(SHADOW_MAXLEN*60/TILE)+1, tall=[];
+  g.globalCompositeOperation='source-over'; g.clearRect(0,0,W,H); g.fillStyle='#050a18';
+  const c0=Math.max(0,Math.floor(cx/TILE)-m), c1=Math.min(WC-1,Math.ceil((cx+W)/TILE)+m);
+  const r0=Math.max(0,Math.floor(cy/TILE)-m), r1=Math.min(WR-1,Math.ceil((cy+H)/TILE)+m);
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    const v=map[r*WC+c], h=SHADOW_H[v]; if(!h) continue;
+    const L=h*s.len, ex=s.dx*L, ey=s.dy*L, x=c*TILE-cx, y=r*TILE-cy;
+    if(v===TREE){   // la copa del pino: una mancha alargada que sale del pie
+      const fx=x+TILE/2, fy=y+TILE-5;
+      g.beginPath(); g.ellipse(fx+ex*0.55,fy+ey*0.55,Math.max(8,L*0.5),8,ang,0,Math.PI*2); g.fill();
+      continue;
+    }
+    // bloque: la casilla «barrida» hacia la sombra (la casilla, su copia desplazada y lo que hay entre las dos)
+    const P=[[x,y],[x+TILE,y],[x+TILE,y+TILE],[x,y+TILE]];
+    for(let i=0;i<4;i++){ const [ax,ay]=P[i], [bx,by]=P[(i+1)%4];
+      g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by); g.lineTo(bx+ex,by+ey); g.lineTo(ax+ex,ay+ey); g.closePath(); g.fill(); }
+    g.fillRect(x+ex,y+ey,TILE,TILE);
+    tall.push(x,y);
+  }
+  for(const [ux,uy,ur,uz] of units){   // unidades: sombra alargada (si vuelan, se separa de ellas)
+    const L=ur*1.4*s.len, off=L*0.5+(uz||0)*s.len;
+    g.beginPath(); g.ellipse(ux-cx+s.dx*off,uy-cy+s.dy*off,ur*0.8+L*0.5,ur*0.75,ang,0,Math.PI*2); g.fill();
+  }
+  g.globalCompositeOperation='destination-out';   // el techo de lo alto está al sol
+  for(let i=0;i<tall.length;i+=2) g.fillRect(tall[i],tall[i+1],TILE,TILE);
+  ctx.save(); ctx.globalAlpha=s.a; ctx.drawImage(shCv,cx,cy); ctx.restore();
+}
+/* Qué unidades tienen sombra en una misión */
+function shadowUnits(){
+  const U=[];
+  if(player&&player.alive) U.push([player.x,player.y,player.radius,0]);
+  for(const en of enemies) if(en.alive&&!en.hidden) U.push([en.x,en.y,en.radius,en.air?40:(en.leapZ||0)]);
+  if(boss&&boss.alive&&!enemies.includes(boss)) U.push([boss.x,boss.y,boss.radius,0]);
+  if(mate&&mate.alive) U.push([mate.x,mate.y,mate.radius||10,0]);
+  for(const p of pows) if(p.alive) U.push([p.x,p.y,p.radius,0]);
+  for(const d of drones) if(d.alive) U.push([d.x,d.y,9,24]);
+  for(const tu of turrets) if(tu.alive) U.push([tu.x,tu.y,tu.radius,0]);
+  for(const so of soldiers) if(so.alive) U.push([so.x,so.y,so.radius||7,0]);
+  return U;
 }
 /* ===================== INTERIORES =====================
    Al pulsar E en la puerta de un edificio entras en un mapa pequeño propio: paredes, suelo, muebles (sólidos) y
