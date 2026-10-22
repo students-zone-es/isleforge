@@ -3934,44 +3934,48 @@ const MECH_MAPS={
   t10:["......kkkkk.......",".....khhhhhk......",".....kgggggkkkkkkk",".....kgsssgkMMMMCk","......kkkkkkmmmmck","..kkk.kmmmmkkkkkk.",".kmmmkkgggggk.....",".kmrmkghhhhggkk...",".kmmmkghgggcCCk...",".kmmmkghgggcCCk...",".kmrmkgsgggggkk...",".kmmmkksssssk.....","..kkk.kmmmmkkkkkk.","......kkkkkkmmmmck",".....kgsssgkMMMMCk",".....kgggggkkkkkkk",".....khhhhhk......","......kkkkk......."],
 };
 const MAP_BRAWLER=[
-"....kkkk........",
-"...kOOOOk.kk....",
-"...kOooOkkWWk...",
-"...kOOOOkWWWWk..",
-"....kkkkkkkWWWk.",
-".kkkkkOOOOkkkWk.",
-"kmmmkOoooOOk....",
-"kmmmkOoooOVVk...",
-"kmmmkOoooOVVk...",
-"kmmmkOoooOOk....",
-".kkkkkOOOOkkkWk.",
-"....kkkkkkkWWWk.",
-"...kOOOOkWWWWk..",
-"...kOooOkkWWk...",
-"...kOOOOk.kk....",
-"....kkkk........"];
+"....kkkkk.........",
+"...kOhhhOk..kkk...",
+"...kOOOOok.kWhWk..",
+"...kOooook.kWWWWk.",
+"....kkkkkmmkWWWWk.",
+"..kkk.kmmmmkkWWk..",
+".kbbbkOhhhhOkkk...",
+"kbcccbOOOkkkOk....",
+"kbcccbOOkMMmkVk...",
+"kbcccbOOkmmmkVk...",
+"kbcccbOOOkkkOk....",
+".kbbbkOooooOkkk...",
+"..kkk.kmmmmkkWWk..",
+"....kkkkkmmkWWWWk.",
+"...kOOOOok.kWWWWk.",
+"...kOooook.kWhWk..",
+"...kOooOok..kkk...",
+"....kkkkk........."];
 const MAP_GUNNER=[
-"...kkkk.......",
-"..kRRRRk......",
-"..kRrrRkkkkkkk",
-"..kRRRRkbbbbbk",
-"...kkkkkkkkkk.",
-".kkkRRRRk.....",
-"kmmkRrrRRk....",
-"kmmkRrrRVVk...",
-"kmmkRrrRVVk...",
-"kmmkRrrRRk....",
-".kkkRRRRk.....",
-"...kkkkk......",
-"..kRRRRk......",
-"...kkkk......."];
+"....kkkk........",
+"...kRhhRk.......",
+"...kRRRrkkkkkkkk",
+"...kRrrrkmMMMMMk",
+"....kkkkkbbbbbbk",
+"..kkkkRRRRkkkkk.",
+".kbbkRhhhhRk....",
+"kbccbRRkkkRk....",
+"kbccbRkMmmkVk...",
+"kbccbRkmmmkVk...",
+"kbccbRRkkkRk....",
+".kbbkRrrrrRk....",
+"..kkkkRRRRk.....",
+"...kRRRrk.......",
+"...kRrrrk.......",
+"....kkkk........"];
 const MAP_SPOTTER=[
 "....kkkkk.....",
-"..kkYYYYYkk...",
-".kYYyyyyYYYk..",
-".kYyyyyyyYYk..",
+"..kkYhhYYkk...",
+".kYhhyyyYYYk..",
+".kYhyyyyyYYk..",
 "kYYyyAAAyyYYk.",
-"kYyyyAAAyyVVk.",
+"kYyyyAMAyyVVk.",
 "kYyyyAAAyyVVk.",
 "kYYyyyyyyyYYk.",
 ".kYyyyyyyYYk..",
@@ -3980,12 +3984,12 @@ const MAP_SPOTTER=[
 "....kkkkk....."];
 const MAP_MORTAR=[
 ".kk.......kk..",
-"kmmk.....kmmk.",
+"kMmk.....kMmk.",
 ".kmmkkkkkmmk..",
-"..kPPPPPPPk...",
+"..kPhhPPPPk...",
 "..kPpkkkpPk...",
 "..kPkbbbkPk...",
-"..kPkbbbkPVk..",
+"..kPkbcbkPVk..",
 "..kPkbbbkPVk..",
 "..kPpkkkpPk...",
 "..kPPPPPPPk...",
@@ -3999,12 +4003,12 @@ function gunSide(u){
   return lk==='gunner'||lk==='shieldbot'?-3.5*sc:lk==='spotter'?4*sc:lk==='bandit'?3.5:0;
 }
 function robotSprite(look,color){
-  const base={k:'#140808',m:'#4a4e55',V:VISOR,W:'#c9ccd2',b:'#1a1a1a'};
+  const base={k:'#140808',m:'#4a4e55',M:'#8a9098',V:VISOR,c:VISOR,W:'#c9ccd2',b:'#1a1a1a',h:shade(color,0.32)};   // c: núcleo de energía; h: brillo
   switch(look){
-    case 'brawler': return pixSprite('br|'+color,MAP_BRAWLER,Object.assign({},base,{O:color,o:shade(color,-0.3)}));
-    case 'gunner': return pixSprite('gu|'+color,MAP_GUNNER,Object.assign({},base,{R:color,r:shade(color,-0.3)}));
-    case 'spotter': return pixSprite('sp|'+color,MAP_SPOTTER,Object.assign({},base,{Y:color,y:shade(color,-0.22),A:'#555'}));
-    case 'mortar': return pixSprite('mo|'+color,MAP_MORTAR,Object.assign({},base,{P:color,p:shade(color,-0.25),b:'#050505'}));
+    case 'brawler': return pixSprite('br2|'+color,MAP_BRAWLER,Object.assign({},base,{O:color,o:shade(color,-0.3)}));
+    case 'gunner': return pixSprite('gu2|'+color,MAP_GUNNER,Object.assign({},base,{R:color,r:shade(color,-0.3)}));
+    case 'spotter': return pixSprite('sp2|'+color,MAP_SPOTTER,Object.assign({},base,{Y:color,y:shade(color,-0.22),A:'#555'}));
+    case 'mortar': return pixSprite('mo2|'+color,MAP_MORTAR,Object.assign({},base,{P:color,p:shade(color,-0.25),b:'#050505'}));
   }
   return null;
 }
@@ -4168,12 +4172,29 @@ function drawJeep(u,col){
 /* KAGE por niveles: androide de chatarra con visor amarillo y una barra de hierro (1), cuerpo de combate azul con visor
    cian, katana y pañuelo rojo (2), cinturón de granadas parásito (3), capa de camuflaje con borde cian (4) y el
    maestro negro con visor rojo, adornos dorados y katana larga (5). Invisible: casi transparente. */
+const MAP_KAGE=[
+"................",
+"....kkkkk.......",
+"...kBHHBBk......",
+"...kBBBbbk......",
+"..kkkkkkkkkGLLLL",
+".SkBBkkkkBBk....",
+"SSkBkHHHHkBk....",
+".SkBkHHHHVVk....",
+".SkBkHHHHVVk....",
+"SSkBkHHHHkBk....",
+".SkBBkkkkBBk....",
+"..kkgkgkgkkk....",
+"...kBBBbbk......",
+"...kBHHBBk......",
+"....kkkkk.......",
+"................"];
 const NINJA_PAL=[null,
-  {o:'#2a2620',b:'#4a4038',t:'#6a5a48',v:'#c9a74a',bl:'#7a7a7a',sc:null},
-  {o:'#07080f',b:'#1c2240',t:'#2e3866',v:'#3ee6e6',bl:'#c8d0e0',sc:'#ff3b3b'},
-  {o:'#07080f',b:'#1c2240',t:'#2e3866',v:'#3ee6e6',bl:'#c8d0e0',sc:'#ff3b3b'},
-  {o:'#07080f',b:'#141a2c',t:'#26304e',v:'#3ee6e6',bl:'#c8d0e0',sc:'#ff3b3b'},
-  {o:'#030308',b:'#0c0e18',t:'#1c2030',v:'#ff3b3b',bl:'#e8f0ff',sc:'#ff3b3b'}];
+  {k:'#1a1612',B:'#4a4038',b:'#3a3028',H:'#6a5a48',V:'#c9a74a',S:null,L:'#7a7a7a',G:'#5a3a1e',g:'#3a3028'},
+  {k:'#07080f',B:'#1c2240',b:'#141a30',H:'#2e3866',V:'#3ee6e6',S:'#ff3b3b',L:'#c8d0e0',G:'#5a3a1e',g:'#141a30'},
+  {k:'#07080f',B:'#1c2240',b:'#141a30',H:'#2e3866',V:'#3ee6e6',S:'#ff3b3b',L:'#c8d0e0',G:'#5a3a1e',g:'#ff3df0'},
+  {k:'#07080f',B:'#141a2c',b:'#0e1322',H:'#26304e',V:'#3ee6e6',S:'#ff3b3b',L:'#c8d0e0',G:'#5a3a1e',g:'#ff3df0'},
+  {k:'#030308',B:'#0c0e18',b:'#08090f',H:'#22263a',V:'#ff3b3b',S:'#ff3b3b',L:'#e8f0ff',G:'#f5c518',g:'#ff3df0'}];
 function drawNinja(m,ghost){
   const tier=m.tier!=null?m.tier:vehTier('ninja'), P=NINJA_PAL[Math.max(1,Math.min(5,tier))];
   if(!ghost&&m.clones) for(const c of m.clones) drawNinja(c,true);
@@ -4186,20 +4207,14 @@ function drawNinja(m,ghost){
   ctx.save(); ctx.globalAlpha*=alpha;
   if(ghost) ctx.filter='hue-rotate(220deg) brightness(0.7)';
   drawFeet(m.x,m.y,m.angle,m.walk||0,1.2,3.2,ghost?'#1a1030':'#0a0c18');
-  ctx.translate(m.x,m.y); ctx.rotate(m.aim!=null?m.aim:m.angle);
-  if(tier>=4&&!ghost){ ctx.fillStyle='rgba(20,30,50,.85)'; ctx.fillRect(-11,-8,6,16); ctx.fillStyle='#3ee6e6'; ctx.fillRect(-11,-8,1,16); }   // capa de camuflaje
-  ctx.fillStyle=P.o; ctx.fillRect(-8,-7,14,14);
-  ctx.fillStyle=P.b; ctx.fillRect(-7,-6,12,12);
-  ctx.fillStyle=P.t; ctx.fillRect(-7,-6,12,3);
-  if(tier===1){ ctx.fillStyle='#8a4b2a'; ctx.fillRect(-6,2,3,2); ctx.fillRect(1,-5,2,1); }   // óxido
-  ctx.fillStyle='#0d1020'; ctx.fillRect(-1,-4,6,8);
-  ctx.fillStyle=P.v; ctx.fillRect(3,-3,2,6);
-  const bl=tier>=5?19:tier>=2?15:12;   // arma: barra de hierro, katana, katana larga
-  ctx.fillStyle=P.bl; ctx.fillRect(-11,-9,bl,2); ctx.fillStyle=tier>=5?'#f5c518':'#5a3a1e'; ctx.fillRect(-11,-9,4,2);
-  if(P.sc){ ctx.fillStyle=P.sc; ctx.fillRect(-3,-7,4,2); ctx.fillRect(-9-Math.round(Math.sin(t*0.3)*1),-7,6,1); }   // pañuelo
-  if(tier>=3){ ctx.fillStyle='#ff3df0'; ctx.fillRect(-5,5,2,2); ctx.fillRect(-1,5,2,2); ctx.fillRect(3,5,2,2); }   // granadas parásito en el cinturón
-  if(tier>=5){ ctx.fillStyle='#f5c518'; ctx.fillRect(-7,-6,1,12); ctx.fillRect(4,-6,1,1); ctx.fillRect(4,5,1,1); }   // adornos dorados
-  if(m.lvl>=2){ ctx.fillStyle='#f5c518'; ctx.fillRect(-7,5,3,2); }
+  const a=m.aim!=null?m.aim:m.angle, sc=1.3;
+  ctx.translate(m.x,m.y); ctx.rotate(a);
+  if(tier>=4&&!ghost){ ctx.fillStyle='rgba(20,30,50,.85)'; ctx.fillRect(-13,-9,7,18); ctx.fillStyle='#3ee6e6'; ctx.fillRect(-13,-9,1,18); }   // capa de camuflaje
+  if(P.S){ ctx.fillStyle=P.S; ctx.fillRect(-14,-1+Math.round(Math.sin(t*0.3)*1.5),5,2); }   // punta del pañuelo ondeando
+  blit(pixSprite('kage|'+tier,MAP_KAGE,P),0,0,0,sc);
+  if(tier===1){ ctx.fillStyle='#8a4b2a'; ctx.fillRect(-4,-6,2,1); ctx.fillRect(-2,5,2,1); }   // óxido
+  if(tier>=5){ ctx.fillStyle='#f5c518'; ctx.fillRect(-6,-7,1,1); ctx.fillRect(-6,6,1,1); ctx.fillRect(-4,-1,1,2); }   // adornos dorados
+  if(m.lvl>=2){ ctx.fillStyle='#f5c518'; ctx.fillRect(-3,6,3,1); }
   ctx.restore();
 }
 function drawTesla(m){
