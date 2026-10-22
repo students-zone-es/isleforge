@@ -6530,10 +6530,19 @@ function worldAlarms(dt){
 function armAlarms(g,gi){
   const w=world, n=w.id>=3?3:2, sid=newSquad(), items=[];
   const cols=n===3?[7,13,27]:[9,30];
+  // sitio libre: ni encima de un generador, una mina u otra alarma, ni sobre metal fundido, lava, fuego, arenas o cinta
+  const bad=v=>SOLID[v]||v===MOLTEN||v===LAVA||v===FIRE||v===QSAND||v===BELT;
+  const clear=(x,y)=>!enemies.some(o=>o.alive&&o.static&&Math.hypot(o.x-x,o.y-y)<o.radius+40)&&!items.some(o=>Math.hypot(o.x-x,o.y-y)<60);
   for(const c0 of cols){
-    let c=Math.min(c0,WC-3), r=g.row+3;
-    if(SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,4); if(!nb) continue; c=nb[0]; r=nb[1]; }
-    const en=addEnemy('alarm',c*TILE+TILE/2,r*TILE+TILE/2,sid,true); en.static=true; en.ai='structure'; en.spawnGrace=0; items.push(en);
+    let spot=null;
+    for(const dc of [0,2,-2,3,-3,4,-4,5,-5,6,-6]){
+      let c=clamp(c0+dc,1,WC-2), r=g.row+3;
+      if(SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,3); if(!nb||nb[1]<=g.row+1) continue; c=nb[0]; r=nb[1]; }
+      const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
+      if(!bad(tileAtC(c,r))&&clear(x,y)){ spot=[x,y]; break; }
+    }
+    if(!spot) continue;
+    const en=addEnemy('alarm',spot[0],spot[1],sid,true); en.static=true; en.ai='structure'; en.spawnGrace=0; items.push(en);
   }
   w.alarm={gi,items,t:ALARM_TIME,state:items.length?'armed':'off'};
   if(items.length) popup(player.x,player.y-60,'⏰ '+items.length+' ALARMAS EN LA COMPUERTA · 1:30','#ff8a8a',14);
