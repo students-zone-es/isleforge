@@ -502,9 +502,35 @@ const JEEP_STEPS=[   // CHACAL: empieza como un viejo jeep de rescate y acaba co
   {d:'Puntas de energía: las balas atraviesan a un enemigo', pierce:1},
   {d:'Chacal de asalto: el modelo definitivo, dispara más rápido', cdMul:0.85},
 ];
+const TANK_STEPS=[   // TANQUE: empieza como un tractor blindado con pala y acaba como el tanque pesado de fábrica
+  {d:'Tractor blindado: pala delantera, cañón corto y faros; sin arco ni camuflaje', cloak:false, nade:false, carLights:1, dmgMul:0.8},
+  {d:'Faldones de acero sobre las orugas: +25 de vida', hp:25},
+  {d:'Cañón largo con freno de boca: daño completo', dmgMul:1},
+  {d:'Mortero en el casco: vuelve el ataque en arco (G)', nade:true},
+  {d:'Motor diésel nuevo: +15% de velocidad', spd:1.15},
+  {d:'Pintura de camuflaje: vuelve el camuflaje (F)', cloak:true},
+  {d:'Cargador automático: recarga un 25% más rápida', cdMul:0.75},
+  {d:'Doble cañón y barra de luces en la torreta', shells:2, carLights:2},
+  {d:'Proyectiles perforantes: atraviesan a un enemigo', pierce:1},
+  {d:'Tanque pesado de fábrica: +20% de daño', dmgMul:1.2},
+];
+const MOTO_STEPS=[   // JINETE: la moto bandida que capturas, cada vez más tuya
+  {d:'Moto bandida reprogramada: una pistola y un faro; sin arco ni camuflaje', shot:'single', cloak:false, nade:false, carLights:1, oneLight:true},
+  {d:'Chasis reforzado: +12 de vida', hp:12},
+  {d:'Dos pistolas: dispara alternando', shot:null},
+  {d:'Alforjas de granadas: vuelve el ataque en arco (G)', nade:true},
+  {d:'Turbo: +12% de velocidad', spd:1.12},
+  {d:'Carenado blindado: recibe menos daño', hurt:1.15},
+  {d:'Pintura de camuflaje: vuelve el camuflaje (F)', cloak:true},
+  {d:'Doble faro y 2 granadas por lanzamiento', oneLight:false, nades:2},
+  {d:'Balas perforantes: atraviesan a un enemigo', pierce:1},
+  {d:'Moto de neón: el modelo definitivo, dispara más rápido', cdMul:0.85},
+];
 const tierTable=steps=>Object.fromEntries(steps.map((s,i)=>[i+1,Object.assign({},...steps.slice(0,i+1),{d:s.d,map:'t'+(i+1)})]));
 const VEH_TIERS={
   jeep:tierTable(JEEP_STEPS),
+  tank:tierTable(TANK_STEPS),
+  moto:tierTable(MOTO_STEPS),
   mech:tierTable(MECH_STEPS),
 };
 function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
@@ -1639,7 +1665,7 @@ function makePlayer(){
     body:-Math.PI/2, aim:-Math.PI/2,
     hp:maxHp, maxHp, shield:up.shield*20, shieldMax:Math.max(20,up.shield*20),
     speedMax:ch.speed*(1+up.speed*0.07)*(tierInfo(ch.id).spd||1), accel:ch.accel, friction:ch.friction,
-    dmgMul:1+up.dmg*0.15, fireCdBase:ch.fireCd, fireCd:0,
+    dmgMul:(1+up.dmg*0.15)*(tierInfo(ch.id).dmgMul||1), fireCdBase:ch.fireCd, fireCd:0,
     fragment:0, pierce:0, regenRate:up.regen, regenTimer:0, magnet:50+up.ally*6,
     cloak:0, cloakCd:0, cloakDur:ch.cloakDur+up.cloak*90, cloakCdBase:ch.cloakCd,
     nadeCd:0, nadeCdBase:ch.nadeCd, nadeCount:1, nadeDmg:ch.nadeDmg,
@@ -1647,7 +1673,7 @@ function makePlayer(){
 }
 /* Lo que da el nivel del vehículo: tipo de disparo y si tiene camuflaje y ataque en arco */
 function tierLoadout(ch){
-  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp, burst:T.burst||0, carLights:T.carLights||0};
+  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp, burst:T.burst||0, carLights:T.carLights||0, oneLight:!!T.oneLight, shells:T.shells||0};
   if(T.hurt) o.hurt=T.hurt;
   if(T.pierce) o.pierce=T.pierce;
   if(T.nades) o.nadeCount=T.nades;
@@ -1745,7 +1771,7 @@ function firePlayerWeapon(follow){
   const dmg=ch.dmg*p.dmgMul*(1+(wl-1)*0.15);
   const side=(off)=>[Math.cos(p.aim+Math.PI/2)*off, Math.sin(p.aim+Math.PI/2)*off];
   if(ch.id==='tank'){
-    const n=wl>=3?2:1;
+    const n=Math.max(p.shells||1,wl>=3?2:1);   // doble cañón desde el nivel 8 del tanque
     for(let i=0;i<n;i++){
       const [ox,oy]=side(n>1?(i-0.5)*8:0);
       fireBullet(p.x+Math.cos(p.aim)*(muzzle+10)+ox, p.y+Math.sin(p.aim)*(muzzle+10)+oy, p.aim+rand(-0.02,0.02),'p',
@@ -4031,6 +4057,44 @@ function drawTankUnit(u,col,dark,hullAng,turAng,L){
   const tx=u.x-Math.cos(turAng)*rc*0.6, ty=u.y-Math.sin(turAng)*rc*0.6;
   blit(tankTurretSpr(col,dark,L||9),tx,ty,turAng,sc,6.5,6);
 }
+/* TANQUE por niveles: tractor blindado oxidado con pala delantera y cañón corto (1), faldones sobre las orugas (2),
+   cañón largo con freno de boca (3), mortero en el casco (4), motor nuevo con escapes (5), camuflaje (6-9), cargador
+   automático detrás de la torreta (7), doble cañón y barra de luces (8), puntas de energía (9) y el pesado dorado sin pala (10) */
+function tankTierHull(tier,frame){
+  const key='tkh|'+tier+'|'+frame; if(sprCache[key]) return sprCache[key];
+  const c=mkCanvas(22,18), g=c.getContext('2d'), R=(x,y,w,h,cc)=>{ g.fillStyle=cc; g.fillRect(x+2,y+1,w,h); };
+  const camo=tier>=6&&tier<10, col=tier>=10?'#d9a53a':camo?'#6a7040':'#7a6a42', dark=tier>=10?'#3a2a05':'#2e2818';
+  R(0,0,18,4,'#151515'); R(0,12,18,4,'#151515');
+  for(let x=frame;x<18;x+=3){ R(x,1,1,2,'#505050'); R(x,13,1,2,'#505050'); }
+  if(tier>=2){ R(1,0,16,2,'#5a5f66'); R(1,14,16,2,'#5a5f66'); for(const x of [3,8,13]){ R(x,0,1,1,'#9aa0a8'); R(x,15,1,1,'#9aa0a8'); } }   // faldones
+  R(1,3,16,10,dark); R(2,4,14,8,col); R(2,4,14,1,shade(col,0.3)); R(2,11,14,1,shade(col,-0.3));
+  if(tier>=5){ R(2,5,3,6,'#3a3f46'); R(2,6,3,1,'#7a8088'); R(2,8,3,1,'#7a8088'); R(-1,5,1,2,'#333'); R(-1,9,1,2,'#333'); }   // motor nuevo y escapes
+  else { R(2,5,2,6,shade(col,-0.25)); R(2,6,2,1,'#111'); R(2,8,2,1,'#111'); }
+  R(15,4,1,1,'#ffeeaa'); R(15,11,1,1,'#ffeeaa');
+  if(tier<6){ R(5,10,2,1,'#8a4b2a'); R(11,4,2,1,'#8a4b2a'); R(14,9,1,1,'#8a4b2a'); }   // óxido
+  if(camo){ R(6,5,3,2,'#4a5030'); R(10,8,3,2,'#545a36'); R(13,5,2,2,'#4a5030'); }
+  if(tier>=4){ R(4,9,3,3,'#2a2a2a'); R(5,10,1,1,'#666'); }   // mortero
+  if(tier<10){ R(18,0,2,16,'#3a3a3a'); R(19,1,1,14,'#6a6a6a'); R(17,4,1,8,'#2a2a2a'); }   // pala de tractor
+  sprCache[key]=c; return c;
+}
+function tankTierTurret(tier){
+  const key='tkt|'+tier; if(sprCache[key]) return sprCache[key];
+  const L=tier<3?7:12, c=mkCanvas(13+L,12), g=c.getContext('2d'), R=(x,y,w,h,cc)=>{ g.fillStyle=cc; g.fillRect(x,y,w,h); };
+  const camo=tier>=6&&tier<10, col=tier>=10?'#d9a53a':camo?'#6a7040':'#7a6a42', dark=tier>=10?'#3a2a05':'#2e2818', tip=tier>=9?'#bfffff':shade(dark,0.45);
+  if(tier>=7){ R(0,3,2,6,'#3a3f46'); R(0,4,1,4,'#7a8088'); }   // cargador automático
+  R(1,2,11,8,dark); R(2,3,9,6,col); R(2,3,9,1,shade(col,0.35)); R(2,8,9,1,shade(col,-0.3));
+  R(4,4,3,3,shade(col,-0.2)); R(5,5,1,1,'#111');
+  if(camo){ R(7,4,2,2,'#4a5030'); }
+  const barrel=yy=>{ R(11,yy,L,2,dark); R(11,yy,L,1,shade(dark,0.45)); R(10+L,yy,1,2,tip); };
+  if(tier>=8){ barrel(3); barrel(7); } else { barrel(5); if(tier>=3) R(9+L,4,2,4,dark); }
+  if(tier>=8){ R(3,2,5,1,'#fff6c8'); }   // barra de luces
+  sprCache[key]=c; return c;
+}
+function drawTankTier(u){
+  const tier=u.tier!=null?u.tier:vehTier('tank'), sc=u.radius*2/16, frame=Math.floor(Math.abs(u.tread||0))%3, rc=u.recoil||0;
+  blit(tankTierHull(tier,frame),u.x,u.y,u.body||0,sc);
+  blit(tankTierTurret(tier),u.x-Math.cos(u.aim||0)*rc*0.6,u.y-Math.sin(u.aim||0)*rc*0.6,u.aim||0,sc,6.5,6);
+}
 function drawJeep(u,col){
   const sc=u.radius*2/13;
   blit(jeepSpr(col,Math.floor(Math.abs(u.tread||0))%3),u.x,u.y,u.body!=null?u.body:u.angle,sc);
@@ -4210,7 +4274,7 @@ function drawPlayer(){
   ctx.save(); ctx.globalAlpha=alpha;
   if(p.hurtFlash>0) ctx.filter='brightness(2.2)';
   if(p.ch.id==='mech') drawMech(p);
-  else if(p.ch.id==='tank') drawTankUnit(p,'#d9a53a','#3a2a05',p.body,p.aim,12);
+  else if(p.ch.id==='tank') drawTankTier(p);
   else if(p.ch.id==='moto') drawPlayerMoto(p);
   else drawChacal(p);
   ctx.restore();
@@ -5759,7 +5823,7 @@ function drawUpgradeStation(){
       ctx.fillStyle='#ffd76e'; ctx.font='bold 13px Rajdhani, monospace'; ctx.fillText('?',cx,cy+5);
     } else {
       const sc=id==='tank'?1.25:1.4, u={x:cx,y:cy,radius:ch.radius*sc,body:-Math.PI/2,aim:-Math.PI/2+(mine?Math.sin(t*0.02)*0.5:0),walk:0,tread:0,angle:-Math.PI/2};
-      if(id==='mech') drawMech(u); else if(id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else if(id==='moto') drawPlayerMoto(u); else drawChacal(u);
+      if(id==='mech') drawMech(u); else if(id==='tank') drawTankTier(u); else if(id==='moto') drawPlayerMoto(u); else drawChacal(u);
     }
     // cartel con el nombre y el nivel de mejoras
     ctx.fillStyle=mine?'rgba(8,40,44,.92)':'rgba(13,20,32,.85)'; ctx.fillRect(bx+3,y+8,bw-6,30);
@@ -5855,7 +5919,7 @@ function drawHelipadHome(){
   ctx.strokeStyle='#f5c518'; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(cx,cy,74,0,Math.PI*2); ctx.stroke();
   ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillRect(cx-28,cy-36,12,72); ctx.fillRect(cx+16,cy-36,12,72); ctx.fillRect(cx-28,cy-6,56,12);
   for(const [lx,ly] of [[x+10,y+10],[x+w-14,y+10],[x+10,y+h-14],[x+w-14,y+h-14]]){ ctx.fillStyle=Math.floor(t/25)%2?'#ff4757':'#5a1a1a'; ctx.fillRect(lx,ly,5,5); }
-  drawHeli(cx+6,cy-4,-Math.PI/2,0,t*0.04,null);
+  ctx.save(); ctx.translate(cx+6,cy-4); ctx.scale(1.35,1.35); drawHeli(0,0,-Math.PI/2,0,0.5,null,0); ctx.restore();   // aparcado (más grande, ocupa el helipuerto): las palas quietas
 }
 function drawLamps(){
   for(const [c,r] of homeLamps){
@@ -6413,25 +6477,59 @@ function updateHelis(dt){
     }
   }
 }
-function drawHeli(x,y,ang,alt,rotor,carry){
+/* HELICÓPTERO de transporte (como el del concepto de la base): fuselaje gris oscuro y redondeado, cabina de cristal
+   delante, patines, alas cortas con cohetes, motor con escapes, cola con estabilizador y rotor de cola, y 4 palas.
+   spin = lo rápido que giran las palas (0 = paradas: así está en la base; 1 = en vuelo, con el disco borroso) */
+function drawHeli(x,y,ang,alt,rotor,carry,spin){
+  spin=spin==null?1:spin;
   ctx.fillStyle='rgba(0,0,0,.25)';
   ctx.beginPath(); ctx.ellipse(x+alt*0.35,y+alt*0.6+10,30,11,ang,0,Math.PI*2); ctx.fill();
   if(carry==='orb'){ ctx.strokeStyle='#cfd6df'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+28); ctx.stroke(); glowCircle(x,y+30,8,'#3ee67a'); }
   ctx.save(); ctx.translate(x,y); ctx.rotate(ang);
-  ctx.fillStyle='#2f3a26'; ctx.fillRect(-50,-3,34,6); ctx.fillRect(-54,-9,7,18);
-  ctx.fillStyle='rgba(220,230,240,.5)'; ctx.fillRect(-53,-13+Math.sin(rotor*3)*4,2,26);
-  ctx.fillStyle='#22281c'; ctx.fillRect(-18,-14,38,28);
-  ctx.fillStyle='#4f5f42'; ctx.fillRect(-16,-12,34,24);
-  ctx.fillStyle='#62754f'; ctx.fillRect(-16,-12,34,5);
-  ctx.fillStyle='#f5c518'; ctx.fillRect(-16,-2,34,4);
-  ctx.fillStyle='#9fe8ff'; ctx.fillRect(10,-9,9,18); ctx.fillStyle='rgba(255,255,255,.45)'; ctx.fillRect(10,-9,9,4);
-  ctx.fillStyle='#1a1d22'; ctx.fillRect(-14,-17,30,3); ctx.fillRect(-14,14,30,3);
+  // patines
+  ctx.fillStyle='#1a1d22'; ctx.fillRect(-16,-17,36,3); ctx.fillRect(-16,14,36,3);
+  ctx.fillStyle='#2a2f36'; for(const sx of [-8,10]){ ctx.fillRect(sx,-15,2,5); ctx.fillRect(sx,10,2,5); }
+  // cola: botalón que se estrecha, estabilizador y rotor de cola
+  ctx.fillStyle='#38444c'; ctx.beginPath(); ctx.moveTo(-14,-5); ctx.lineTo(-58,-2); ctx.lineTo(-58,2); ctx.lineTo(-14,5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#4e5c65'; ctx.fillRect(-56,-1,40,1);
+  ctx.fillStyle='#2e383f'; ctx.fillRect(-50,-9,6,18); ctx.fillStyle='#4e5c65'; ctx.fillRect(-50,-9,6,2);
+  if(spin>0){ ctx.fillStyle='rgba(200,210,220,'+(0.35*spin).toFixed(2)+')'; ctx.fillRect(-60,-10,3,20); }
+  else { ctx.fillStyle='#1e2328'; ctx.fillRect(-60,-9,2,18); }
+  // alas cortas con cohetes
+  ctx.fillStyle='#2e383f'; ctx.fillRect(-6,-19,8,6); ctx.fillRect(-6,13,8,6);
+  ctx.fillStyle='#4a5560'; ctx.fillRect(-8,-22,12,4); ctx.fillRect(-8,18,12,4); ctx.fillStyle='#c94a3a'; ctx.fillRect(4,-22,1,4); ctx.fillRect(4,18,1,4);
+  // fuselaje
+  ctx.fillStyle='#262e33'; ctx.beginPath(); ctx.ellipse(2,0,24,13,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#45525a'; ctx.beginPath(); ctx.ellipse(2,0,22,11,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#5a6a73'; ctx.beginPath(); ctx.ellipse(1,-3,19,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(-10,-11,1,22); ctx.fillRect(6,-11,1,22);   // juntas de los paneles
+  // motor con escapes
+  ctx.fillStyle='#323c43'; ctx.fillRect(-14,-6,16,12); ctx.fillStyle='#3e4a52'; ctx.fillRect(-14,-6,16,3);
+  ctx.fillStyle='#14181b'; ctx.fillRect(-16,-5,3,3); ctx.fillRect(-16,2,3,3);
+  // cabina de cristal
+  ctx.fillStyle='#16343f'; ctx.beginPath(); ctx.ellipse(15,0,9,9,0,-Math.PI/2,Math.PI/2); ctx.fill();
+  ctx.fillStyle='#2d6a7e'; ctx.beginPath(); ctx.ellipse(15,0,7,7,0,-Math.PI/2,Math.PI/2); ctx.fill();
+  ctx.fillStyle='rgba(180,240,255,.55)'; ctx.fillRect(16,-5,3,3);
+  ctx.fillStyle='#262e33'; ctx.fillRect(15,-9,1,18);
+  ctx.fillStyle='#3ee6e6'; ctx.fillRect(-4,-9,2,2);   // emblema
+  ctx.fillStyle=Math.floor(t/20)%2?'#ff4757':'#5a1a1a'; ctx.fillRect(-58,-1,2,2);   // luz de la cola
   ctx.restore();
+  // rotor principal: en vuelo, disco borroso; parado, 4 palas nítidas con la punta amarilla
   ctx.save(); ctx.translate(x,y);
-  ctx.globalAlpha=0.12; ctx.fillStyle='#e8f0ff'; ctx.beginPath(); ctx.arc(0,0,44,0,Math.PI*2); ctx.fill();
-  ctx.globalAlpha=0.65; ctx.strokeStyle='#1a1d22'; ctx.lineWidth=4;
-  for(let k=0;k<2;k++){ const a=rotor+k*Math.PI/2; ctx.beginPath(); ctx.moveTo(-Math.cos(a)*44,-Math.sin(a)*44); ctx.lineTo(Math.cos(a)*44,Math.sin(a)*44); ctx.stroke(); }
-  ctx.globalAlpha=1; ctx.fillStyle='#2a2f36'; ctx.fillRect(-4,-4,8,8);
+  if(spin>0){
+    ctx.globalAlpha=0.12*spin; ctx.fillStyle='#e8f0ff'; ctx.beginPath(); ctx.arc(0,0,46,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=0.55*spin; ctx.strokeStyle='#1a1d22'; ctx.lineWidth=4;
+    for(let k=0;k<2;k++){ const a=rotor+k*Math.PI/2; ctx.beginPath(); ctx.moveTo(-Math.cos(a)*46,-Math.sin(a)*46); ctx.lineTo(Math.cos(a)*46,Math.sin(a)*46); ctx.stroke(); }
+    ctx.globalAlpha=1;
+  } else {
+    for(let k=0;k<4;k++){ const a=rotor+k*Math.PI/2;
+      ctx.save(); ctx.rotate(a);
+      ctx.fillStyle='rgba(0,0,0,.2)'; ctx.fillRect(4,1,44,3);   // sombra de la pala sobre el fuselaje
+      ctx.fillStyle='#1e2328'; ctx.fillRect(3,-1.5,45,3); ctx.fillStyle='#3a434b'; ctx.fillRect(3,-1.5,45,1);
+      ctx.fillStyle='#f5c518'; ctx.fillRect(44,-1.5,4,3);
+      ctx.restore(); }
+  }
+  ctx.fillStyle='#2a2f36'; ctx.fillRect(-4,-4,8,8); ctx.fillStyle='#5a646e'; ctx.fillRect(-2,-2,4,4);
   ctx.restore();
 }
 function drawHelis(){ for(const h of helis) drawHeli(h.x,h.y,h.ang,h.state==='hover'?20:46,h.rotor,h.kind==='orb'&&h.state==='in'?'orb':null); }
@@ -9670,7 +9768,14 @@ function captureMoto(en){
   else { runWork+=10; popup(en.x,en.y-30,'MOTO REPROGRAMADA · +10 ◆ en piezas','#3ee6e6',13); }
 }
 /* Tu moto: el mismo dibujo, con pañuelo verde, y la estela que deja al correr */
-function drawPlayerMoto(u){ drawMoto({x:u.x,y:u.y,bodyA:u.body,lean:u.lean||0,steer:u.steer||0,trail:u.trail,skids:null,wheelie:0},'#3ee67a'); }
+function drawPlayerMoto(u){ drawMoto({x:u.x,y:u.y,bodyA:u.body,lean:u.lean||0,steer:u.steer||0,trail:u.trail,skids:null,wheelie:0,tier:u.tier!=null?u.tier:vehTier('moto')},'#3ee67a'); }
+/* Colores de la moto según su nivel: chatarra oxidada (1-5), carenado de metal (6), camuflaje (7-9) y neón verde (10) */
+function motoPal(tier){
+  if(tier==null||tier<6) return {b0:'#4a2a14',b1:'#7a4a24',b2:'#b8672e',f:'#5a3418',s:'#8a5a2e',eye:'#ff3df0',eye2:'#ffd0fa'};
+  if(tier===6) return {b0:'#3a2a18',b1:'#6a4a2a',b2:'#a8774a',f:'#5a6068',s:null,eye:'#ff3df0',eye2:'#ffd0fa'};
+  if(tier<10) return {b0:'#2e3820',b1:'#4e5a32',b2:'#7a8a4a',f:'#5a6448',s:null,eye:'#ff3df0',eye2:'#ffd0fa'};
+  return {b0:'#0e1013',b1:'#1c2026',b2:'#3ee67a',f:'#22262c',s:null,eye:'#3ee67a',eye2:'#d8ffe8'};
+}
 
 function motoDrive(en,dt){
   const M=MOTO, kGeo=Math.tan(M.steerMax)/M.L;
@@ -9813,11 +9918,14 @@ function drawMoto(en,col){
   ctx.fillStyle='rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(4-Math.sin(a)*lo,6+Math.cos(a)*lo,20,6,a,0,Math.PI*2); ctx.fill();
   ctx.rotate(a);
   const fx=-lift*Math.sin(a), fy=-lift*Math.cos(a);   // «arriba» de la pantalla visto desde el sistema girado de la moto
-  // luz de los faros (cono rosa tenue hacia donde apunta la rueda)
+  const P=motoPal(en.tier), tier=en.tier;
+  // luz de los faros (cono rosa tenue hacia donde apunta la rueda): la moto del jugador usa los faros de verdad (p9m_daynight.js)
+  if(tier==null){
   ctx.save(); ctx.translate(fx,fy); ctx.rotate(st*0.5);
   const g=ctx.createLinearGradient(22,0,76,0); g.addColorStop(0,'rgba(255,61,240,'+(0.18+0.2*dark).toFixed(2)+')'); g.addColorStop(1,'rgba(255,61,240,0)');
   ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(22,-2); ctx.lineTo(76,-14); ctx.lineTo(76,14); ctx.lineTo(22,2); ctx.closePath(); ctx.fill();
   ctx.restore();
+  }
   const wheel=(neon)=>{
     ctx.fillStyle='#141210'; ctx.fillRect(-5,-3,10,6);
     ctx.fillStyle='#3a332c'; for(let k=-4;k<=3;k+=2) ctx.fillRect(k+(Math.floor(t/2)%2),-3,1,6);   // taco del neumático girando
@@ -9827,19 +9935,25 @@ function drawMoto(en,col){
   ctx.save(); ctx.translate(17+fx,fy); ctx.rotate(st); wheel('#3ee6e6'); ctx.restore();            // delantera cian, gira con el manillar
   // al tumbarse, la moto vista desde arriba se estrecha
   ctx.save(); ctx.scale(1,1-0.3*Math.abs(Math.sin(lean)));
-  ctx.fillStyle='#4a2a14'; ctx.fillRect(-8,-4,17,8);
-  ctx.fillStyle='#7a4a24'; ctx.fillRect(-7,-3,15,6);
-  ctx.fillStyle='#b8672e'; ctx.fillRect(-6,-3,6,1); ctx.fillRect(2,2,4,1);
+  ctx.fillStyle=P.b0; ctx.fillRect(-8,-4,17,8);
+  ctx.fillStyle=P.b1; ctx.fillRect(-7,-3,15,6);
+  ctx.fillStyle=P.b2; ctx.fillRect(-6,-3,6,1); ctx.fillRect(2,2,4,1);
+  if(tier>=2){ ctx.fillStyle='#7a8088'; ctx.fillRect(-5,-4,6,1); ctx.fillRect(-5,3,6,1); ctx.fillStyle='#b0b6be'; ctx.fillRect(-4,-4,1,1); ctx.fillRect(-4,3,1,1); }   // chasis reforzado
+  if(tier>=4){ ctx.fillStyle='#4a6a3a'; ctx.fillRect(-12,-8,5,3); ctx.fillRect(-12,5,5,3); ctx.fillStyle='#ff4757'; ctx.fillRect(-9,-8,1,1); ctx.fillRect(-9,7,1,1); }   // alforjas de granadas
+  if(tier>=5){ ctx.fillStyle=Math.floor(t/3)%2?'#6ad7ff':'#2a8ad8'; ctx.fillRect(-15,-6,3,2); ctx.fillRect(-15,4,3,2); }   // llama azul del turbo
   ctx.fillStyle='#5a5f66'; ctx.beginPath(); ctx.arc(0,0,2.6,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#2a2d33'; ctx.fillRect(-1,-1,2,2);
   ctx.fillStyle='#6a6a6a'; ctx.fillRect(-12,4,9,2); ctx.fillRect(-12,-6,9,2);                 // escapes a los lados
   ctx.fillStyle=Math.floor(t/4)%2?'#ff3df0':'#b02aa8'; ctx.fillRect(-2,4,3,2);                  // brillo rosa del motor
   ctx.fillStyle='#232a33'; ctx.fillRect(-9,-2,6,4); ctx.fillStyle='#2f3a46'; ctx.fillRect(-10,-5,3,3); ctx.fillRect(-10,2,3,3);   // asiento y alforjas
   // carenado con pinchos y dos «ojos» rosas (sube con el caballito)
   ctx.save(); ctx.translate(fx,fy);
-  ctx.fillStyle='#5a3418'; ctx.beginPath(); ctx.moveTo(6,-5); ctx.lineTo(13,-3); ctx.lineTo(14,0); ctx.lineTo(13,3); ctx.lineTo(6,5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#8a5a2e'; for(const [x,y,dx,dy] of [[12,-3,3,-4],[12,3,3,4],[7,-5,1,-5],[7,5,1,5]]){ ctx.beginPath(); ctx.moveTo(x,y-1); ctx.lineTo(x+dx,y+dy); ctx.lineTo(x,y+1); ctx.closePath(); ctx.fill(); }
-  ctx.fillStyle='#ff3df0'; ctx.fillRect(11,-3,2,2); ctx.fillRect(11,1,2,2);
-  ctx.fillStyle='#ffd0fa'; ctx.fillRect(12,-3,1,1); ctx.fillRect(12,1,1,1);
+  ctx.fillStyle=P.f; ctx.beginPath(); ctx.moveTo(6,-5); ctx.lineTo(13,-3); ctx.lineTo(14,0); ctx.lineTo(13,3); ctx.lineTo(6,5); ctx.closePath(); ctx.fill();
+  if(P.s){ ctx.fillStyle=P.s; for(const [x,y,dx,dy] of [[12,-3,3,-4],[12,3,3,4],[7,-5,1,-5],[7,5,1,5]]){ ctx.beginPath(); ctx.moveTo(x,y-1); ctx.lineTo(x+dx,y+dy); ctx.lineTo(x,y+1); ctx.closePath(); ctx.fill(); } }   // pinchos (el carenado blindado ya no los lleva)
+  ctx.fillStyle=P.eye; ctx.fillRect(11,-3,2,2); ctx.fillRect(11,1,2,2);
+  ctx.fillStyle=P.eye2; ctx.fillRect(12,-3,1,1); ctx.fillRect(12,1,1,1);
+  if(tier>=3){ ctx.fillStyle='#2a2a2a'; ctx.fillRect(8,-7,5,1); ctx.fillRect(8,6,5,1); ctx.fillStyle=tier>=9?'#bfffff':'#777'; ctx.fillRect(13,-7,1,1); ctx.fillRect(13,6,1,1); }   // dos pistolas
+  if(tier>=8){ ctx.fillStyle='#fff6c8'; ctx.fillRect(14,-2,1,1); ctx.fillRect(14,1,1,1); }   // doble faro
+  if(tier>=10){ ctx.fillStyle='#3ee67a'; ctx.fillRect(-7,-4,13,1); ctx.fillRect(-7,3,13,1); }   // franjas de neón
   ctx.save(); ctx.translate(8,0); ctx.rotate(st); ctx.fillStyle='#9aa0a8'; ctx.fillRect(0,-7,1,14); ctx.restore();   // manillar
   ctx.restore();
   ctx.restore();
@@ -10322,6 +10436,7 @@ function lampBeam(p){
 /* FAROS del Chacal: dos conos paralelos desde las esquinas delanteras; con la barra del techo (nivel 8), un tercero ancho */
 function headLights(p){
   const a=p.body, fx=Math.cos(a), fy=Math.sin(a), sx=-fy, sy=fx, f=p.radius*0.95, w=p.radius*0.7, k=dreadLightK();
+  if(p.oneLight) return [[p.x+fx*f,p.y+fy*f,240*k,0.85,a,0.2,'hq']];   // la moto: un solo faro
   const L=[-1,1].map(s=>[p.x+fx*f+sx*w*s, p.y+fy*f+sy*w*s, 240*k, 0.85, a+s*0.07, 0.16, 'hq']);   // cada faro un poco hacia su lado
   if(p.carLights>=2) L.push([p.x+fx*2, p.y+fy*2, 320*k, 0.6, a, 0.5, 'hq']);
   return L;
@@ -10771,7 +10886,7 @@ function menuCursor(){
   menuCurFor=ch;
   const c=previewCanvas(()=>{
     const u={x:28,y:28,radius:ch==='mech'?23:21,body:0,aim:0,walk:0.6,tread:0,angle:0};
-    if(ch==='mech') drawMech(u); else if(ch==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',0,0,12); else if(ch==='moto') drawPlayerMoto(u); else drawChacal(u);
+    if(ch==='mech') drawMech(u); else if(ch==='tank') drawTankTier(u); else if(ch==='moto') drawPlayerMoto(u); else drawChacal(u);
   });
   document.getElementById('scrMenu').style.setProperty('--mcur','url('+c.toDataURL()+')');
 }
@@ -11991,7 +12106,7 @@ function renderHangar(){
     const cvs=previewCanvas(()=>{
       const u={x:28,y:31,radius:ch.radius*(ch.id==='tank'?1.35:1.55),body:-Math.PI/2,aim:-Math.PI/2-0.6,walk:0.6,tread:0,angle:-Math.PI/2};
       if(ch.id==='mech') drawMech(u);
-      else if(ch.id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12);
+      else if(ch.id==='tank') drawTankTier(u);
       else if(ch.id==='moto') drawPlayerMoto(u);
       else drawChacal(u);
     });
