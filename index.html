@@ -10066,7 +10066,7 @@ function nightLights(){
   }
   const p=player;
   if(p&&p.alive&&!p.lamp) L.push([p.x,p.y,140*dreadLightK(),1]);   // halo de luz (el Centinela con linterna no lo tiene)
-  if(p&&p.alive&&p.lamp) for(const [x,y,r] of lampBeam(p)) L.push([x,y,r*dreadLightK(),0.95]);
+  if(p&&p.alive&&p.lamp) L.push(...lampBeam(p));
   if(orb) L.push([orb.x,orb.y,110,0.95]);
   if(mate&&mate.alive) L.push([mate.x,mate.y,70,0.8]);
   for(const tu of turrets) if(tu.alive) L.push([tu.x,tu.y,50,0.7]);
@@ -10080,6 +10080,7 @@ function drawNight(cx,cy){
   const k=nightAmt(), wm=warmAmt();
   if(k<0.02) return;
   drawDark(cx,cy,darkAlpha()/0.62,nightLights());
+  drawLampTint(cx,cy);
   drawWatchers(cx,cy);
   if(wm>0.02){ ctx.fillStyle='rgba(255,130,60,'+(0.14*wm).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }   // luz anaranjada
 }
@@ -10090,9 +10091,10 @@ function drawDark(cx,cy,k,lights){
   g.globalCompositeOperation='source-over'; g.clearRect(0,0,W,H);
   g.fillStyle='rgba(6,10,30,'+(Math.min(0.97,0.62*k)).toFixed(3)+')'; g.fillRect(0,0,W,H);
   g.globalCompositeOperation='destination-out';   // cada luz "borra" la oscuridad a su alrededor
-  for(const [x,y,r,s] of lights){
+  for(const [x,y,r,s,a,sp] of lights){
     const sx=x-cx, sy=y-cy;
     if(sx<-r||sy<-r||sx>W+r||sy>H+r) continue;
+    if(a!=null){ drawCone(g,sx,sy,r,s,a,sp); continue; }
     const gr=g.createRadialGradient(sx,sy,0,sx,sy,r);
     gr.addColorStop(0,'rgba(0,0,0,'+s+')'); gr.addColorStop(0.55,'rgba(0,0,0,'+(s*0.6).toFixed(2)+')'); gr.addColorStop(1,'rgba(0,0,0,0)');
     g.fillStyle=gr; g.beginPath(); g.arc(sx,sy,r,0,Math.PI*2); g.fill();
@@ -10139,16 +10141,33 @@ function updateDread(dt){
   const near=D.watchers.some(w=>!w.gone&&Math.hypot(u.x-w.x,u.y-w.y)<300);
   if(L>=3&&near&&(D.beatT-=dt)<=0){ D.beatT=52; beep(55,0.13,'sine',0.11); beep(47,0.13,'sine',0.08,null,0.17); }
 }
-/* LINTERNA del Centinela: haz de luz hacia delante desde el brazo izquierdo; los ojos que alumbra huyen */
+/* Luz en CONO [x,y,alcance,fuerza,ángulo,apertura]: tres capas (borde suave, haz y centro caliente) */
+function drawCone(g,sx,sy,r,s,a,sp){
+  for(const [w,k] of [[1.3,0.3],[1,0.5],[0.5,0.45]]){
+    const gr=g.createRadialGradient(sx,sy,4,sx,sy,r);
+    gr.addColorStop(0,'rgba(0,0,0,'+(s*k).toFixed(2)+')'); gr.addColorStop(0.6,'rgba(0,0,0,'+(s*k*0.75).toFixed(2)+')'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=gr; g.beginPath(); g.moveTo(sx,sy); g.arc(sx,sy,r,a-sp*w,a+sp*w); g.closePath(); g.fill();
+  }
+}
+/* LINTERNA del Centinela (casera): un cono que tiembla un poco y parpadea como una bombilla mala; alumbra apenas
+   el brazo y los ojos que toca el haz huyen. No es un halo: solo ves lo que tienes delante. */
 function lampBeam(p){
-  const a=p.body, ox=p.x+Math.cos(a-Math.PI/2)*p.radius*0.5, oy=p.y+Math.sin(a-Math.PI/2)*p.radius*0.5;
-  return [[34,28],[100,46],[190,68]].map(([d,r])=>[ox+Math.cos(a)*d,oy+Math.sin(a)*d,r]);
+  const a=p.body+Math.sin(t*0.05)*0.02, ox=p.x+Math.cos(a-Math.PI/2)*p.radius*0.55+Math.cos(a)*p.radius, oy=p.y+Math.sin(a-Math.PI/2)*p.radius*0.55+Math.sin(a)*p.radius;
+  const fl=Math.random()<0.012?0.45:0.86+0.14*Math.sin(t*0.9)*Math.sin(t*0.37);   // parpadeo de bombilla vieja
+  return [[ox,oy,270*dreadLightK(),fl,a,0.36],[ox,oy,26,0.55*fl]];
+}
+/* Tinte cálido amarillento del haz (bombilla barata), encima de la oscuridad */
+function drawLampTint(cx,cy){
+  const p=player; if(!p||!p.alive||!p.lamp||inHome) return;
+  const [[x,y,r,s,a,sp]]=lampBeam(p), sx=x-cx, sy=y-cy, gr=ctx.createRadialGradient(sx,sy,4,sx,sy,r);
+  gr.addColorStop(0,'rgba(255,214,140,'+(0.16*s).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,214,140,0)');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.arc(sx,sy,r,a-sp,a+sp); ctx.closePath(); ctx.fill();
 }
 function lampScare(u){
   for(const w of dread.watchers){
     if(w.gone) continue;
     const d=Math.hypot(w.x-u.x,w.y-u.y);
-    if(d<300&&Math.abs(angDiff(u.body,Math.atan2(w.y-u.y,w.x-u.x)))<0.4){
+    if(d<270&&Math.abs(angDiff(u.body,Math.atan2(w.y-u.y,w.x-u.x)))<0.4){
       w.gone=true; beep(rand(520,620),0.25,'sawtooth',0.03,rand(180,240));   // chillido al huir
       popup(w.x,w.y-10,'¡huye!','#8fc8ff',11);
     }
