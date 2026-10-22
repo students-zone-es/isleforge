@@ -544,7 +544,7 @@ const TESLA_STEPS=[   // VOLTIO (aliado): de dron casero a tormenta eléctrica
   {d:'Dron casero: un rayo corto que da a un enemigo', chain:1, range:140, hpMul:0.85},
   {d:'El rayo salta a 3 enemigos', chain:3, range:170, hpMul:1},
   {d:'Escudo eléctrico: cada 12 s te da +20 de escudo', shieldPulse:true},
-  {d:'El rayo salta a 4 enemigos y aturde el doble a los jefes', chain:4, bossStun:2, hpMul:1.3},
+  {d:'El rayo salta a 4 enemigos y +30% de vida', chain:4, hpMul:1.3},
   {d:'Tormenta eléctrica: cada 9 s descarga sobre todos los enemigos cercanos', storm:true, chain:5},
 ];
 const tierTable=steps=>Object.fromEntries(steps.map((s,i)=>[i+1,Object.assign({},...steps.slice(0,i+1),{d:s.d,map:'t'+(i+1)})]));
@@ -761,7 +761,7 @@ const CHARS={
 const MATES={
   car:{id:'car', name:'JABALÍ', evo:'MINITANQUE JABALÍ', desc:'Auto con ametralladora giratoria. Con R evoluciona a MINITANQUE con cañón.'},
   ninja:{id:'ninja', name:'KAGE', evo:'KAGE SHINOBI', desc:'Androide con IA ninja: esquiva, flanquea y pega granadas parásito que estallan a los 5 s dentro del enemigo.'},
-  tesla:{id:'tesla', name:'VOLTIO', evo:'VOLTIO MAX', desc:'Dron Tesla: electrocuta en cadena y aturde. Llena rápido la barra de aturdimiento de los jefes.'},
+  tesla:{id:'tesla', name:'VOLTIO', evo:'VOLTIO MAX', desc:'Dron Tesla: electrocuta en cadena y aturde a los enemigos (a los jefes solo les hace daño).'},
 };
 /* role: melee, ranged, spotter, mortar, air, ram, siege */
 const EDEFS={
@@ -2665,7 +2665,7 @@ function updateTesla(m,anchor,dt){
     if(boss&&boss.alive&&Math.hypot(boss.x-m.x,boss.y-m.y)<160&&!near.includes(boss)) near.push(boss);
     if(near.length){
       m.stormCd=540;
-      for(const e of near){ bolts.push(makeBolt(m.x,m.y,e.x,e.y)); if(e===boss) damageBoss(12,{stunAdd:20}); else damageEnemy(e,12,{src:mate,stun:30}); }
+      for(const e of near){ bolts.push(makeBolt(m.x,m.y,e.x,e.y)); if(e===boss) damageBoss(12,{stunAdd:0}); else damageEnemy(e,12,{src:mate,stun:30}); }
       rings.push({x:m.x,y:m.y,r:10,max:140,life:22,maxLife:22,color:'#9ff3ff'}); shake=Math.max(shake,4); S.zap();
       popup(m.x,m.y-26,'¡TORMENTA!','#9ff3ff',13);
     }
@@ -2686,7 +2686,7 @@ function chainZap(src,first,n,bossStun){
   for(let i=0;i<n&&cur;i++){
     hit.push(cur);
     bolts.push(makeBolt(fx,fy,cur.x,cur.y));
-    if(cur===boss) damageBoss(5,{stunAdd:9*(bossStun||1)});
+    if(cur===boss) damageBoss(5,{stunAdd:0});   // a los jefes solo les hace daño
     else damageEnemy(cur,5,{src:mate,stun:14});
     fx=cur.x; fy=cur.y;
     const prev=cur;
@@ -3755,6 +3755,7 @@ function bossKeepInArena(b){
 function updateBoss(dt){
   const b=boss; if(!b||!b.alive) return;
   if(b.dmgK==null) bossInit(b);   // se adapta a tu equipo (p9k_bosses.js)
+  bossAdaptTick(b,dt);            // y a cómo va la pelea
   if(b.flash>0) b.flash-=dt;
   shotFac=b.fac||'r'; shotSrc=null;
   if(b.purpleCd>0) b.purpleCd-=dt;
@@ -4331,6 +4332,17 @@ function drawEnemy(en){
     ctx.fillStyle=en.burst>0?'#ffd76e':'#ff5a6a'; ctx.fillRect(20,-6,2,3); ctx.fillRect(20,3,2,3);
     ctx.fillStyle='#4a5059'; ctx.fillRect(-6,-6,12,12); ctx.fillStyle=VISOR; ctx.fillRect(2,-2,3,4);
     ctx.restore(); hitFlashOff(); return;
+  }
+  if(d.look==='alarm'){
+    hitFlashOn(en);
+    const x=en.x, y=en.y, A=world&&world.alarm, k=A&&A.state==='armed'?A.t/ALARM_TIME:1, sp=0.08+0.3*(1-k), on=Math.sin(t*sp*3)>0;
+    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(x-9,y-4,20,16);
+    ctx.fillStyle='#2a2f36'; ctx.fillRect(x-2,y-2,4,12);
+    ctx.fillStyle='#3a4048'; ctx.fillRect(x-10,y-10,20,14); ctx.fillStyle='#5a646e'; ctx.fillRect(x-10,y-10,20,3);
+    ctx.fillStyle='#1a1d22'; for(let i=0;i<3;i++) ctx.fillRect(x-7+i*5,y-4,3,6);   // altavoz
+    ctx.fillStyle=on?'#ff4757':'#6a1a22'; ctx.beginPath(); ctx.arc(x,y-14,6,0,Math.PI*2); ctx.fill();
+    if(A&&A.state==='armed'){ ctx.save(); ctx.translate(x,y-14); ctx.rotate(t*sp*2); ctx.fillStyle='rgba(255,71,87,.25)'; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,40,-0.3,0.3); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    hitFlashOff(); return;
   }
   if(d.look==='generator'){
     hitFlashOn(en);
@@ -5171,6 +5183,7 @@ function render(){
   drawNight(cx,cy);   // p9m_daynight.js
   drawEnemyLamps(cx,cy);
   drawMuzzles(cx,cy);
+  drawAlarmHud();   // p9_campaign.js
   drawScreenFx();
   drawReticle();
 }
@@ -6426,7 +6439,7 @@ function updateWorld(dt){
     if(en.reinf){ if(dist(en,player)>1300){ en.alive=false; const sq=squads[en.squad]; if(sq) sq.alive--; } continue; }
     if(en.ai==='hunt'||en.ai==='search'||en.ai==='combat'){ en.ai='patrol'; en.home={x:en.x,y:en.y}; en.wp=null; en.aware=0; en.lastKnown=null; }
   }
-  worldRetreat(dt);
+  worldAlarms(dt);   // alarmas de la compuerta (antes: refuerzos al retroceder)
   // Durante el combate contra el jefe la compuerta de la arena queda cerrada a tu espalda
   if(w.bossSpawned&&boss&&boss.alive){
     const lockY=(w.arenaRow-0.4)*TILE;
@@ -6487,10 +6500,61 @@ function worldRetreat(dt){
     if(w.reinfLvl>0){ w.calmT=(w.calmT||0)+dt; if(w.calmT>1500){ w.calmT=0; w.reinfLvl--; } }
   }
 }
-function callReinforcements(){
+/* ALARMAS DE LA COMPUERTA: al entrar en una sección, junto a la compuerta del final se encienden 2 alarmas (3 desde el
+   Mundo 3) con una cuenta atrás de 90 s. Si las destruyes todas a tiempo, no viene nadie y sueltan WORK. Si se acaba el
+   tiempo, suena la sirena y llega la ÉLITE (los mismos enemigos, más duros, por la compuerta y en paracaídas).
+   Mientras no te hayan detectado la cuenta atrás va a la mitad de velocidad (el sigilo compensa). */
+const ALARM_TIME=90*60;
+EDEFS.alarm={name:'ALARMA', role:'structure', hp:26, speed:0, radius:11, mass:99, view:0, fov:0, dmg:0, score:120, work:3, color:'#ff4757', look:'alarm', purple:0};
+function worldAlarms(dt){
+  const w=world, p=player; if(!w||w.done||cine>0) return;
+  const gi=w.section-1, g=w.gates[gi];
+  if(w.alarm&&w.alarm.gi!==gi) w.alarm=null;   // ya pasaste esa compuerta
+  if(!g||g.open){ if(w.alarm&&w.alarm.state==='armed') w.alarm.state='off'; return; }
+  if(!w.alarm) armAlarms(g,gi);
+  const A=w.alarm; if(A.state!=='armed') return;
+  if(A.items.every(e=>!e.alive)){
+    A.state='off'; runWork+=15; S.upgrade();
+    popup(p.x,p.y-50,'🔕 ALARMAS DESACTIVADAS · +15 ◆','#3ee67a',16);
+    return;
+  }
+  if(!p.alive) return;
+  const seen=enemies.some(e=>e.alive&&e.ai==='combat'&&e.seen);
+  A.t-=dt*(seen?1:0.5);
+  if(A.t<=0){
+    A.state='fired'; alarmT=Math.max(alarmT,240); S.alarm();
+    announce('🚨 ¡ALARMA!','#ff4757','No llegaste a tiempo: la élite viene a por ti');
+    callReinforcements(true); setTimeout(()=>{ if(world===w&&!w.done) callReinforcements(true); },5000);
+  }
+}
+function armAlarms(g,gi){
+  const w=world, n=w.id>=3?3:2, sid=newSquad(), items=[];
+  const cols=n===3?[7,13,27]:[9,30];
+  for(const c0 of cols){
+    let c=Math.min(c0,WC-3), r=g.row+3;
+    if(SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,4); if(!nb) continue; c=nb[0]; r=nb[1]; }
+    const en=addEnemy('alarm',c*TILE+TILE/2,r*TILE+TILE/2,sid,true); en.static=true; en.ai='structure'; en.spawnGrace=0; items.push(en);
+  }
+  w.alarm={gi,items,t:ALARM_TIME,state:items.length?'armed':'off'};
+  if(items.length) popup(player.x,player.y-60,'⏰ '+items.length+' ALARMAS EN LA COMPUERTA · 1:30','#ff8a8a',14);
+}
+/* Contador de las alarmas arriba en el centro, y una flecha hacia cada alarma que quede (pantalla) */
+function drawAlarmHud(){
+  const w=world; if(!w||!w.alarm||w.alarm.state!=='armed'||cine>0) return;
+  const A=w.alarm, left=A.items.filter(e=>e.alive), s=Math.ceil(A.t/60), k=A.t/ALARM_TIME, urgent=s<=20;
+  const txt='⏰ ALARMAS '+left.length+'/'+A.items.length+' · '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  ctx.save(); ctx.font='bold 15px Rajdhani, monospace'; ctx.textAlign='center';
+  const bw=230, bx=W/2-bw/2, by=58;
+  ctx.fillStyle='rgba(13,20,32,.85)'; ctx.fillRect(bx,by,bw,26); ctx.strokeStyle=urgent?'#ff4757':'#ff8a8a'; ctx.strokeRect(bx+0.5,by+0.5,bw-1,25);
+  ctx.fillStyle=urgent&&Math.floor(t/10)%2?'#ff4757':'#ffd0d0'; ctx.fillText(txt,W/2,by+16);
+  ctx.fillStyle=urgent?'#ff4757':'#ff8a8a'; ctx.fillRect(bx+3,by+21,(bw-6)*k,2);
+  ctx.restore();
+  for(const e of left) drawOffscreenArrow(e.x,e.y,'#ff4757','⏰');
+}
+function callReinforcements(elite){
   const w=world, p=player;
   if(enemies.filter(e=>e.alive&&e.reinf).length>=REINF_MAX_ALIVE) return;
-  const L=w.reinfLvl=(w.reinfLvl||0)+1;
+  const L=elite?(w.eliteN=(w.eliteN||0)+1)+2:(w.reinfLvl=(w.reinfLvl||0)+1);   // la élite llega a nivel 3, 4, 5...
   const pool=worldReinfPool(w);
   // un solo bando por llamada: en los mundos con robots y bandidos se pelearían entre ellos
   const facs=[...new Set(pool.map(id=>EDEFS[id].fac||'r'))], fac=pick(facs);
@@ -6503,7 +6567,7 @@ function callReinforcements(){
   const sid=newSquad({reinf:true});
   const make=(id,x,y)=>{
     const d=EDEFS[id], en=addEnemy(id,x,y,sid,true);
-    en.reinf=true;
+    en.reinf=true; if(elite) en.elite=true;
     if(d.dmg!=null){ en.def=Object.create(d); en.def.dmg=Math.round(d.dmg*dmgMul); }
     en.maxHp=Math.round(en.maxHp*hpMul); en.hp=en.maxHp;
     en.ai='hunt'; en.aware=1; en.lastKnown={x:p.x,y:p.y}; en.spawnGrace=45;
@@ -6523,8 +6587,7 @@ function callReinforcements(){
     make(id,c*TILE+TILE/2,d.air?y:r*TILE+TILE/2);
   }
   alarmT=Math.max(alarmT,160); S.alarm();
-  popup(p.x,p.y-40,'¡REFUERZOS ENEMIGOS! · NIVEL '+L,'#ff8a3a',16);
-  if(L===1||L%3===0) announce('REFUERZOS · NIVEL '+L,'#ff8a3a',L>=3?'Ahora llegan tropas más duras… y algunas traen Hollow Boom':'Cuanto más retrocedas, más fuertes llegarán');
+  popup(p.x,p.y-40,elite?'¡LLEGA LA ÉLITE!':'¡REFUERZOS ENEMIGOS! · NIVEL '+L,'#ff8a3a',16);
 }
 /* Si caes mientras retrocedías (o acorralado por los refuerzos), reapareces en lo más lejos que habías llegado; los que
    te derrotaron se hacen más fuertes (+25% vida, se reparan, +20% daño, acumulable) y te siguen hasta allí. */
@@ -6533,13 +6596,13 @@ function worldDeathRespawn(){
   // el Orbe siempre cae en un punto concreto: el punto seguro de la sección más avanzada a la que has llegado
   const st=w.starts&&w.starts.length?w.starts[clamp(w.section,1,w.starts.length)-1]:null, spot=st?{x:st.x,y:st.y}:worldDropSpot();
   const hunters=enemies.filter(e=>e.alive&&!e.static&&!['structure','spawner','turret','dummy'].includes(e.def.role)&&(e.reinf||(e.ai==='combat'&&dist(e,p)<450)));
-  if(!(w.retreating||hunters.some(e=>e.reinf))) return spot;
+  if(!hunters.some(e=>e.reinf)) return spot;
   for(const e of hunters){
     e.vengeLvl=(e.vengeLvl||0)+1; e.maxHp=Math.round(e.maxHp*1.25); e.hp=e.maxHp;
     if(e.def.dmg!=null){ e.def=Object.create(e.def); e.def.dmg=Math.round(e.def.dmg*1.2); }
   }
   w.pursuers=hunters;
-  announce('¡CAÍSTE RETROCEDIENDO!','#ff8a3a','Reapareces en tu posición más avanzada… y los que te vencieron vienen detrás, más fuertes');
+  announce('¡TE HA VENCIDO LA ÉLITE!','#ff8a3a','Reapareces en tu posición más avanzada… y los que te vencieron vienen detrás, más fuertes');
   return spot;
 }
 /* Pide refuerzos, que caen en paracaídas a su alrededor (2-3 tropas de su bando): la torreta al caer, el mecánico al huir */
@@ -10124,7 +10187,26 @@ function drawMoto(en,col){
    · TRANSFORMACIÓN al bajar de la mitad de vida: gira, no recibe daño un momento, suelta una onda que te lanza y sigue
      con un aura roja, más agresivo. */
 let bossDmgK=1;   // multiplicador de daño mientras actúa el jefe (lo leen damagePlayer, fireBullet y addLob)
-function bossGear(){ let n=0, m=0; for(const d of SHOP_DEFS){ n+=Math.min(d.max,upOf(d.id)); m+=d.max; } return m?n/m:0; }   // el equipo del vehículo con el que vas
+function bossGear(){   // tu ventaja: mejoras del taller, nivel del vehículo y nivel del aliado (0..1)
+  let n=0, m=0; for(const d of SHOP_DEFS){ n+=Math.min(d.max,upOf(d.id)); m+=d.max; }
+  const ch=sel().char, mt=sel().mate, vt=maxTier(ch)>1?(vehTier(ch)-1)/(maxTier(ch)-1):0, at=maxTier(mt)>1?(vehTier(mt)-1)/(maxTier(mt)-1):0;
+  return (m?n/m:0)*0.5+vt*0.35+at*0.15;
+}
+/* EL JEFE SE ADAPTA EN LA PELEA: cada 6 s mira si llevas ventaja (le has quitado mucha vida en poco tiempo, o vas casi
+   entero mientras él está tocado) y, si es así, se refuerza: más daño, más agresivo, algo más rápido y se repara un poco.
+   Hasta 3 veces por pelea; se le nota con un aura roja que crece. */
+function bossAdaptTick(b,dt){
+  if(b.state==='intro') return;
+  b.adT=(b.adT||0)+dt; if(b.adT<360) return;
+  const lost=((b.adHp!=null?b.adHp:b.maxHp)-b.hp)/b.maxHp, p=player;
+  b.adT=0; b.adHp=b.hp;
+  const fast=lost>0.18, healthy=p.alive&&p.hp/p.maxHp>0.75&&b.hp/b.maxHp<0.7;
+  if((b.adapt||0)>=3||!(fast||healthy)) return;
+  b.adapt=(b.adapt||0)+1;
+  b.dmgK*=1.15; b.aggr*=1.15; b.speedMax*=1.06; b.hp=Math.min(b.maxHp,b.hp+b.maxHp*0.06);
+  popup(b.x,b.y-90,'¡EL JEFE SE ADAPTA! · '+b.adapt+'/3','#ff4757',16); S.huh();
+  rings.push({x:b.x,y:b.y,r:20,max:120,life:26,maxLife:26,color:'#ff4757'}); shake=Math.max(shake,6);
+}
 function bossInit(b){
   const g=bossGear(); b.gear=g; b.gearMsg=true;
   b.hp=b.maxHp=Math.round(b.maxHp*(1+1.2*g)); b.dmgK=1+0.6*g; b.aggr=1+0.5*g; b.speedMax*=1+0.2*g;
@@ -10224,6 +10306,7 @@ function bossExtra(b,dt,tgt,dd,toA,p){
 function drawBossExtra(){
   const b=boss; if(!b||!b.alive) return;
   ctx.save();
+  if(b.adapt){ const g=ctx.createRadialGradient(b.x,b.y-(b.z||0),b.radius*0.6,b.x,b.y-(b.z||0),b.radius*(1.3+0.25*b.adapt)); g.addColorStop(0,'rgba(255,40,60,0)'); g.addColorStop(0.7,'rgba(255,40,60,'+(0.12*b.adapt+0.05*Math.sin(t*0.2)).toFixed(3)+')'); g.addColorStop(1,'rgba(255,40,60,0)'); ctx.fillStyle=g; ctx.fillRect(b.x-b.radius*2.2,b.y-(b.z||0)-b.radius*2.2,b.radius*4.4,b.radius*4.4); }   // aura de adaptación
   if(b.phase2){ ctx.strokeStyle='rgba(255,71,87,'+(0.35+0.25*Math.sin(t*0.3)).toFixed(2)+')'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(b.x,b.y-(b.z||0),b.radius+8+Math.sin(t*0.2)*3,0,Math.PI*2); ctx.stroke(); }
   if(b.state==='xDashWind'&&b.xLine){
     const L=b.xLine; ctx.strokeStyle='rgba(255,71,87,'+(0.3+0.6*L.k).toFixed(2)+')'; ctx.lineWidth=2+L.k*4; ctx.setLineDash([12,8]); ctx.lineDashOffset=-t*2;
@@ -10493,20 +10576,24 @@ let dread={watchers:[],spawnT:200,flickerT:0,nextFlicker:1500,beatT:0,lvl:0,map:
 function dreadTarget(){ if(inHome) return human; return player&&player.alive?player:null; }
 function dreadLevel(){ if(inHome&&interior) return interior.def.dark?3:0; return darkLevel(); }
 function dreadLightK(){ const D=dread; return D.flickerT>0?(Math.random()<0.5?0.25:0.6):1; }
-function announceDark(L){
-  if(L===1) announce('ANOCHECE','#ffb36b','Busca la luz antes de que caiga la noche');
-  else if(L===2) announce('CAE LA NOCHE','#8ab4ff','Los enemigos ven menos… y no son lo único que acecha');
-  else announce('LA HORA MÁS OSCURA','#c77dff','Algo te observa desde la oscuridad');
+/* SONIDOS DEL AMBIENTE (en lugar de carteles): de noche, grillos; al amanecer, pájaros; al atardecer, una brisa */
+let ambT=60;
+function ambienceTick(dt){
+  if(interior||(!inHome&&mission&&mission.type==='tutorial')) return;
+  if((ambT-=dt)>0) return;
+  const S2=skyNow(), a=S2.sun.alt, am=clockNow()<0.5;
+  if(nightAmt()>0.6){ ambT=rand(40,110); const f=rand(3900,4500); for(let i=0;i<3;i++) beep(f,0.025,'sine',0.010,null,i*0.07); }   // grillos
+  else if(am&&a>-3&&a<14){ ambT=rand(80,220); const f=rand(2300,3100); beep(f,0.07,'sine',0.018,f*1.3); beep(f*1.15,0.06,'sine',0.014,f*0.9,0.11); }   // pájaros
+  else if(!am&&a>-6&&a<8){ ambT=rand(200,400); noise(1.6,0.01,450); }   // brisa del atardecer
+  else ambT=rand(120,240);
 }
 function updateDread(dt){
+  ambienceTick(dt);
   const D=dread, u=dreadTarget(), L=dreadLevel();
   if(D.map!==map){ D.map=map; D.watchers=[]; }   // nuevo mapa (misión, base, interior): los ojos se quedan atrás
   if(L!==D.lvl){
-    if(L>D.lvl&&!interior) announceDark(L);
-    if(L===0&&D.survived){ D.survived=false; announce('🌅 ¡SOBREVIVISTE A LA NOCHE!','#ffd76e','La luz vuelve a la isla'); S.upgrade(); }
-    D.lvl=L;
+    D.lvl=L;   // sin carteles: el cambio se nota en la luz y en los sonidos (ambienceTick)
   }
-  if(L>=3&&u&&!interior) D.survived=true;
   for(const w of D.watchers){
     w.t+=dt; w.blink-=dt; if(w.blink<-7) w.blink=rand(50,200);
     if(u&&!w.gone&&(Math.hypot(u.x-w.x,u.y-w.y)<150||w.t>w.life||L<2)) w.gone=true;
@@ -12049,7 +12136,6 @@ function updateHUD(){
     else if(enemies.some(e=>e.ai==='hunt'||e.ai==='search')){ txt='TE ESTÁN BUSCANDO'; col='#ffd76e'; }
     if(p.alive&&tileAt(p.x,p.y)===BUSH&&p.cloak<=0) txt+=' · EN PASTO';
     if(alarmT>0) txt='¡ALARMA! '+txt;
-    if(world&&world.retreating){ txt='¡RETROCEDES! REFUERZOS NV '+(world.reinfLvl||0)+' · '+txt; col='#ff8a3a'; }
     setText('statusTag',txt); setStyle('statusTag','color',col);
   }
   // Aliado
