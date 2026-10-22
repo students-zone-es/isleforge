@@ -526,10 +526,18 @@ const MOTO_STEPS=[   // JINETE: la moto bandida que capturas, cada vez más tuya
   {d:'Balas perforantes: atraviesan a un enemigo', pierce:1},
   {d:'Moto de neón: el modelo definitivo, dispara más rápido', cdMul:0.85},
 ];
+const CAR_STEPS=[   // JABALÍ (aliado): de coche de chatarra a coche de asalto
+  {d:'Coche de chatarra: una ametralladora lenta', fireCd:10, hpMul:0.85},
+  {d:'Parachoques de acero: embiste y aturde a los enemigos', ram:true, hpMul:1},
+  {d:'Ametralladora doble', twin:true},
+  {d:'Blindaje y ruedas todoterreno: +40% de vida y su minitanque (R) pega más', hpMul:1.4, evoBoost:true},
+  {d:'Modelo de asalto: lanzacohetes en la caja', rockets:true, fireCd:7},
+];
 const tierTable=steps=>Object.fromEntries(steps.map((s,i)=>[i+1,Object.assign({},...steps.slice(0,i+1),{d:s.d,map:'t'+(i+1)})]));
 const VEH_TIERS={
   jeep:tierTable(JEEP_STEPS),
   tank:tierTable(TANK_STEPS),
+  car:tierTable(CAR_STEPS),
   moto:tierTable(MOTO_STEPS),
   mech:tierTable(MECH_STEPS),
 };
@@ -2474,7 +2482,7 @@ function updateEscort(dt){
 function makeMate(kind,x,y,lvl){
   const hpMul=1+save.up.mate*0.3;
   const m={kind:'mate',mk:kind,lvl:1,x,y,vx:0,vy:0,alive:true,angle:-Math.PI/2,aim:-Math.PI/2,flash:0,fireCd:30,walk:0,tread:0,trail:[]};
-  if(kind==='car') Object.assign(m,{radius:11,mass:1.8,hp:70*hpMul,speedMax:3.3,accel:0.3,friction:0.88,cannonCd:60});
+  if(kind==='car'){ const T=tierInfo('car'); Object.assign(m,{radius:11,mass:1.8,hp:70*hpMul*(T.hpMul||1),speedMax:3.3,accel:0.3,friction:0.88,cannonCd:60,tier:vehTier('car'),T,fireBase:T.fireCd||7,ramCd:0,rocketCd:90}); }
   else if(kind==='ninja') Object.assign(m,{radius:9,mass:1,hp:55*hpMul,speedMax:3.6,accel:0.45,friction:0.84,dashCd:0,nadeCd:90,slashCd:0,flankSide:1,flankT:200,dash:0});
   else Object.assign(m,{radius:9,mass:0.5,hp:45*hpMul,speedMax:3.5,accel:0.32,friction:0.9,air:true,zapCd:20,spin:0});
   m.maxHp=m.hp;
@@ -2542,12 +2550,24 @@ function updateCar(m,anchor,dt){
   } else { m.vx*=Math.pow(0.86,dt); m.vy*=Math.pow(0.86,dt); }   // ya está en su sitio: frena suave
   sp=Math.hypot(m.vx,m.vy);
   m.tread+=sp*dt*0.5;
-  m.fireCd-=dt; if(m.lvl>=2) m.cannonCd-=dt;
+  const T=m.T||{};
+  m.fireCd-=dt; m.ramCd-=dt; m.rocketCd-=dt; if(m.lvl>=2) m.cannonCd-=dt;
+  if(T.ram&&m.ramCd<=0&&sp>1.2){   // parachoques: al chocar contra un enemigo de tierra lo daña, lo aturde y lo empuja
+    const en=enemies.find(e=>e.alive&&!e.air&&!e.static&&Math.hypot(e.x-m.x,e.y-m.y)<e.radius+m.radius+3);
+    if(en){ hitTarget(en,10,m,{stunAdd:22}); en.stun=Math.max(en.stun||0,40); const a=Math.atan2(en.y-m.y,en.x-m.x); en.vx+=Math.cos(a)*4; en.vy+=Math.sin(a)*4; m.ramCd=45; S.stomp(); popup(en.x,en.y-20,'¡EMBESTIDA!','#3ee6e6',11); }
+  }
   if(tg){
     const a=Math.atan2(tg.y-m.y,tg.x-m.x), aimed=Math.abs(angDiff(m.aim,a))<0.2;
     m.aim=turnTo(m.aim,a,0.2*dt);
-    if(aimed && m.fireCd<=0){ fireBullet(m.x+Math.cos(m.aim)*14,m.y+Math.sin(m.aim)*14,m.aim+rand(-0.06,0.06),'p',{speed:8,dmg:4,radius:2.5,life:45,pierce:0,frag:0,src:m}); m.fireCd=7; S.shoot(); }
-    if(m.lvl>=2 && aimed && m.cannonCd<=0){ fireBullet(m.x+Math.cos(m.aim)*18,m.y+Math.sin(m.aim)*18,m.aim,'p',{speed:7,dmg:18,splash:30,radius:4.5,life:60,kind:'shell',pierce:0,frag:0,src:m,stunMul:0.8}); m.cannonCd=80; S.cannon(); }
+    if(aimed && m.fireCd<=0){
+      const shot=off=>fireBullet(m.x+Math.cos(m.aim)*14-Math.sin(m.aim)*off,m.y+Math.sin(m.aim)*14+Math.cos(m.aim)*off,m.aim+rand(-0.06,0.06),'p',{speed:8,dmg:4,radius:2.5,life:45,pierce:0,frag:0,src:m});
+      if(T.twin){ shot(-3); shot(3); } else shot(0);
+      m.fireCd=m.fireBase||7; S.shoot();
+    }
+    if(m.lvl>=2 && aimed && m.cannonCd<=0){ fireBullet(m.x+Math.cos(m.aim)*18,m.y+Math.sin(m.aim)*18,m.aim,'p',{speed:7,dmg:T.evoBoost?24:18,splash:30,radius:4.5,life:60,kind:'shell',pierce:0,frag:0,src:m,stunMul:0.8}); m.cannonCd=T.evoBoost?60:80; S.cannon(); }
+    if(T.rockets&&m.rocketCd<=0&&Math.hypot(tg.x-m.x,tg.y-m.y)<300){   // lanzacohetes de la caja
+      addLob({x0:m.x,y0:m.y,x1:tg.x,y1:tg.y,dur:30,h:45,owner:'p',kind:'missile',dmg:22,splash:44,stunMul:1,marker:false}); m.rocketCd=150; S.launch();
+    }
   } else m.aim=turnTo(m.aim,m.angle,0.1*dt);
 }
 function ninjaDash(m,a){
@@ -3996,23 +4016,32 @@ function jeepSpr(col,frame){
 /* CHACAL por niveles: viejo jeep de rescate color arena con óxido y rueda de repuesto (1), parachoques (2), lanzamisiles
    en la caja (4), ruedas todoterreno (5), placas laterales (6), camuflaje (7-9), barra de luces (8) y el de asalto dorado (10) */
 function chacalSpr(tier,frame){
-  const key='chacal|'+tier+'|'+frame; if(sprCache[key]) return sprCache[key];
+  const camo=tier>=7&&tier<10;
+  return carSpr('chacal|'+tier,{col:tier>=10?'#c9a74a':camo?'#8a8a5a':'#a39272',hi:tier>=10,rust:tier<7,spare:tier<4,bull:tier>=2,camo,stripes:tier>=10,pod:tier>=4,wide:tier>=5,plates:tier>=6,bar:tier>=8},frame);
+}
+/* JABALÍ (aliado) por niveles: coche de chatarra verde azulado con óxido (1), parachoques (2), ametralladora doble (3),
+   placas y ruedas todoterreno (4) y el de asalto con lanzacohetes y franjas (5) */
+function jabaliSpr(tier,frame){
+  return carSpr('jabali|'+tier,{col:tier>=5?'#2fd8c4':'#2a9a8c',hi:tier>=5,rust:tier<2,spare:tier<3,bull:tier>=2,camo:false,stripes:tier>=5,pod:tier>=5,wide:tier>=4,plates:tier>=4,bar:false},frame);
+}
+function carSpr(name,F,frame){
+  const key=name+'|'+frame; if(sprCache[key]) return sprCache[key];
   const c=mkCanvas(20,14), g=c.getContext('2d'), R=(x,y,w,h,cc)=>{ g.fillStyle=cc; g.fillRect(x,y,w,h); };
-  const camo=tier>=7&&tier<10, col=tier>=10?'#c9a74a':camo?'#8a8a5a':'#a39272', ww=tier>=5?3:2;
+  const camo=F.camo, col=F.col, ww=F.wide?3:2;
   for(const [x,y] of [[3,ww===3?0:1],[13,ww===3?0:1],[3,11],[13,11]]){ R(x,y,4,ww,'#111'); R(x+frame,y,1,ww,ww===3?'#777':'#555'); }
   R(2,2,16,10,shade(col,-0.45)); R(3,3,14,8,col);
-  R(3,3,14,1,shade(col,tier>=10?0.45:0.3)); R(3,10,14,1,shade(col,-0.25));
+  R(3,3,14,1,shade(col,F.hi?0.45:0.3)); R(3,10,14,1,shade(col,-0.25));
   R(13,3,1,8,'#7fd8ff'); R(13,3,1,1,'#ffffff');
   R(14,4,3,6,shade(col,0.1)); R(17,4,1,2,'#ffeeaa'); R(17,8,1,2,'#ffeeaa');
   R(5,4,3,2,'#333'); R(5,8,3,2,'#333'); R(9,3,1,8,'#222');
-  if(tier<7){ R(4,9,2,1,'#8a4b2a'); R(11,3,2,1,'#8a4b2a'); R(15,9,1,1,'#8a4b2a'); }   // óxido
-  if(tier<4){ R(1,5,2,4,'#1a1a1a'); R(1,6,1,2,'#444'); }   // rueda de repuesto
-  if(tier>=2){ R(18,3,1,8,'#2a2a2a'); R(19,4,1,2,'#555'); R(19,8,1,2,'#555'); }   // parachoques
+  if(F.rust){ R(4,9,2,1,'#8a4b2a'); R(11,3,2,1,'#8a4b2a'); R(15,9,1,1,'#8a4b2a'); }   // óxido
+  if(F.spare){ R(1,5,2,4,'#1a1a1a'); R(1,6,1,2,'#444'); }   // rueda de repuesto
+  if(F.bull){ R(18,3,1,8,'#2a2a2a'); R(19,4,1,2,'#555'); R(19,8,1,2,'#555'); }   // parachoques
   if(camo){ R(6,4,2,2,'#5a6a3a'); R(10,7,3,2,'#6a5a3a'); R(14,5,2,2,'#5a6a3a'); R(4,8,2,1,'#6a5a3a'); }
-  if(tier>=10){ R(3,6,6,2,'#2a1a06'); R(14,6,3,2,'#2a1a06'); }   // franjas del modelo de asalto
-  if(tier>=4){ R(2,4,4,6,'#3a3f46'); R(2,5,4,1,'#111'); R(2,8,4,1,'#111'); R(1,5,1,1,'#ff4757'); R(1,8,1,1,'#ff4757'); }   // lanzamisiles
-  if(tier>=6){ R(4,2,8,1,'#7a8088'); R(4,11,8,1,'#7a8088'); R(6,2,1,1,'#b0b6be'); R(10,2,1,1,'#b0b6be'); R(6,11,1,1,'#b0b6be'); R(10,11,1,1,'#b0b6be'); }   // placas
-  if(tier>=8){ R(9,4,1,1,'#fff6c8'); R(9,6,1,1,'#fff6c8'); R(9,7,1,1,'#fff6c8'); R(9,9,1,1,'#fff6c8'); }   // barra de luces
+  if(F.stripes){ R(3,6,6,2,'#2a1a06'); R(14,6,3,2,'#2a1a06'); }   // franjas del modelo de asalto
+  if(F.pod){ R(2,4,4,6,'#3a3f46'); R(2,5,4,1,'#111'); R(2,8,4,1,'#111'); R(1,5,1,1,'#ff4757'); R(1,8,1,1,'#ff4757'); }   // lanzamisiles
+  if(F.plates){ R(4,2,8,1,'#7a8088'); R(4,11,8,1,'#7a8088'); R(6,2,1,1,'#b0b6be'); R(10,2,1,1,'#b0b6be'); R(6,11,1,1,'#b0b6be'); R(10,11,1,1,'#b0b6be'); }   // placas
+  if(F.bar){ R(9,4,1,1,'#fff6c8'); R(9,6,1,1,'#fff6c8'); R(9,7,1,1,'#fff6c8'); R(9,9,1,1,'#fff6c8'); }   // barra de luces
   sprCache[key]=c; return c;
 }
 function chacalGunSpr(tier){
@@ -4022,6 +4051,11 @@ function chacalGunSpr(tier){
   if(tier<3){ R(4,2,10,2,'#333'); R(4,2,10,1,'#222'); R(13,2,1,2,tip); }   // una sola ametralladora
   else { R(4,1,10,1,'#222'); R(4,4,10,1,'#222'); R(4,2,9,2,'#333'); R(13,1,1,1,tip); R(13,4,1,1,tip); }
   sprCache[key]=c; return c;
+}
+function drawJabali(u){
+  const tier=u.tier!=null?u.tier:vehTier('car'), sc=u.radius*2/13, a=u.body!=null?u.body:u.angle;
+  blit(jabaliSpr(tier,Math.floor(Math.abs(u.tread||0))%3),u.x,u.y,a,sc);
+  blit(chacalGunSpr(tier>=3?3:1),u.x-Math.cos(a)*2*sc,u.y-Math.sin(a)*2*sc,u.aim,sc,3,3);
 }
 function drawChacal(u){
   const tier=u.tier!=null?u.tier:vehTier('jeep'), sc=u.radius*2/13, a=u.body!=null?u.body:u.angle;
@@ -4260,7 +4294,7 @@ function drawMate(m){
   hitFlashOn(m);
   if(m.mk==='car'){
     if(m.lvl>=2) drawTankUnit(m,'#2fb8a8','#0d3a35',m.angle,m.aim,9);
-    else drawJeep({x:m.x,y:m.y,radius:m.radius,body:m.angle,aim:m.aim,tread:m.tread},'#2fb8a8');
+    else drawJabali({x:m.x,y:m.y,radius:m.radius,body:m.angle,aim:m.aim,tread:m.tread,tier:m.tier});
   } else if(m.mk==='ninja') drawNinja(m);
   else drawTesla(m);
   hitFlashOff();
@@ -10805,7 +10839,9 @@ function forgeTick(){
   while(F.q>0&&now>=F.next){ F.q--; save.minerals.lingote=(save.minerals.lingote||0)+1; F.next+=FORGE_T; }
 }
 function maxTier(id){ return Object.keys(VEH_TIERS[id]||{}).length; }
-function tierCost(tier){ return {work:Math.round(250*tier*inflK()), lingote:3*tier}; }   // para pasar de «tier» a «tier+1»
+const ALLY_ORE={car:'hierro', ninja:'estano', tesla:'cobre'};   // cada aliado pide además su mineral
+function tierCost(tier,id){ const c={work:Math.round(250*tier*inflK()), lingote:3*tier}; if(ALLY_ORE[id]) c.ore=[ALLY_ORE[id],2*tier]; return c; }   // para pasar de «tier» a «tier+1»
+function canPayTier(c){ const m=save.minerals; return save.work>=c.work&&(m.lingote||0)>=c.lingote&&(!c.ore||(m[c.ore[0]]||0)>=c.ore[1]); }
 
 function ecoAct(act,veh){
   const F=save.forge, m=save.minerals;
@@ -10813,8 +10849,8 @@ function ecoAct(act,veh){
   if(act==='build'&&!F.built&&save.work>=FORGE_BUILD.work&&(m.piedra||0)>=FORGE_BUILD.piedra){ save.work-=FORGE_BUILD.work; m.piedra-=FORGE_BUILD.piedra; F.built=true; }
   if(act==='smelt'&&F.built&&F.q<FORGE_MAX&&(m.hierro||0)>=FORGE_IN){ m.hierro-=FORGE_IN; if(F.q===0) F.next=Date.now()+FORGE_T; F.q++; }
   if(act==='tier'){
-    const tier=vehTier(veh), c=tierCost(tier);
-    if(tier<maxTier(veh)&&save.work>=c.work&&(m.lingote||0)>=c.lingote){ save.work-=c.work; m.lingote-=c.lingote; save.vtier[veh]=tier+1; inflate(); }
+    const tier=vehTier(veh), c=tierCost(tier,veh);
+    if(tier<maxTier(veh)&&canPayTier(c)){ save.work-=c.work; m.lingote-=c.lingote; if(c.ore) m[c.ore[0]]-=c.ore[1]; save.vtier[veh]=tier+1; inflate(); }
   }
   saveSave(); S.upgrade();
 }
@@ -10823,12 +10859,18 @@ function ecoHtml(veh){
   forgeTick();
   const F=save.forge, m=save.minerals, ing=m.lingote||0, tier=vehTier(veh), mx=maxTier(veh);
   const col=(ok,s)=>'<span style="color:'+(ok?'var(--gold)':'#ff6b6b')+'">'+s+'</span>';
-  let h='<p class="secTitle">NIVEL DE '+CHARS[veh].name+'</p><div class="shopCard" style="margin:6px 0"><div class="name">NIVEL '+tier+(mx?' / '+mx:'')+'</div>';
-  if(tier<mx){
-    const c=tierCost(tier), ok=save.work>=c.work&&ing>=c.lingote;
-    h+='<div class="lvl">Sube a nivel '+(tier+1)+': '+(tierInfo(veh,tier+1).d||'nuevo diseño y armas')+'</div><div class="cost">'+col(save.work>=c.work,'◆ '+c.work)+' · '+col(ing>=c.lingote,'▬ '+c.lingote+' lingotes')+'</div><button class="btn small" data-eco="tier" '+(ok?'':'disabled')+'>SUBIR NIVEL</button>';
-  } else h+='<div class="lvl">'+(mx?'Nivel máximo por ahora':'Sus niveles aún no están diseñados')+' · PRÓXIMAMENTE</div>';
-  h+='</div><p class="secTitle">FORJA</p><div class="shopCard" style="margin:6px 0">';
+  const card=(id,name)=>{   // tarjeta de nivel de un vehículo o de un aliado
+    const tier=vehTier(id), mx=maxTier(id);
+    let h='<p class="secTitle">NIVEL DE '+name+'</p><div class="shopCard" style="margin:6px 0"><div class="name">NIVEL '+tier+(mx?' / '+mx:'')+'</div>';
+    if(tier<mx){
+      const c=tierCost(tier,id);
+      h+='<div class="lvl">Sube a nivel '+(tier+1)+': '+(tierInfo(id,tier+1).d||'nuevo diseño y armas')+'</div><div class="cost">'+col(save.work>=c.work,'◆ '+c.work)+' · '+col(ing>=c.lingote,'▬ '+c.lingote+' lingotes')+
+        (c.ore?' · '+col((m[c.ore[0]]||0)>=c.ore[1],'⛏ '+c.ore[1]+' '+minName(c.ore[0])):'')+'</div><button class="btn small" data-eco="tier" data-id="'+id+'" '+(canPayTier(c)?'':'disabled')+'>SUBIR NIVEL</button>';
+    } else h+='<div class="lvl">'+(mx?'Nivel máximo por ahora':'Sus niveles aún no están diseñados')+' · PRÓXIMAMENTE</div>';
+    return h+'</div>';
+  };
+  let h=card(veh,CHARS[veh].name)+card(sel().mate,'TU ALIADO · '+MATES[sel().mate].name);
+  h+='<p class="secTitle">FORJA</p><div class="shopCard" style="margin:6px 0">';
   if(!F.built){
     const ok=save.work>=FORGE_BUILD.work&&(m.piedra||0)>=FORGE_BUILD.piedra;
     h+='<div class="lvl">Funde hierro en lingotes</div><div class="cost">'+col(save.work>=FORGE_BUILD.work,'◆ '+FORGE_BUILD.work)+' · '+col((m.piedra||0)>=FORGE_BUILD.piedra,'⛏ '+FORGE_BUILD.piedra+' piedra')+'</div><button class="btn small" data-eco="build" '+(ok?'':'disabled')+'>CONSTRUIR FORJA</button>';
@@ -11904,7 +11946,7 @@ function updateHUD(){
   }
   // Aliado
   if(mate&&mate.alive){
-    setText('mateLbl',(mate.lvl>=2?MATES[mate.mk].evo:MATES[mate.mk].name)+' · '+Math.ceil(mate.hp)+'/'+Math.round(mate.maxHp));
+    setText('mateLbl',(mate.lvl>=2?MATES[mate.mk].evo:MATES[mate.mk].name)+(mate.tier&&maxTier(mate.mk)?' NV '+mate.tier:'')+' · '+Math.ceil(mate.hp)+'/'+Math.round(mate.maxHp));
     setStyle('mateBar','width',clamp(mate.hp/mate.maxHp*100,0,100).toFixed(1)+'%');
   } else {
     const n=MATES[sel().mate].name;
@@ -12087,7 +12129,7 @@ function renderShop(){
     grid.appendChild(card);
   });
   const st=document.getElementById('shopStore'); st.innerHTML=ecoHtml(shopVeh)+storeHtml();
-  st.querySelectorAll('[data-eco]').forEach(b=>b.onclick=()=>{ ecoAct(b.dataset.eco,shopVeh); renderShop(); });
+  st.querySelectorAll('[data-eco]').forEach(b=>b.onclick=()=>{ ecoAct(b.dataset.eco,b.dataset.id||shopVeh); renderShop(); });
 }
 
 /* ===================== HANGAR ===================== */
@@ -12122,7 +12164,7 @@ function renderHangar(){
     const card=document.createElement('div'); card.className='pickCard'+(s.mate===mt.id?' sel':'');
     const cvs=previewCanvas(()=>{
       const m={x:28,y:30,radius:mt.id==='car'?16:11,angle:-Math.PI/2,aim:-Math.PI/2-0.5,tread:0,walk:0.5,lvl:1,mk:mt.id,spin:t*0.1,trail:[{x:20,y:46},{x:26,y:40}],alive:true,flash:0};
-      if(mt.id==='car') drawJeep({x:m.x,y:m.y,radius:m.radius,body:m.angle,aim:m.aim,tread:0},'#2fb8a8');
+      if(mt.id==='car') drawJabali({x:m.x,y:m.y,radius:m.radius,body:m.angle,aim:m.aim,tread:0});
       else if(mt.id==='ninja'){ ctx.save(); ctx.translate(28,30); ctx.scale(2.1,2.1); ctx.translate(-28,-30); drawNinja(m); ctx.restore(); }
       else { ctx.save(); ctx.translate(28,30); ctx.scale(1.9,1.9); ctx.translate(-28,-30); drawTesla(m); ctx.restore(); }
     });
