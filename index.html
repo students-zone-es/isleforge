@@ -533,11 +533,19 @@ const CAR_STEPS=[   // JABALÍ (aliado): de coche de chatarra a coche de asalto
   {d:'Blindaje y ruedas todoterreno: +40% de vida y su minitanque (R) pega más', hpMul:1.4, evoBoost:true},
   {d:'Modelo de asalto: lanzacohetes en la caja', rockets:true, fireCd:7},
 ];
+const NINJA_STEPS=[   // KAGE (aliado): de androide reciclado a maestro de las sombras
+  {d:'Androide reciclado: solo ataca cuerpo a cuerpo', dodge:false, nades:false, hpMul:0.85, slash:10},
+  {d:'Reflejos: vuelve a esquivar las balas', dodge:true, hpMul:1},
+  {d:'Granadas parásito', nades:true, slash:12},
+  {d:'Camuflaje al flanquear: se vuelve invisible un momento', invis:true, hpMul:1.3},
+  {d:'Maestro de las sombras: clones que atacan contigo', clones:true, slash:15},
+];
 const tierTable=steps=>Object.fromEntries(steps.map((s,i)=>[i+1,Object.assign({},...steps.slice(0,i+1),{d:s.d,map:'t'+(i+1)})]));
 const VEH_TIERS={
   jeep:tierTable(JEEP_STEPS),
   tank:tierTable(TANK_STEPS),
   car:tierTable(CAR_STEPS),
+  ninja:tierTable(NINJA_STEPS),
   moto:tierTable(MOTO_STEPS),
   mech:tierTable(MECH_STEPS),
 };
@@ -2014,7 +2022,7 @@ function landLob(l){
 /* ===================== EXPLOSIONES Y EFECTOS ===================== */
 function friendlies(){
   const a=[];
-  if(mate&&mate.alive) a.push(mate);
+  if(mate&&mate.alive&&!(mate.invis>0)) a.push(mate);   // Kage invisible: los enemigos no lo ven
   for(const s of soldiers) if(s.alive) a.push(s);
   for(const tu of turrets) if(tu.alive) a.push(tu);
   for(const d of drones) if(d.alive) a.push(d);
@@ -2022,7 +2030,7 @@ function friendlies(){
   return a;
 }
 function hitFriendly(x,y,r){
-  if(mate&&mate.alive&&(x-mate.x)**2+(y-mate.y)**2<(r+mate.radius)**2) return mate;
+  if(mate&&mate.alive&&!(mate.invis>0)&&(x-mate.x)**2+(y-mate.y)**2<(r+mate.radius)**2) return mate;
   for(const u of soldiers) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
   for(const u of turrets) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
   for(const u of drones) if(u.alive&&(x-u.x)**2+(y-u.y)**2<(r+u.radius)**2) return u;
@@ -2030,7 +2038,7 @@ function hitFriendly(x,y,r){
   return null;
 }
 function hurtFriendly(u,dmg){
-  if(!u.alive) return;
+  if(!u.alive||u.invis>0) return;
   if(escort&&!escort.detected&&(u.escort||u.role==='escort'||u.role==='decoy')){
     const en=nearestEnemyFrom(u.x,u.y,450,false);
     if(en&&en!==boss) escortDetected(en,u); else { escort.detected=true; escort.pathT=0; }
@@ -2483,7 +2491,7 @@ function makeMate(kind,x,y,lvl){
   const hpMul=1+save.up.mate*0.3;
   const m={kind:'mate',mk:kind,lvl:1,x,y,vx:0,vy:0,alive:true,angle:-Math.PI/2,aim:-Math.PI/2,flash:0,fireCd:30,walk:0,tread:0,trail:[]};
   if(kind==='car'){ const T=tierInfo('car'); Object.assign(m,{radius:11,mass:1.8,hp:70*hpMul*(T.hpMul||1),speedMax:3.3,accel:0.3,friction:0.88,cannonCd:60,tier:vehTier('car'),T,fireBase:T.fireCd||7,ramCd:0,rocketCd:90}); }
-  else if(kind==='ninja') Object.assign(m,{radius:9,mass:1,hp:55*hpMul,speedMax:3.6,accel:0.45,friction:0.84,dashCd:0,nadeCd:90,slashCd:0,flankSide:1,flankT:200,dash:0});
+  else if(kind==='ninja') Object.assign(m,{tier:vehTier('ninja'),T:tierInfo('ninja'),invis:0,cloneCd:240,clones:[],radius:9,mass:1,hp:55*hpMul*(tierInfo('ninja').hpMul||1),speedMax:3.6,accel:0.45,friction:0.84,dashCd:0,nadeCd:90,slashCd:0,flankSide:1,flankT:200,dash:0});
   else Object.assign(m,{radius:9,mass:0.5,hp:45*hpMul,speedMax:3.5,accel:0.32,friction:0.9,air:true,zapCd:20,spin:0});
   m.maxHp=m.hp;
   if((lvl||1)>=2) evolveMate(m,true);
@@ -2575,9 +2583,11 @@ function ninjaDash(m,a){
   for(let i=0;i<6;i++) particles.push({x:m.x+rand(-5,5),y:m.y+rand(-5,5),vx:0,vy:0,life:16,maxLife:16,color:'#3ee6e6',size:3});
 }
 function updateNinja(m,anchor,dt){
-  m.dashCd-=dt; m.nadeCd-=dt; m.slashCd-=dt; if(m.dash>0) m.dash-=dt;
-  // Esquiva: si una bala enemiga viene hacia él, salto lateral
-  if(m.dashCd<=0){
+  const T=m.T||{};
+  m.dashCd-=dt; m.nadeCd-=dt; m.slashCd-=dt; if(m.dash>0) m.dash-=dt; if(m.invis>0) m.invis-=dt; m.cloneCd-=dt;
+  updateNinjaClones(m,dt);
+  // Esquiva: si una bala enemiga viene hacia él, salto lateral (desde el nivel 2)
+  if(T.dodge!==false&&m.dashCd<=0){
     for(const b of bullets){
       if(b.owner!=='e') continue;
       const dx=m.x-b.x, dy=m.y-b.y;
@@ -2590,13 +2600,14 @@ function updateNinja(m,anchor,dt){
     const base=Math.atan2(tg.y-anchor.y,tg.x-anchor.x), fa=base+Math.PI/2*m.flankSide;
     const fx=tg.x+Math.cos(fa)*105-Math.cos(base)*25, fy=tg.y+Math.sin(fa)*105-Math.sin(base)*25;
     if(m.dash<=0) steerTo(m,fx,fy,dt,1);
-    m.flankT-=dt; if(m.flankT<=0){ m.flankSide*=-1; m.flankT=rand(200,320); }
+    m.flankT-=dt; if(m.flankT<=0){ m.flankSide*=-1; m.flankT=rand(200,320); if(T.invis){ m.invis=90; spawnDebris(m.x,m.y,6,'#3ee6e6'); } }   // al cambiar de flanco se vuelve invisible 1,5 s
+    if(T.clones&&m.cloneCd<=0){ m.cloneCd=600; spawnNinjaClones(m); }
     const d=dist(m,tg);
     m.aim=Math.atan2(tg.y-m.y,tg.x-m.x);
     if(d<m.radius+tg.radius+24 && m.slashCd<=0){
-      hitTarget(tg,m.lvl>=2?18:12,m,{stunAdd:8}); slashFx(m.x,m.y,m.aim,34,'#9ff'); S.slash(); m.slashCd=35;
+      hitTarget(tg,(T.slash||12)*(m.lvl>=2?1.5:1),m,{stunAdd:8}); slashFx(m.x,m.y,m.aim,34,'#9ff'); S.slash(); m.slashCd=35; m.invis=0;   // al atacar se le ve
     }
-    if(m.nadeCd<=0 && d<340){
+    if(T.nades!==false&&m.nadeCd<=0 && d<340){
       const targets=[tg];
       if(m.lvl>=2){ const t2=nearestEnemyFrom(m.x,m.y,340,false,e=>e!==tg); if(t2) targets.push(t2); }
       targets.forEach(tt=>addLob({x0:m.x,y0:m.y,x1:tt.x,y1:tt.y,dur:32,h:55,owner:'p',kind:'parasite',target:tt,dmg:m.lvl>=2?95:70,marker:false}));
@@ -2611,6 +2622,26 @@ function updateNinja(m,anchor,dt){
   const sp=Math.hypot(m.vx,m.vy);
   if(sp>0.3) m.angle=turnTo(m.angle,Math.atan2(m.vy,m.vx),0.3*dt);
   m.walk+=sp*dt*0.2;
+}
+/* CLONES DE SOMBRA (Kage nivel 5): cada 10 s salen dos copias que corren hacia un enemigo, le dan un tajo y se deshacen */
+function spawnNinjaClones(m){
+  const used=new Set();
+  for(let i=0;i<2;i++){
+    const tg=nearestEnemyFrom(m.x,m.y,380,false,e=>!used.has(e)); if(!tg) break; used.add(tg);
+    m.clones.push({x:m.x,y:m.y,angle:m.angle,aim:m.aim,walk:0,lvl:m.lvl,tier:m.tier,tg,life:150,radius:9});
+  }
+  if(m.clones.length){ spawnDebris(m.x,m.y,10,'#7a4aa8'); S.slash(); popup(m.x,m.y-22,'¡CLONES DE SOMBRA!','#c77dff',12); }
+}
+function updateNinjaClones(m,dt){
+  for(const c of m.clones){
+    c.life-=dt; const tg=c.tg;
+    if(!tg||!tg.alive){ c.life=Math.min(c.life,10); continue; }
+    const a=Math.atan2(tg.y-c.y,tg.x-c.x), d=Math.hypot(tg.x-c.x,tg.y-c.y);
+    c.x+=Math.cos(a)*6*dt; c.y+=Math.sin(a)*6*dt; c.angle=c.aim=a; c.walk+=dt*1.2;
+    if(d<tg.radius+14){ hitTarget(tg,10,m,{stunAdd:6}); slashFx(c.x,c.y,a,30,'#c77dff'); c.life=0; }
+  }
+  for(const c of m.clones) if(c.life<=0) spawnDebris(c.x,c.y,5,'#3a2a5a');
+  m.clones=m.clones.filter(c=>c.life>0);
 }
 function updateTesla(m,anchor,dt){
   m.zapCd-=dt; m.spin+=0.5*dt;
@@ -4134,21 +4165,40 @@ function drawJeep(u,col){
   blit(jeepSpr(col,Math.floor(Math.abs(u.tread||0))%3),u.x,u.y,u.body!=null?u.body:u.angle,sc);
   blit(gunMountSpr(),u.x-Math.cos(u.body!=null?u.body:u.angle)*2*sc,u.y-Math.sin(u.body!=null?u.body:u.angle)*2*sc,u.aim,sc,3,3);
 }
-function drawNinja(m){
-  if(m.trail && m.trail.length>1){
-    ctx.strokeStyle='#ff3b3b'; ctx.lineWidth=2; ctx.beginPath();
+/* KAGE por niveles: androide de chatarra con visor amarillo y una barra de hierro (1), cuerpo de combate azul con visor
+   cian, katana y pañuelo rojo (2), cinturón de granadas parásito (3), capa de camuflaje con borde cian (4) y el
+   maestro negro con visor rojo, adornos dorados y katana larga (5). Invisible: casi transparente. */
+const NINJA_PAL=[null,
+  {o:'#2a2620',b:'#4a4038',t:'#6a5a48',v:'#c9a74a',bl:'#7a7a7a',sc:null},
+  {o:'#07080f',b:'#1c2240',t:'#2e3866',v:'#3ee6e6',bl:'#c8d0e0',sc:'#ff3b3b'},
+  {o:'#07080f',b:'#1c2240',t:'#2e3866',v:'#3ee6e6',bl:'#c8d0e0',sc:'#ff3b3b'},
+  {o:'#07080f',b:'#141a2c',t:'#26304e',v:'#3ee6e6',bl:'#c8d0e0',sc:'#ff3b3b'},
+  {o:'#030308',b:'#0c0e18',t:'#1c2030',v:'#ff3b3b',bl:'#e8f0ff',sc:'#ff3b3b'}];
+function drawNinja(m,ghost){
+  const tier=m.tier!=null?m.tier:vehTier('ninja'), P=NINJA_PAL[Math.max(1,Math.min(5,tier))];
+  if(!ghost&&m.clones) for(const c of m.clones) drawNinja(c,true);
+  const alpha=ghost?0.5:(m.invis>0?0.22:1);
+  if(m.trail && m.trail.length>1 && !ghost){
+    ctx.strokeStyle=tier>=5?'#c77dff':'#ff3b3b'; ctx.lineWidth=2; ctx.beginPath();
     m.trail.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
     ctx.lineTo(m.x,m.y); ctx.stroke();
   }
-  drawFeet(m.x,m.y,m.angle,m.walk||0,1.2,3.2,'#0a0c18');
-  ctx.save(); ctx.translate(m.x,m.y); ctx.rotate(m.aim!=null?m.aim:m.angle);
-  ctx.fillStyle='#07080f'; ctx.fillRect(-8,-7,14,14);
-  ctx.fillStyle='#1c2240'; ctx.fillRect(-7,-6,12,12);
-  ctx.fillStyle='#2e3866'; ctx.fillRect(-7,-6,12,3);
+  ctx.save(); ctx.globalAlpha*=alpha;
+  if(ghost) ctx.filter='hue-rotate(220deg) brightness(0.7)';
+  drawFeet(m.x,m.y,m.angle,m.walk||0,1.2,3.2,ghost?'#1a1030':'#0a0c18');
+  ctx.translate(m.x,m.y); ctx.rotate(m.aim!=null?m.aim:m.angle);
+  if(tier>=4&&!ghost){ ctx.fillStyle='rgba(20,30,50,.85)'; ctx.fillRect(-11,-8,6,16); ctx.fillStyle='#3ee6e6'; ctx.fillRect(-11,-8,1,16); }   // capa de camuflaje
+  ctx.fillStyle=P.o; ctx.fillRect(-8,-7,14,14);
+  ctx.fillStyle=P.b; ctx.fillRect(-7,-6,12,12);
+  ctx.fillStyle=P.t; ctx.fillRect(-7,-6,12,3);
+  if(tier===1){ ctx.fillStyle='#8a4b2a'; ctx.fillRect(-6,2,3,2); ctx.fillRect(1,-5,2,1); }   // óxido
   ctx.fillStyle='#0d1020'; ctx.fillRect(-1,-4,6,8);
-  ctx.fillStyle='#3ee6e6'; ctx.fillRect(3,-3,2,6);
-  ctx.fillStyle='#c8d0e0'; ctx.fillRect(-11,-9,15,2); ctx.fillStyle='#5a3a1e'; ctx.fillRect(-11,-9,4,2);
-  ctx.fillStyle='#ff3b3b'; ctx.fillRect(-3,-7,4,2);
+  ctx.fillStyle=P.v; ctx.fillRect(3,-3,2,6);
+  const bl=tier>=5?19:tier>=2?15:12;   // arma: barra de hierro, katana, katana larga
+  ctx.fillStyle=P.bl; ctx.fillRect(-11,-9,bl,2); ctx.fillStyle=tier>=5?'#f5c518':'#5a3a1e'; ctx.fillRect(-11,-9,4,2);
+  if(P.sc){ ctx.fillStyle=P.sc; ctx.fillRect(-3,-7,4,2); ctx.fillRect(-9-Math.round(Math.sin(t*0.3)*1),-7,6,1); }   // pañuelo
+  if(tier>=3){ ctx.fillStyle='#ff3df0'; ctx.fillRect(-5,5,2,2); ctx.fillRect(-1,5,2,2); ctx.fillRect(3,5,2,2); }   // granadas parásito en el cinturón
+  if(tier>=5){ ctx.fillStyle='#f5c518'; ctx.fillRect(-7,-6,1,12); ctx.fillRect(4,-6,1,1); ctx.fillRect(4,5,1,1); }   // adornos dorados
   if(m.lvl>=2){ ctx.fillStyle='#f5c518'; ctx.fillRect(-7,5,3,2); }
   ctx.restore();
 }
