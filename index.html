@@ -458,6 +458,13 @@ const UP_KEYS=['hp','dmg','speed','shield','ally','regen','lives','cloak','mate'
 const VEH_UPS=['hp','dmg','speed','shield','ally','regen','cloak'], VEHICLE_IDS=['mech','tank','jeep','moto'];
 function upOf(id,ch){ return VEH_UPS.includes(id)?((save.upV[ch||sel().char]||{})[id]||0):(save.up[id]||0); }
 function vehLevel(ch){ return VEH_UPS.reduce((n,k)=>n+((save.upV[ch]||{})[k]||0),0); }
+/* NIVEL DEL VEHÍCULO (1-10, save.vtier): como las tropas de Clash of Clans, cada nivel cambia su DISEÑO y sus HABILIDADES.
+   VEH_TIERS[vehículo][nivel] dice qué tiene ese nivel (los que no aparecen usan el diseño y armas de siempre). */
+const VEH_TIERS={
+  mech:{ 1:{shot:'tri', cloak:false, nade:false, map:'t1'} },   // CENTINELA nv1: un cañón central, 3 balas por disparo, sin camuflaje ni arco
+};
+function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
+function tierInfo(id,tier){ const T=VEH_TIERS[id]; return (T&&T[tier||vehTier(id)])||{}; }
 const DEFAULT_SEL={char:'mech', mate:'car', mode:'robots', tutorial:true};
 function blankUp(){ const o={}; UP_KEYS.forEach(k=>o[k]=0); return o; }
 function defaultHome(){
@@ -466,6 +473,7 @@ function defaultHome(){
 function defaultWorlds(){ const o={}; for(let i=1;i<=5;i++) o['w'+i]={best:1,cleared:false}; return o; }
 function normalizeSave(s){
   // mejoras por vehículo: en las partidas anteriores cada vehículo empieza con las mejoras que ya tenías compradas
+  s.vtier=Object.assign({},s.vtier||{});
   const uv=s.upV||{}; s.upV={};
   for(const v of VEHICLE_IDS){ s.upV[v]={}; for(const k of VEH_UPS) s.upV[v][k]=uv[v]?(uv[v][k]||0):((s.up&&s.up[k])||0); }
   const h=Object.assign(defaultHome(),s.home||{});
@@ -494,7 +502,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock, upV:p.upV });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock, upV:p.upV, vtier:p.vtier });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -1586,7 +1594,13 @@ function makePlayer(){
     fragment:0, pierce:0, regenRate:up.regen, regenTimer:0, magnet:50+up.ally*6,
     cloak:0, cloakCd:0, cloakDur:ch.cloakDur+up.cloak*90, cloakCdBase:ch.cloakCd,
     nadeCd:0, nadeCdBase:ch.nadeCd, nadeCount:1, nadeDmg:ch.nadeDmg,
-    alive:false, invuln:0, walk:0, tread:0, hurtFlash:0, recoil:0, armAlt:false };
+    alive:false, invuln:0, walk:0, tread:0, hurtFlash:0, recoil:0, armAlt:false, ...tierLoadout(ch) };
+}
+/* Lo que da el nivel del vehículo: tipo de disparo y si tiene camuflaje y ataque en arco */
+function tierLoadout(ch){
+  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false};
+  if(T.shot==='tri') o.fireCdBase=Math.round(ch.fireCd*3);   // 3 balas por disparo: recarga 3 veces más lenta (el mismo daño total que antes)
+  return o;
 }
 function updatePlayer(dt){
   const p=player; if(!p.alive) return;
@@ -1648,7 +1662,7 @@ function updatePlayer(dt){
   if(p.fireCd>0) p.fireCd-=dt;
   if((keys[' ']||mouse.down) && p.fireCd<=0 && !stunned) firePlayerWeapon();
   if(p.nadeCd>0) p.nadeCd-=dt;
-  if((mouse.right||keys.shift) && p.nadeCd<=0 && !stunned) throwGrenade();
+  if((mouse.right||keys.shift) && p.nadeCd<=0 && !stunned && !p.noNade) throwGrenade();
   if(p.cloak>0){ p.cloak-=dt; if(p.cloak<=0){ p.cloak=0; p.cloakCd=p.cloakCdBase; S.uncloak(); popup(p.x,p.y-26,'VISIBLE','#8ea0b8',12); } }
   else if(p.cloakCd>0) p.cloakCd-=dt;
   if(p.regenRate>0){
@@ -1691,9 +1705,10 @@ function firePlayerWeapon(){
       fireBullet(p.x+Math.cos(p.aim)*muzzle+ox, p.y+Math.sin(p.aim)*muzzle+oy, p.aim+da+rand(-0.03,0.03),'p',
         {speed:9, dmg:dmg*(mul||1), radius:3, life:55, kind:'mg'});
     };
-    if(ch.twin){ shoot(-4,0); shoot(4,0); }
+    if(p.shot==='tri'){ shoot(0,-0.09); shoot(0,0); shoot(0,0.09); }   // un solo cañón central: 3 balas en abanico estrecho
+    else if(ch.twin){ shoot(-4,0); shoot(4,0); }
     else { p.armAlt=!p.armAlt; shoot(p.armAlt?7:-7,0); }
-    for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
+    if(!p.shot) for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
     S.shoot();
   }
   p.fireCd=p.fireCdBase;
@@ -1716,6 +1731,7 @@ function throwGrenade(){
 function activateCloak(){
   const p=player;
   if(!p.alive||p.cloak>0||p.cloakCd>0) return;
+  if(p.noCloak){ if((p.lockMsgT||0)<t){ p.lockMsgT=t+90; popup(p.x,p.y-26,'🔒 '+p.ch.name+' NV '+p.tier+': aún sin camuflaje','#8ea0b8',12); } return; }
   p.cloak=p.cloakDur; S.cloak();
   popup(p.x,p.y-26,'CAMUFLAJE ÓPTICO','#3ee6e6',14);
   for(let i=0;i<16;i++){ const a=rand(0,Math.PI*2); particles.push({x:p.x,y:p.y,vx:Math.cos(a)*2,vy:Math.sin(a)*2,life:24,maxLife:24,color:'#9ff',size:2}); }
@@ -3760,6 +3776,26 @@ const MAP_MECH=[
 ".....kgggggkkkkkkk",
 ".....kghhhgk......",
 "......kkkkk......."];
+/* CENTINELA NIVEL 1: sin cañones en los hombros (hombreras lisas), mochila sin luces y UN cañón central que sale del pecho */
+const MAP_MECH_T1=[
+"......kkkkk.......",
+".....kgsssgk......",
+".....kgggggk......",
+"......kkkkk.......",
+"..................",
+"..kkk.kkkkkk......",
+".kmmmkkgggggk.....",
+".kmmmkgggggggkkkkk",
+".kmmmkggggcCMMMMMb",
+".kmmmkggggcCMMMMMb",
+".kmmmkgggggggkkkkk",
+".kmmmkksssssk.....",
+"..kkk.kkkkkk......",
+"..................",
+"......kkkkk.......",
+".....kgggggk......",
+".....kgsssgk......",
+"......kkkkk......."];
 const MAP_BRAWLER=[
 "....kkkk........",
 "...kOOOOk.kk....",
@@ -3835,7 +3871,8 @@ function robotSprite(look,color){
   }
   return null;
 }
-function mechSprite(){ return pixSprite('mech',MAP_MECH,{k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff'}); }
+const MECH_PAL={k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff'};
+function mechSprite(tier){ return tierInfo('mech',tier).map==='t1'?pixSprite('mech_t1',MAP_MECH_T1,MECH_PAL):pixSprite('mech',MAP_MECH,MECH_PAL); }
 function tankHullSpr(col,dark,frame){
   const key='hull|'+col+'|'+dark+'|'+frame;
   if(sprCache[key]) return sprCache[key];
@@ -3889,7 +3926,7 @@ function drawFeet(x,y,ang,walk,sc,spread,col){
 function drawMech(u){
   const sc=u.radius*2/17;
   drawFeet(u.x,u.y,u.body,u.walk||0,sc,5,'#3a3f46');
-  blit(mechSprite(),u.x,u.y,u.body,sc);
+  blit(mechSprite(u.tier!=null?u.tier:vehTier('mech')),u.x,u.y,u.body,sc);   // el diseño cambia con el nivel del Centinela
 }
 function drawTankUnit(u,col,dark,hullAng,turAng,L){
   const sc=u.radius*2/16;
@@ -11320,8 +11357,8 @@ function updateHUD(){
   }
   // Habilidades
   const alive=p.alive&&cine<=0;
-  abil('abF',!alive?'off':p.cloak>0?'active':p.cloakCd>0?'':'ready',p.cloak>0?0:p.cloakCd/p.cloakCdBase);
-  abil('abG',!alive?'off':p.nadeCd>0?'':'ready',p.nadeCd/p.nadeCdBase);
+  abil('abF',!alive||p.noCloak?'off':p.cloak>0?'active':p.cloakCd>0?'':'ready',p.cloak>0?0:p.cloakCd/p.cloakCdBase);
+  abil('abG',!alive||p.noNade?'off':p.nadeCd>0?'':'ready',p.nadeCd/p.nadeCdBase);   // sin la habilidad en este nivel: apagada
   const canEvo=mate&&mate.alive&&mate.lvl<2;
   abil('abR',!canEvo?'off':runWork>=20?'ready':'',0);
   abil('abE',!alive?'off':runWork>=DRONE_COST?'ready':'',0);
