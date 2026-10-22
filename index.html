@@ -5686,41 +5686,63 @@ function drawCrop(kind,st,x,y,sw){
     }
   }
 }
+/* TALLER MILITAR en vista 3/4: se ve el TEJADO (bóveda de chapa ondulada: la mitad de atrás se aleja y se ve más oscura,
+   la de delante más clara, con claraboyas y extractores) y la FACHADA que mira al sur (al jugador), con el alero que le
+   hace sombra, pilastras en las esquinas, el cartel, el portón abierto con luz dentro y las ventanas. */
 function drawWorkshop(){
-  const L=homeL.workshop, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE, fh=56, rh=h-fh;
-  ctx.fillStyle='#55606b'; ctx.fillRect(x,y,w,rh);
-  ctx.fillStyle='#64707c'; for(let i=0;i<w;i+=14) ctx.fillRect(x+i,y,7,rh);
-  ctx.fillStyle='#3e4750'; ctx.fillRect(x,y+rh/2-3,w,6);
-  ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(x,y,w,4);
-  ctx.fillStyle='#2e353c'; ctx.fillRect(x,y+rh-6,w,6);
-  ctx.save(); ctx.globalAlpha=0.6; ctx.fillStyle='#f5c518'; ctx.font='15px "Press Start 2P", monospace'; ctx.textAlign='center';
-  ctx.fillText('TALLER MILITAR',x+w/2,y+rh/2-16); ctx.restore();
-  for(const [vx,vy] of [[x+30,y+rh/2+14],[x+w-52,y+rh/2+14]]){
-    ctx.fillStyle='#2e353c'; ctx.fillRect(vx,vy,22,22);
-    ctx.save(); ctx.translate(vx+11,vy+11); ctx.rotate(t*0.08); ctx.fillStyle='#8a929c'; ctx.fillRect(-8,-2,16,4); ctx.fillRect(-2,-8,4,16); ctx.restore();
+  const L=homeL.workshop, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE, fh=84, rh=h-fh;
+  for(let j=0;j<rh;j++){ const u=j/rh, k=u<0.38?lerp(-0.25,0,u/0.38):lerp(0.2,-0.08,(u-0.38)/0.62);
+    ctx.fillStyle=shade('#6e7a86',k); ctx.fillRect(x-6,y+j,w+12,1); }
+  for(let i=x-6;i<x+w+6;i+=10){ ctx.fillStyle='rgba(0,0,0,.13)'; ctx.fillRect(i,y,2,rh); ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(i+2,y,1,rh); }   // chapa ondulada
+  ctx.fillStyle='rgba(255,255,255,.2)'; ctx.fillRect(x-6,Math.round(y+rh*0.38)-1,w+12,2);   // cumbrera
+  for(const sx of [x+70,x+w-140]){   // claraboyas
+    ctx.fillStyle='#2a3440'; ctx.fillRect(sx,y+Math.round(rh*0.5),70,26);
+    ctx.fillStyle='rgba(120,200,235,.55)'; ctx.fillRect(sx+3,y+Math.round(rh*0.5)+3,64,20);
+    ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(sx+3,y+Math.round(rh*0.5)+3,64,3);
   }
+  for(const [vx,vy] of [[x+24,y+12],[x+w-46,y+12]]){   // extractores
+    ctx.fillStyle='#2e353c'; ctx.fillRect(vx,vy,22,22); ctx.fillStyle='#8a929c'; ctx.fillRect(vx,vy,22,3);
+    ctx.save(); ctx.translate(vx+11,vy+12); ctx.rotate(t*0.08); ctx.fillStyle='#8a929c'; ctx.fillRect(-8,-2,16,4); ctx.fillRect(-2,-8,4,16); ctx.restore();
+  }
+  ctx.fillStyle='#2e353c'; ctx.fillRect(x-6,y+rh-5,w+12,5);   // canalón del alero
+  // fachada
   ctx.fillStyle='#5f6640'; ctx.fillRect(x,y+rh,w,fh);
-  ctx.fillStyle='#4a5032'; for(let i=0;i<w;i+=20) ctx.fillRect(x+i,y+rh,2,fh);
-  const dw=150, dx=x+w/2-dw/2;
-  ctx.fillStyle='#14171c'; ctx.fillRect(dx,y+rh+8,dw,fh-8);
-  for(let i=0;i<dw;i+=12){ ctx.fillStyle=(i/12)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(dx+i,y+rh+2,12,6); }
-  ctx.fillStyle='rgba(255,220,120,.16)'; ctx.fillRect(dx+8,y+rh+14,dw-16,fh-14);
-  ctx.fillStyle='#8a929c'; ctx.fillRect(dx+18,y+rh+16,4,16); ctx.fillRect(dx+28,y+rh+16,12,4); ctx.fillRect(dx+dw-34,y+rh+16,14,10);
-  for(const wx of [x+22,x+w-62]){
-    ctx.fillStyle='#2a2f36'; ctx.fillRect(wx,y+rh+14,40,20);
-    ctx.fillStyle='#9fe8ff'; ctx.fillRect(wx+3,y+rh+17,34,14);
-    ctx.fillStyle='rgba(255,255,255,.4)'; ctx.fillRect(wx+3,y+rh+17,34,3);
+  ctx.fillStyle='#4a5032'; for(let i=0;i<w;i+=24) ctx.fillRect(x+i,y+rh,2,fh);
+  for(let j=0;j<10;j++){ ctx.fillStyle='rgba(0,0,0,'+(0.38*(1-j/10)).toFixed(3)+')'; ctx.fillRect(x,y+rh+j,w,1); }   // sombra del alero
+  ctx.fillStyle='#4a5032'; ctx.fillRect(x,y+rh,8,fh); ctx.fillRect(x+w-8,y+rh,8,fh);   // pilastras
+  ctx.fillStyle='#78805a'; ctx.fillRect(x+8,y+rh,1,fh); ctx.fillRect(x+w-9,y+rh,1,fh);
+  ctx.fillStyle='#3a3f2a'; ctx.fillRect(x,y+h-6,w,6);   // zócalo
+  ctx.fillStyle='#1d2229'; ctx.fillRect(x+w/2-82,y+rh+10,164,18); ctx.strokeStyle='#f5c518'; ctx.lineWidth=1; ctx.strokeRect(x+w/2-81.5,y+rh+10.5,163,17);
+  ctx.fillStyle='#f5c518'; ctx.font='9px "Press Start 2P", monospace'; ctx.textAlign='center'; ctx.fillText('TALLER MILITAR',x+w/2,y+rh+24); ctx.textAlign='left';
+  const dw=150, dx=x+w/2-dw/2, dy=y+rh+34, dh=fh-40;
+  ctx.fillStyle='#14171c'; ctx.fillRect(dx,dy,dw,dh);
+  for(let i=0;i<dw;i+=12){ ctx.fillStyle=(i/12)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(dx+i,dy-5,12,5); }
+  ctx.fillStyle='rgba(255,210,120,.2)'; ctx.fillRect(dx+6,dy+4,dw-12,dh-4);
+  ctx.fillStyle='#8a929c'; ctx.fillRect(dx+16,dy+8,4,16); ctx.fillRect(dx+26,dy+8,12,4); ctx.fillRect(dx+dw-34,dy+8,14,10);
+  ctx.fillStyle='#3a4048'; ctx.fillRect(dx-10,dy,10,dh); ctx.fillRect(dx+dw,dy,10,dh);   // hojas del portón, abiertas a los lados
+  for(const wx of [x+24,x+w-64]){
+    ctx.fillStyle='#2a2f36'; ctx.fillRect(wx,y+rh+36,40,22);
+    ctx.fillStyle='#9fe8ff'; ctx.fillRect(wx+3,y+rh+39,34,16);
+    ctx.fillStyle='rgba(255,255,255,.4)'; ctx.fillRect(wx+3,y+rh+39,34,3);
+    ctx.fillStyle='#4a5032'; ctx.fillRect(wx-2,y+rh+58,44,3);   // alféizar
   }
 }
 /* GARAJE DE VEHÍCULOS (antes «estación de mejora»): una plaza por vehículo con su nivel de mejoras. El que llevas está
    iluminado, con los brazos de reparación encima; el JINETE aparece tapado con una lona hasta que capturas una moto. */
 function drawUpgradeStation(){
   const L=homeL.pad, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE;
-  // suelo del garaje y borde de peligro
-  ctx.fillStyle='#2a2f36'; ctx.fillRect(x+4,y+4,w-8,h-8);
-  for(let i=0;i<w;i+=16){ ctx.fillStyle=(i/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x+i,y,16,5); ctx.fillRect(x+i,y+h-5,16,5); }
-  for(let j=0;j<h;j+=16){ ctx.fillStyle=(j/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x,y+j,5,16); ctx.fillRect(x+w-5,y+j,5,16); }
+  // vista 3/4: suelo, MURO DEL FONDO (albardilla clara y cara de hormigón; los carteles van colgados en él),
+  // muretes a los lados y separadores bajos entre plazas; delante, la entrada con el borde de peligro
+  ctx.fillStyle='#2a2f36'; ctx.fillRect(x+4,y+40,w-8,h-44);
+  ctx.fillStyle='#9aa2ac'; ctx.fillRect(x,y,w,6);
+  ctx.fillStyle='#4a5059'; ctx.fillRect(x,y+6,w,34);
+  ctx.fillStyle='#3e444c'; for(let i=0;i<w;i+=30) ctx.fillRect(x+i,y+6,2,34);
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(x+8,y+40,w-16,6);
+  for(const sx of [x,x+w-8]){ ctx.fillStyle='#9aa2ac'; ctx.fillRect(sx,y,8,h-10); ctx.fillStyle='#4a5059'; ctx.fillRect(sx,y+h-10,8,10); }
+  for(let i=8;i<w-8;i+=16){ ctx.fillStyle=((i-8)/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x+i,y+h-5,Math.min(16,w-8-i),5); }
   const ids=['mech','jeep','tank','moto'], bw=(w-16)/ids.length, cur=sel().char;
+  for(let i=1;i<ids.length;i++){ const sx=Math.round(x+8+i*bw)-3;   // separadores: parte de arriba clara y su cara delantera
+    ctx.fillStyle='#8a929c'; ctx.fillRect(sx,y+40,6,h-62); ctx.fillStyle='#3e444c'; ctx.fillRect(sx,y+h-22,6,8); }
   ids.forEach((id,i)=>{
     const ch=CHARS[id], bx=x+8+i*bw, by=y+44, bh=h-56, cx=bx+bw/2, cy=by+bh/2+4, mine=id===cur, locked=ch.locked&&!save[ch.locked];
     // plaza: líneas blancas y su número
@@ -5770,13 +5792,18 @@ function drawHouse(){
   ctx.fillStyle=pal.trim; ctx.fillRect(x-4,y+rh/2-2,w+8,4); ctx.fillRect(x-4,y+rh-3,w+8,3);
   if(Lv===1){ ctx.fillStyle='rgba(0,0,0,.2)'; for(let xx=x;xx<x+w;xx+=12) ctx.fillRect(xx,y,2,rh); }
   if(Lv>=4){ ctx.fillStyle=pal.wall; ctx.fillRect(x+w*0.18,y+rh*0.18,26,16); ctx.fillStyle='#9fe8ff'; ctx.fillRect(x+w*0.18+5,y+rh*0.18+4,16,9); }
-  if(Lv>=3){ const chx=x+w-38, chy=y+4; ctx.fillStyle='#6b5a50'; ctx.fillRect(chx,chy,16,20); ctx.fillStyle='#3a3028'; ctx.fillRect(chx+3,chy+2,10,5); }
+  if(Lv>=3){ const chx=x+w-38, chy=y-10;   // chimenea en 3/4: la boca arriba y la cara de ladrillo delante
+    ctx.fillStyle='#8a7468'; ctx.fillRect(chx,chy,16,6); ctx.fillStyle='#2a2018'; ctx.fillRect(chx+3,chy+1,10,4);
+    ctx.fillStyle='#6b5a50'; ctx.fillRect(chx,chy+6,16,22); ctx.fillStyle='rgba(0,0,0,.25)'; for(let yy=chy+10;yy<chy+28;yy+=5) ctx.fillRect(chx,yy,16,1); }
   if(Lv===5){ ctx.fillStyle='#5a3a1e'; ctx.fillRect(x+w/2-1,y-26,3,30); ctx.fillStyle='#f5c518'; ctx.fillRect(x+w/2+2,y-26+Math.sin(t*0.1)*1,16,10); glowCircle(x+w/2+10,y-21,3,'#3ee67a'); }
   ctx.fillStyle=pal.wall; ctx.fillRect(x,y+rh,w,fh);
   if(Lv<=2){ ctx.fillStyle='rgba(0,0,0,.14)'; for(let xx=x+6;xx<x+w;xx+=9) ctx.fillRect(xx,y+rh,2,fh); }
   if(Lv===3){ ctx.fillStyle='rgba(0,0,0,.14)'; for(let yy=y+rh+6;yy<y+h;yy+=9) for(let xx=x+((yy/9)%2?0:7);xx<x+w;xx+=14) ctx.fillRect(xx,yy,12,2); }
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(x,y+rh,w,3);
+  for(let j=0;j<8;j++){ ctx.fillStyle='rgba(0,0,0,'+(0.34*(1-j/8)).toFixed(3)+')'; ctx.fillRect(x,y+rh+j,w,1); }   // sombra del alero
+  ctx.fillStyle='#6e685e'; ctx.fillRect(x,y+h-6,w,6); ctx.fillStyle='#8a8478'; for(let xx=x;xx<x+w;xx+=14) ctx.fillRect(xx,y+h-6,12,2);   // zócalo de piedra
   const dx=x+w/2-10;
+  ctx.fillStyle='#8a8478'; ctx.fillRect(dx-4,y+h,28,4); ctx.fillStyle='#6e685e'; ctx.fillRect(dx-4,y+h+4,28,2);   // escalones
+  ctx.fillStyle='#9a9488'; ctx.fillRect(dx-8,y+h+6,36,4); ctx.fillStyle='#6e685e'; ctx.fillRect(dx-8,y+h+10,36,2);
   ctx.fillStyle='#3a2210'; ctx.fillRect(dx-2,y+h-fh+6,24,fh-6);
   ctx.fillStyle='#5a3418'; ctx.fillRect(dx,y+h-fh+8,20,fh-8);
   ctx.fillStyle='#f5c518'; ctx.fillRect(dx+15,y+h-fh/2,3,3);
@@ -5802,6 +5829,8 @@ function drawHomeFarm(){
   ctx.fillRect(fx-1,fy,3,4*TILE); ctx.fillRect(fx-1,fy+7*TILE,3,fhh-7*TILE); ctx.fillRect(fx+fw-1,fy,3,fhh);
   homeL.plots.forEach((pl,i)=>{
     const x0=pl.c*TILE, y0=pl.r*TILE;
+    ctx.fillStyle='#8a5a2e'; ctx.fillRect(x0-2,y0-2,64,3); ctx.fillRect(x0-2,y0,3,58); ctx.fillRect(x0+59,y0,3,58);   // bancal: borde de madera
+    ctx.fillStyle='#5a381c'; ctx.fillRect(x0-2,y0+58,64,6); ctx.fillStyle='#4a2c14'; ctx.fillRect(x0-2,y0+63,64,1);   // y su cara delantera
     if(i>=lv.plots){
       ctx.fillStyle='rgba(30,20,10,.55)'; ctx.fillRect(x0,y0,60,60);
       ctx.strokeStyle='#c8ccd2'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x0+30,y0+26,6,Math.PI,0); ctx.stroke();
@@ -5821,7 +5850,8 @@ function drawHomeFarm(){
 }
 function drawHelipadHome(){
   const L=homeL.heli, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE, cx=x+w/2, cy=y+h/2;
-  ctx.fillStyle='#5a6068'; ctx.fillRect(x+4,y+4,w-8,h-8);
+  ctx.fillStyle='#5a6068'; ctx.fillRect(x+4,y+4,w-8,h-14);
+  ctx.fillStyle='#3e444c'; ctx.fillRect(x+4,y+h-10,w-8,8); ctx.fillStyle='#2e333a'; for(let i=x+4;i<x+w-4;i+=20) ctx.fillRect(i,y+h-10,2,8);   // la plataforma está elevada: su cara delantera
   ctx.strokeStyle='#f5c518'; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(cx,cy,74,0,Math.PI*2); ctx.stroke();
   ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillRect(cx-28,cy-36,12,72); ctx.fillRect(cx+16,cy-36,12,72); ctx.fillRect(cx-28,cy-6,56,12);
   for(const [lx,ly] of [[x+10,y+10],[x+w-14,y+10],[x+10,y+h-14],[x+w-14,y+h-14]]){ ctx.fillStyle=Math.floor(t/25)%2?'#ff4757':'#5a1a1a'; ctx.fillRect(lx,ly,5,5); }
@@ -10175,6 +10205,7 @@ function drawNight(cx,cy){
   const k=nightAmt(), wm=warmAmt();
   if(k<0.02) return;
   drawDark(cx,cy,darkAlpha()/0.62,nightLights());
+  drawLavaGlow(cx,cy);   // p9o_lava.js
   drawLampTint(cx,cy);
   drawWatchers(cx,cy);
   if(wm>0.02){ ctx.fillStyle='rgba(255,130,60,'+(0.14*wm).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }   // luz anaranjada
@@ -10614,12 +10645,35 @@ function drawLavaFx(cx,cy){
     if(hash2(c,r+Math.floor(t/26))<0.06){ ctx.fillStyle='#ff8c2a'; ctx.beginPath(); ctx.arc(c*TILE+hash2(r,c)*24+3,r*TILE+hash2(c+5,r)*24+3,2+hash2(c,r)*2,0,Math.PI*2); ctx.fill(); }
   }
 }
-/* De noche la lava alumbra: luces débiles sobre las casillas de lava cercanas a la pantalla (máx. 40) */
+/* De noche la lava alumbra: cada casilla de lava cercana a la pantalla abre la oscuridad (máx. 90) */
 function lavaLights(L){
   const c0=Math.max(0,Math.floor(cam.x/TILE)-2), c1=Math.min(WC-1,Math.floor((cam.x+W)/TILE)+2);
   const r0=Math.max(0,Math.floor(cam.y/TILE)-2), r1=Math.min(WR-1,Math.floor((cam.y+H)/TILE)+2);
   let n=0;
-  for(let r=r0;r<=r1&&n<40;r+=2) for(let c=c0;c<=c1&&n<40;c+=2) if(map[r*WC+c]===LAVA){ L.push([c*TILE+15,r*TILE+15,46,0.55]); n++; }
+  for(let r=r0;r<=r1&&n<90;r++) for(let c=c0;c<=c1&&n<90;c++) if(map[r*WC+c]===LAVA){ L.push([c*TILE+15,r*TILE+15,40,0.42]); n++; }
+}
+/* ...y encima de la oscuridad (coordenadas de pantalla): la lava brilla con luz propia (sus grietas se encienden) y
+   un resplandor naranja que late tiñe el suelo y lo que hay cerca */
+let lavaGlowCv=null;
+function lavaGlowSpr(){
+  if(lavaGlowCv) return lavaGlowCv;
+  const c=mkCanvas(110,110), g=c.getContext('2d'), gr=g.createRadialGradient(55,55,0,55,55,55);
+  gr.addColorStop(0,'rgba(255,120,40,0.5)'); gr.addColorStop(0.35,'rgba(255,80,25,0.2)'); gr.addColorStop(1,'rgba(255,40,10,0)');
+  g.fillStyle=gr; g.fillRect(0,0,110,110); return lavaGlowCv=c;
+}
+function drawLavaGlow(cx,cy){
+  if(!lavaOn||inHome) return;
+  const k=nightAmt(); if(k<0.05) return;
+  const c0=Math.max(0,Math.floor(cx/TILE)-2), c1=Math.min(WC-1,Math.floor((cx+W)/TILE)+2);
+  const r0=Math.max(0,Math.floor(cy/TILE)-2), r1=Math.min(WR-1,Math.floor((cy+H)/TILE)+2), S=lavaGlowSpr();
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    if(map[r*WC+c]!==LAVA) continue;
+    const sx=c*TILE-cx, sy=r*TILE-cy, p=0.85+0.15*Math.sin(t*0.03+c*0.9+r*1.7);
+    ctx.globalAlpha=0.32*k*p; ctx.drawImage(S,sx+15-55,sy+15-55);
+    ctx.globalAlpha=0.55*k*p; ctx.drawImage(mapCanvas,c*TILE,r*TILE,TILE,TILE,sx,sy,TILE,TILE);   // las grietas al rojo brillan
+  }
+  ctx.restore();
 }
 /* ===================== ECONOMÍA: INFLACIÓN, FORJA Y NIVEL DE LOS VEHÍCULOS =====================
    · INFLACIÓN: cada compra en el taller (mejoras y niveles) sube un 8% el precio en WORK de todo lo que viene después.
