@@ -1976,7 +1976,8 @@ function updateBullets(dt){
       } else {
         if(player.alive){
           const d2=(b.x-player.x)**2+(b.y-player.y)**2;
-          if(!b.grazed && d2<(player.radius+11)**2 && d2>player.radius**2){ b.grazed=true; score+=2; S.graze(); }
+          if(!b.grazed && d2<(player.radius+11)**2) b.grazed=true;   // ROCE: se apunta al pasar cerca...
+          else if(b.grazed===true && d2>(player.radius+11)**2){ b.grazed='ok'; score+=2; S.graze(); }   // ...y puntúa solo si se aleja sin darte
           if(d2<(b.radius+player.radius)**2){
             damagePlayer(b.dmg,b.sp); dead=true;
             if(b.stunP){ stunPlayer(b.stunP); popup(player.x,player.y-34,'¡ELECTROCUTADO!','#7fe8ff',13); }
@@ -5227,6 +5228,7 @@ function render(){
   drawDrones();
   if(mate&&mate.alive&&mate.air) drawMate(mate);
   drawHelis();
+  drawEnemyHelis();   // helicópteros enemigos de la alarma (p9_campaign.js)
   drawLobs();
   drawVoids();
   drawAssembly();
@@ -6564,24 +6566,73 @@ const ALARM_TIME=90*60;
 EDEFS.alarm={name:'ALARMA', role:'structure', hp:26, speed:0, radius:11, mass:99, view:0, fov:0, dmg:0, score:120, work:3, color:'#ff4757', look:'alarm', purple:0};
 function worldAlarms(dt){
   const w=world, p=player; if(!w||w.done||cine>0) return;
+  updateEnemyHelis(dt);
   const gi=w.section-1, g=w.gates[gi];
   if(w.alarm&&w.alarm.gi!==gi) w.alarm=null;   // ya pasaste esa compuerta
   if(!g||g.open){ if(w.alarm&&w.alarm.state==='armed') w.alarm.state='off'; return; }
   if(!w.alarm) armAlarms(g,gi);
-  const A=w.alarm; if(A.state!=='armed') return;
+  const A=w.alarm; if(A.state==='off') return;
   if(A.items.every(e=>!e.alive)){
-    A.state='off'; runWork+=15; S.upgrade();
-    popup(p.x,p.y-50,'🔕 ALARMAS DESACTIVADAS · +15 ◆','#3ee67a',16);
+    if(A.state==='armed'){ runWork+=15; S.upgrade(); popup(p.x,p.y-50,'🔕 ALARMAS DESACTIVADAS · +15 ◆','#3ee67a',16); }
+    else popup(p.x,p.y-50,'🔕 ALARMAS DESTRUIDAS · no vendrán más helicópteros','#3ee67a',15);
+    A.state='off'; return;
+  }
+  if(A.state==='fired'){   // la alarma sigue sonando: un helicóptero con élite cada 12 s mientras quede alguna alarma
+    if(p.alive&&(A.heliT-=dt)<=0){ A.heliT=720; sendEliteHeli(); }
     return;
   }
   if(!p.alive) return;
   const seen=enemies.some(e=>e.alive&&e.ai==='combat'&&e.seen);
   A.t-=dt*(seen?1:0.5);
   if(A.t<=0){
-    A.state='fired'; alarmT=Math.max(alarmT,240); S.alarm();
-    announce('🚨 ¡ALARMA!','#ff4757','No llegaste a tiempo: la élite viene a por ti');
-    callReinforcements(true); setTimeout(()=>{ if(world===w&&!w.done) callReinforcements(true); },5000);
+    A.state='fired'; A.heliT=0; alarmT=Math.max(alarmT,240); S.alarm();
+    announce('🚨 ¡ALARMA!','#ff4757','Llegan helicópteros con la élite… hasta que destruyas las alarmas');
   }
+}
+/* HELICÓPTERO ENEMIGO: entra desde fuera de la pantalla, se queda en el aire cerca de ti (en tu lado de la compuerta),
+   suelta 3 soldados de élite uno a uno y se va. No se le puede derribar: hay que apagar las alarmas. */
+let eHelis=[];
+function sendEliteHeli(){
+  const w=world, p=player, g=w.gates[w.alarm.gi], minY=g?(g.row+3)*TILE:0;
+  if(enemies.filter(e=>e.alive&&e.reinf).length>=REINF_MAX_ALIVE) return;
+  let s=null;
+  for(let i=0;i<12&&!s;i++){ const q=randomWalkable(p.x,p.y,280); if(q&&q.y>minY&&Math.hypot(q.x-p.x,q.y-p.y)>140) s=q; }
+  if(!s) return;
+  const side=Math.random()<0.5?-1:1, sx=side<0?cam.x-140:cam.x+W+140;
+  w.eliteN=Math.min(6,(w.eliteN||0)+1);
+  eHelis.push({x:sx,y:s.y-60-rand(0,60),tx:s.x,ty:s.y-50,ang:side<0?0:Math.PI,state:'in',t:0,drops:3,rotor:0,map});
+  popup(p.x,p.y-60,'🚁 ¡HELICÓPTERO ENEMIGO!','#ff4757',14); S.alarm();
+}
+function updateEnemyHelis(dt){
+  eHelis=eHelis.filter(h=>h.map===map);
+  for(const h of eHelis){
+    h.rotor+=0.5*dt; h.t+=dt;
+    if(h.state==='in'){
+      const dx=h.tx-h.x, dy=h.ty-h.y, d=Math.hypot(dx,dy);
+      h.ang=turnTo(h.ang,Math.atan2(dy,dx),0.06*dt); const v=Math.min(6,d*0.06+1); h.x+=dx/d*v*dt; h.y+=dy/d*v*dt;
+      if(d<8){ h.state='drop'; h.t=0; }
+    } else if(h.state==='drop'){
+      if(h.drops>0&&h.t>=25){ h.t=0; h.drops--;
+        const x1=h.x+rand(-30,30), y1=h.y+50+rand(-10,20), c=Math.floor(x1/TILE), r=Math.floor(y1/TILE), nb=SOLID[tileAtC(c,r)]?nearestWalkable(c,r,3):[c,r];
+        if(nb) addLob({x0:h.x,y0:h.y,x1:nb[0]*TILE+15,y1:nb[1]*TILE+15,dur:40,h:18,owner:'n',kind:'drop',onLand:l=>{ if(world&&!world.done) spawnEliteAt(l.x1,l.y1); }});
+      }
+      if(h.drops<=0&&h.t>40){ h.state='out'; h.ang=h.x<player.x?Math.PI:0; }
+    } else { h.x+=Math.cos(h.ang)*7*dt; h.y+=Math.sin(h.ang)*1*dt; if(h.x<cam.x-300||h.x>cam.x+W+300) h.dead=true; }
+  }
+  eHelis=eHelis.filter(h=>!h.dead);
+}
+function drawEnemyHelis(){ for(const h of eHelis) if(h.map===map) drawHeli(h.x,h.y,h.ang,h.state==='drop'?20:40,h.rotor,null,1,true); }
+/* Un soldado de élite: de los tipos de este mundo (los más duros que tocan), con más vida y daño cuantos más helicópteros han venido */
+function spawnEliteAt(x,y){
+  const w=world, pool=worldReinfPool(w), L=2+(w.eliteN||1);
+  const facs=[...new Set(pool.map(id=>EDEFS[id].fac||'r'))], fac=w.eliteFac||(w.eliteFac=pick(facs));
+  const mine=pool.filter(id=>(EDEFS[id].fac||'r')===fac&&!EDEFS[id].air), list=mine.length?mine:pool;
+  const top=Math.min(list.length,1+Math.ceil(L*0.6)), choices=list.slice(Math.max(0,top-3),top);
+  const id=pick(choices), d=EDEFS[id], en=addEnemy(id,x,y,w.eliteSid||(w.eliteSid=newSquad({reinf:true})),true);
+  en.reinf=true; en.elite=true;
+  if(d.dmg!=null){ en.def=Object.create(d); en.def.dmg=Math.round(d.dmg*(1+0.12*(L-1))); }
+  en.maxHp=Math.round(en.maxHp*(1+0.18*(L-1))); en.hp=en.maxHp;
+  en.ai='hunt'; en.aware=1; en.lastKnown={x:player.x,y:player.y}; en.spawnGrace=45;
 }
 function armAlarms(g,gi){
   const w=world, n=w.id>=3?3:2, sid=newSquad(), items=[];
@@ -6605,9 +6656,9 @@ function armAlarms(g,gi){
 }
 /* Contador de las alarmas arriba en el centro, y una flecha hacia cada alarma que quede (pantalla) */
 function drawAlarmHud(){
-  const w=world; if(!w||!w.alarm||w.alarm.state!=='armed'||cine>0) return;
-  const A=w.alarm, left=A.items.filter(e=>e.alive), s=Math.ceil(A.t/60), k=A.t/ALARM_TIME, urgent=s<=20;
-  const txt='⏰ ALARMAS '+left.length+'/'+A.items.length+' · '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  const w=world; if(!w||!w.alarm||w.alarm.state==='off'||cine>0) return;
+  const A=w.alarm, left=A.items.filter(e=>e.alive), fired=A.state==='fired', s=Math.ceil(Math.max(0,A.t)/60), k=fired?1:A.t/ALARM_TIME, urgent=fired||s<=20;
+  const txt=fired?'🚨 ALARMA SONANDO · quedan '+left.length:'⏰ ALARMAS '+left.length+'/'+A.items.length+' · '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
   ctx.save(); ctx.font='bold 15px Rajdhani, monospace'; ctx.textAlign='center';
   const bw=230, bx=W/2-bw/2, by=58;
   ctx.fillStyle='rgba(13,20,32,.85)'; ctx.fillRect(bx,by,bw,26); ctx.strokeStyle=urgent?'#ff4757':'#ff8a8a'; ctx.strokeRect(bx+0.5,by+0.5,bw-1,25);
@@ -6750,8 +6801,10 @@ function updateHelis(dt){
 /* HELICÓPTERO de transporte (como el del concepto de la base): fuselaje gris oscuro y redondeado, cabina de cristal
    delante, patines, alas cortas con cohetes, motor con escapes, cola con estabilizador y rotor de cola, y 4 palas.
    spin = lo rápido que giran las palas (0 = paradas: así está en la base; 1 = en vuelo, con el disco borroso) */
-function drawHeli(x,y,ang,alt,rotor,carry,spin){
+function drawHeli(x,y,ang,alt,rotor,carry,spin,enemy){
   spin=spin==null?1:spin;
+  const HC=enemy?{boom:'#4a2424',fin:'#3a1a1a',body0:'#2a1414',body:'#6a2c2c',top:'#8a3a3a',eng:'#3a1e1e',eng2:'#4a2626',glass0:'#3a1010',glass:'#8a2a2a',emb:'#ff4757'}
+    :{boom:'#38444c',fin:'#2e383f',body0:'#262e33',body:'#45525a',top:'#5a6a73',eng:'#323c43',eng2:'#3e4a52',glass0:'#16343f',glass:'#2d6a7e',emb:'#3ee6e6'};
   ctx.fillStyle='rgba(0,0,0,.25)';
   ctx.beginPath(); ctx.ellipse(x+alt*0.35,y+alt*0.6+10,30,11,ang,0,Math.PI*2); ctx.fill();
   if(carry==='orb'){ ctx.strokeStyle='#cfd6df'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+28); ctx.stroke(); glowCircle(x,y+30,8,'#3ee67a'); }
@@ -6760,28 +6813,28 @@ function drawHeli(x,y,ang,alt,rotor,carry,spin){
   ctx.fillStyle='#1a1d22'; ctx.fillRect(-16,-17,36,3); ctx.fillRect(-16,14,36,3);
   ctx.fillStyle='#2a2f36'; for(const sx of [-8,10]){ ctx.fillRect(sx,-15,2,5); ctx.fillRect(sx,10,2,5); }
   // cola: botalón que se estrecha, estabilizador y rotor de cola
-  ctx.fillStyle='#38444c'; ctx.beginPath(); ctx.moveTo(-14,-5); ctx.lineTo(-58,-2); ctx.lineTo(-58,2); ctx.lineTo(-14,5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=HC.boom; ctx.beginPath(); ctx.moveTo(-14,-5); ctx.lineTo(-58,-2); ctx.lineTo(-58,2); ctx.lineTo(-14,5); ctx.closePath(); ctx.fill();
   ctx.fillStyle='#4e5c65'; ctx.fillRect(-56,-1,40,1);
-  ctx.fillStyle='#2e383f'; ctx.fillRect(-50,-9,6,18); ctx.fillStyle='#4e5c65'; ctx.fillRect(-50,-9,6,2);
+  ctx.fillStyle=HC.fin; ctx.fillRect(-50,-9,6,18); ctx.fillStyle='#4e5c65'; ctx.fillRect(-50,-9,6,2);
   if(spin>0){ ctx.fillStyle='rgba(200,210,220,'+(0.35*spin).toFixed(2)+')'; ctx.fillRect(-60,-10,3,20); }
   else { ctx.fillStyle='#1e2328'; ctx.fillRect(-60,-9,2,18); }
   // alas cortas con cohetes
   ctx.fillStyle='#2e383f'; ctx.fillRect(-6,-19,8,6); ctx.fillRect(-6,13,8,6);
   ctx.fillStyle='#4a5560'; ctx.fillRect(-8,-22,12,4); ctx.fillRect(-8,18,12,4); ctx.fillStyle='#c94a3a'; ctx.fillRect(4,-22,1,4); ctx.fillRect(4,18,1,4);
   // fuselaje
-  ctx.fillStyle='#262e33'; ctx.beginPath(); ctx.ellipse(2,0,24,13,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#45525a'; ctx.beginPath(); ctx.ellipse(2,0,22,11,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#5a6a73'; ctx.beginPath(); ctx.ellipse(1,-3,19,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=HC.body0; ctx.beginPath(); ctx.ellipse(2,0,24,13,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=HC.body; ctx.beginPath(); ctx.ellipse(2,0,22,11,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=HC.top; ctx.beginPath(); ctx.ellipse(1,-3,19,6,0,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(-10,-11,1,22); ctx.fillRect(6,-11,1,22);   // juntas de los paneles
   // motor con escapes
-  ctx.fillStyle='#323c43'; ctx.fillRect(-14,-6,16,12); ctx.fillStyle='#3e4a52'; ctx.fillRect(-14,-6,16,3);
+  ctx.fillStyle=HC.eng; ctx.fillRect(-14,-6,16,12); ctx.fillStyle=HC.eng2; ctx.fillRect(-14,-6,16,3);
   ctx.fillStyle='#14181b'; ctx.fillRect(-16,-5,3,3); ctx.fillRect(-16,2,3,3);
   // cabina de cristal
-  ctx.fillStyle='#16343f'; ctx.beginPath(); ctx.ellipse(15,0,9,9,0,-Math.PI/2,Math.PI/2); ctx.fill();
-  ctx.fillStyle='#2d6a7e'; ctx.beginPath(); ctx.ellipse(15,0,7,7,0,-Math.PI/2,Math.PI/2); ctx.fill();
+  ctx.fillStyle=HC.glass0; ctx.beginPath(); ctx.ellipse(15,0,9,9,0,-Math.PI/2,Math.PI/2); ctx.fill();
+  ctx.fillStyle=HC.glass; ctx.beginPath(); ctx.ellipse(15,0,7,7,0,-Math.PI/2,Math.PI/2); ctx.fill();
   ctx.fillStyle='rgba(180,240,255,.55)'; ctx.fillRect(16,-5,3,3);
   ctx.fillStyle='#262e33'; ctx.fillRect(15,-9,1,18);
-  ctx.fillStyle='#3ee6e6'; ctx.fillRect(-4,-9,2,2);   // emblema
+  ctx.fillStyle=HC.emb; ctx.fillRect(-4,-9,2,2);   // emblema
   ctx.fillStyle=Math.floor(t/20)%2?'#ff4757':'#5a1a1a'; ctx.fillRect(-58,-1,2,2);   // luz de la cola
   ctx.restore();
   // rotor principal: en vuelo, disco borroso; parado, 4 palas nítidas con la punta amarilla
