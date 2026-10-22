@@ -540,12 +540,20 @@ const NINJA_STEPS=[   // KAGE (aliado): de androide reciclado a maestro de las s
   {d:'Camuflaje al flanquear: se vuelve invisible un momento', invis:true, hpMul:1.3},
   {d:'Maestro de las sombras: clones que atacan contigo', clones:true, slash:15},
 ];
+const TESLA_STEPS=[   // VOLTIO (aliado): de dron casero a tormenta eléctrica
+  {d:'Dron casero: un rayo corto que da a un enemigo', chain:1, range:140, hpMul:0.85},
+  {d:'El rayo salta a 3 enemigos', chain:3, range:170, hpMul:1},
+  {d:'Escudo eléctrico: cada 12 s te da +20 de escudo', shieldPulse:true},
+  {d:'El rayo salta a 4 enemigos y aturde el doble a los jefes', chain:4, bossStun:2, hpMul:1.3},
+  {d:'Tormenta eléctrica: cada 9 s descarga sobre todos los enemigos cercanos', storm:true, chain:5},
+];
 const tierTable=steps=>Object.fromEntries(steps.map((s,i)=>[i+1,Object.assign({},...steps.slice(0,i+1),{d:s.d,map:'t'+(i+1)})]));
 const VEH_TIERS={
   jeep:tierTable(JEEP_STEPS),
   tank:tierTable(TANK_STEPS),
   car:tierTable(CAR_STEPS),
   ninja:tierTable(NINJA_STEPS),
+  tesla:tierTable(TESLA_STEPS),
   moto:tierTable(MOTO_STEPS),
   mech:tierTable(MECH_STEPS),
 };
@@ -2492,7 +2500,7 @@ function makeMate(kind,x,y,lvl){
   const m={kind:'mate',mk:kind,lvl:1,x,y,vx:0,vy:0,alive:true,angle:-Math.PI/2,aim:-Math.PI/2,flash:0,fireCd:30,walk:0,tread:0,trail:[]};
   if(kind==='car'){ const T=tierInfo('car'); Object.assign(m,{radius:11,mass:1.8,hp:70*hpMul*(T.hpMul||1),speedMax:3.3,accel:0.3,friction:0.88,cannonCd:60,tier:vehTier('car'),T,fireBase:T.fireCd||7,ramCd:0,rocketCd:90}); }
   else if(kind==='ninja') Object.assign(m,{tier:vehTier('ninja'),T:tierInfo('ninja'),invis:0,cloneCd:240,clones:[],radius:9,mass:1,hp:55*hpMul*(tierInfo('ninja').hpMul||1),speedMax:3.6,accel:0.45,friction:0.84,dashCd:0,nadeCd:90,slashCd:0,flankSide:1,flankT:200,dash:0});
-  else Object.assign(m,{radius:9,mass:0.5,hp:45*hpMul,speedMax:3.5,accel:0.32,friction:0.9,air:true,zapCd:20,spin:0});
+  else Object.assign(m,{tier:vehTier('tesla'),T:tierInfo('tesla'),shieldCd:300,stormCd:300,radius:9,mass:0.5,hp:45*hpMul*(tierInfo('tesla').hpMul||1),speedMax:3.5,accel:0.32,friction:0.9,air:true,zapCd:20,spin:0});
   m.maxHp=m.hp;
   if((lvl||1)>=2) evolveMate(m,true);
   return m;
@@ -2644,8 +2652,24 @@ function updateNinjaClones(m,dt){
   m.clones=m.clones.filter(c=>c.life>0);
 }
 function updateTesla(m,anchor,dt){
-  m.zapCd-=dt; m.spin+=0.5*dt;
-  const range=m.lvl>=2?210:170;
+  const T=m.T||{};
+  m.zapCd-=dt; m.spin+=0.5*dt; m.shieldCd-=dt; m.stormCd-=dt;
+  const range=(T.range||170)+(m.lvl>=2?40:0);
+  if(T.shieldPulse&&m.shieldCd<=0&&player.alive){   // escudo eléctrico: un rayo azul hasta ti que recarga tu escudo
+    m.shieldCd=720; player.shield=Math.min(player.shieldMax,player.shield+20);
+    bolts.push(makeBolt(m.x,m.y,player.x,player.y)); rings.push({x:player.x,y:player.y,r:10,max:34,life:16,maxLife:16,color:'#6ad7ff'});
+    popup(player.x,player.y-30,'+20 ESCUDO','#6ad7ff',12); S.zap();
+  }
+  if(T.storm&&m.stormCd<=0){   // tormenta eléctrica: descarga sobre todos los enemigos a menos de 140 px del dron
+    const near=enemies.filter(e=>e.alive&&Math.hypot(e.x-m.x,e.y-m.y)<140);
+    if(boss&&boss.alive&&Math.hypot(boss.x-m.x,boss.y-m.y)<160&&!near.includes(boss)) near.push(boss);
+    if(near.length){
+      m.stormCd=540;
+      for(const e of near){ bolts.push(makeBolt(m.x,m.y,e.x,e.y)); if(e===boss) damageBoss(12,{stunAdd:20}); else damageEnemy(e,12,{src:mate,stun:30}); }
+      rings.push({x:m.x,y:m.y,r:10,max:140,life:22,maxLife:22,color:'#9ff3ff'}); shake=Math.max(shake,4); S.zap();
+      popup(m.x,m.y-26,'¡TORMENTA!','#9ff3ff',13);
+    }
+  }
   const tg=nearestEnemyFrom(anchor.x,anchor.y,range+140,false);
   let hx,hy;
   if(tg){ hx=lerp(anchor.x,tg.x,0.55); hy=lerp(anchor.y,tg.y,0.55); }
@@ -2654,15 +2678,15 @@ function updateTesla(m,anchor,dt){
   accelerate(m,hx-m.x,hy-m.y,dt,dh>40?1:0.35);
   if(m.zapCd<=0){
     const first=nearestEnemyFrom(m.x,m.y,range,false);
-    if(first){ chainZap(m,first,m.lvl>=2?5:3); m.zapCd=m.lvl>=2?26:34; }
+    if(first){ chainZap(m,first,(T.chain||3)+(m.lvl>=2?2:0),T.bossStun||1); m.zapCd=m.lvl>=2?26:34; }
   }
 }
-function chainZap(src,first,n){
+function chainZap(src,first,n,bossStun){
   const hit=[]; let cur=first, fx=src.x, fy=src.y;
   for(let i=0;i<n&&cur;i++){
     hit.push(cur);
     bolts.push(makeBolt(fx,fy,cur.x,cur.y));
-    if(cur===boss) damageBoss(5,{stunAdd:9});
+    if(cur===boss) damageBoss(5,{stunAdd:9*(bossStun||1)});
     else damageEnemy(cur,5,{src:mate,stun:14});
     fx=cur.x; fy=cur.y;
     const prev=cur;
@@ -4217,21 +4241,28 @@ function drawNinja(m,ghost){
   if(m.lvl>=2){ ctx.fillStyle='#f5c518'; ctx.fillRect(-3,6,3,1); }
   ctx.restore();
 }
+/* VOLTIO por niveles: dron casero de 2 brazos con cinta y núcleo amarillo flojo (1), 3 brazos con bobina de cobre y
+   núcleo cian (2), anillo del generador de escudo (3), 4 brazos (4) y Voltio de tormenta con marco dorado y núcleo blanco (5) */
 function drawTesla(m){
+  const tier=m.tier!=null?m.tier:vehTier('tesla'), arms=tier<=1?2:tier<=3?3:4, gold=tier>=5;
   ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(m.x+8,m.y+14,9,5,0,0,Math.PI*2); ctx.fill();
   ctx.save(); ctx.translate(m.x,m.y);
-  for(let k=0;k<3;k++){
-    const a=k*Math.PI*2/3+0.5;
-    ctx.strokeStyle='#2a3346'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*11,Math.sin(a)*11); ctx.stroke();
+  if(tier>=3){ ctx.strokeStyle='rgba(106,215,255,'+(0.35+0.2*Math.sin(t*0.1)).toFixed(2)+')'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.stroke(); }   // anillo del escudo
+  for(let k=0;k<arms;k++){
+    const a=k*Math.PI*2/arms+0.5;
+    ctx.strokeStyle=gold?'#8a6a1a':tier<=1?'#4a4038':'#2a3346'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*11,Math.sin(a)*11); ctx.stroke();
+    if(tier<=1){ ctx.fillStyle='#c9c2a8'; ctx.fillRect(Math.cos(a)*6-1.5,Math.sin(a)*6-1.5,3,3); }   // cinta adhesiva
     ctx.fillStyle='rgba(200,230,255,.28)'; ctx.beginPath(); ctx.arc(Math.cos(a)*11,Math.sin(a)*11,5,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1; const r=m.spin+k;
     ctx.beginPath(); ctx.moveTo(Math.cos(a)*11-Math.cos(r)*5,Math.sin(a)*11-Math.sin(r)*5); ctx.lineTo(Math.cos(a)*11+Math.cos(r)*5,Math.sin(a)*11+Math.sin(r)*5); ctx.stroke();
   }
-  ctx.fillStyle='#1d2433'; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#c87533'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,4.5,0,Math.PI*2); ctx.stroke();
-  ctx.fillStyle=m.lvl>=2?'#fff6a0':'#aff'; ctx.beginPath(); ctx.arc(0,0,2.2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=gold?'#2a2008':'#1d2433'; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle=gold?'#f5c518':'#c87533'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,4.5,0,Math.PI*2); ctx.stroke();
+  const core=tier<=1?'#c9b060':gold?'#ffffff':m.lvl>=2?'#fff6a0':'#aff';
+  if(gold){ const g=ctx.createRadialGradient(0,0,0,0,0,10); g.addColorStop(0,'rgba(200,250,255,.6)'); g.addColorStop(1,'rgba(200,250,255,0)'); ctx.fillStyle=g; ctx.fillRect(-10,-10,20,20); }
+  ctx.fillStyle=core; ctx.beginPath(); ctx.arc(0,0,gold?3:2.2,0,Math.PI*2); ctx.fill();
   ctx.strokeStyle='rgba(140,240,255,.85)'; ctx.lineWidth=1;
-  for(let i=0;i<2;i++){ const a=rand(0,Math.PI*2); ctx.beginPath(); ctx.moveTo(Math.cos(a)*4,Math.sin(a)*4); ctx.lineTo(Math.cos(a+0.3)*9,Math.sin(a+0.3)*9); ctx.lineTo(Math.cos(a-0.2)*12,Math.sin(a-0.2)*12); ctx.stroke(); }
+  for(let i=0;i<(tier<=1?1:gold?4:2);i++){ const a=rand(0,Math.PI*2); ctx.beginPath(); ctx.moveTo(Math.cos(a)*4,Math.sin(a)*4); ctx.lineTo(Math.cos(a+0.3)*9,Math.sin(a+0.3)*9); ctx.lineTo(Math.cos(a-0.2)*12,Math.sin(a-0.2)*12); ctx.stroke(); }
   ctx.restore();
 }
 function drawHawk(en){
@@ -6526,15 +6557,27 @@ function callHelpDrop(en,label){
   popup(en.x,en.y-30,label,'#ff8a3a',13); alarmT=Math.max(alarmT,120); S.alarm();
 }
 EDEFS.emplacement.onDeath=turretCallHelp;
+/* Sitio fuera de la pantalla y EN TIERRA para que aparezca alguien: prueba alrededor de ti empezando por detrás (abajo)
+   y, si todo es mar o pared, la casilla libre más cercana a ti. (Antes se ponían debajo de la pantalla aunque fuese mar.) */
+function offscreenSpot(air,turn){
+  const R=Math.hypot(W,H)/2+40;
+  for(const k of [0,1,-1,2,-2,3,-3,4,-4,5,-5,6]){
+    const a=Math.PI/2+k*0.5+(turn||0)%0.5, x=player.x+Math.cos(a)*R, y=player.y+Math.sin(a)*R;
+    if(x<40||y<40||x>WW-40||y>WH-40) continue;
+    const c=Math.floor(x/TILE), r=Math.floor(y/TILE);
+    if(air||!SOLID[tileAtC(c,r)]) return [x,y];
+    const nb=nearestWalkable(c,r,3); if(nb) return [nb[0]*TILE+TILE/2,nb[1]*TILE+TILE/2];
+  }
+  const nb=nearestWalkable(Math.floor(player.x/TILE),Math.floor(player.y/TILE)+4,12);
+  return nb?[nb[0]*TILE+TILE/2,nb[1]*TILE+TILE/2]:[player.x,player.y];
+}
 /* Al reaparecer, los que te vencieron llegan por detrás (justo fuera de la pantalla) y van a por ti */
 function worldPursuersArrive(){
   const w=world; if(!w||!w.pursuers) return;
   const list=w.pursuers.filter(e=>e.alive); w.pursuers=null; if(!list.length) return;
   list.forEach((e,i)=>{
-    const x=clamp(player.x+(i-(list.length-1)/2)*60+rand(-20,20),40,WW-40), y=Math.min(WH-40,player.y+H/2+50+rand(0,40));   // justo bajo el borde de la pantalla (la cámara se centra en ti)
-    let c=Math.floor(x/TILE), r=Math.floor(y/TILE);
-    if(!e.def.air&&SOLID[tileAtC(c,r)]){ const nb=nearestWalkable(c,r,6); if(nb){ c=nb[0]; r=nb[1]; } }
-    e.x=c*TILE+TILE/2; e.y=r*TILE+TILE/2; e.vx=e.vy=0; e.path=null; e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=60;
+    const [x,y]=offscreenSpot(e.def.air,i*0.35);
+    e.x=x; e.y=y; e.vx=e.vy=0; e.path=null; e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=60;
   });
   popup(player.x,player.y-60,'¡TE HAN SEGUIDO! · '+list.length+' MÁS FUERTES','#ff8a3a',15); alarmT=Math.max(alarmT,120); S.alarm();
 }
