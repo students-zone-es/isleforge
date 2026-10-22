@@ -1458,16 +1458,16 @@ function destroyTile(c,r,toScorch){
   paintTile(c,r);
   miniDirty=true;
 }
-/* El Hollow Boom borra todo lo que toca (menos el agua) */
+/* El Hollow Boom solo se traga lo BLANDO (árboles, matorrales, sacos terreros, alambradas y jaulas). Paredes, compuertas,
+   edificios, rocas y el suelo aguantan: en ellos deja su cicatriz (p4_units.js, addHollowScar). */
+const HB_SOFT=v=>v===TREE||v===BUSH||v===RUB||v===WIRE||v===CAGE;
 function eraseCircle(x,y,R){
   const c0=Math.floor((x-R)/TILE), c1=Math.floor((x+R)/TILE), r0=Math.floor((y-R)/TILE), r1=Math.floor((y+R)/TILE);
   for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
     if(!inB(c,r)) continue;
     const cx=c*TILE+TILE/2, cy=r*TILE+TILE/2;
     if((cx-x)**2+(cy-y)**2>R*R) continue;
-    const v=map[idx(c,r)];
-    if(v===WATER||v===SCORCH||superWall(c,r)) continue;   // las paredes superresistentes aguantan
-    destroyTile(c,r,true);
+    if(HB_SOFT(map[idx(c,r)])) destroyTile(c,r,true);
   }
 }
 
@@ -2806,15 +2806,12 @@ function firePurple(x,y,a,owner,o){
   voids.push({x:x+Math.cos(a)*(r+12),y:y+Math.sin(a)*(r+12),vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r,owner,life:600,hit:new Set(),dmg:o.dmg||40,src:o.src||null,spin:0,trail:0});
   S.purple(); shake=Math.max(shake,14); flashScreen('#b06cff',0.35);
 }
-/* Paredes SUPERRESISTENTES: el Hollow Boom no puede tragárselas y explota al chocar.
-   Son la roca maciza (acantilados, cañones, yacimientos), el muro exterior del mapa, el borde del mundo y,
-   mientras luchas contra un jefe, cualquier pared o cobertura (así no destroza la arena ni las columnas). */
+/* Lo DURO: el Hollow Boom no puede tragárselo y estalla al chocar. Todo lo sólido menos lo blando (árboles, sacos
+   terreros, jaulas): paredes, compuertas entre secciones, edificios, roca, contenedores y el borde del mundo. */
 function superWall(c,r){
   if(!inB(c,r)) return true;
   const v=map[idx(c,r)];
-  if(v===ROCK) return true;
-  if(boss&&boss.alive&&SOLID[v]&&v!==WATER) return true;   // contra un jefe no rompe nada: estalla al tocar cualquier pared o cobertura
-  return (v===WALL||v===BLD)&&(c<=1||c>=WC-2||r<=2||r>=WR-3);
+  return SOLID[v]&&v!==WATER&&!HB_SOFT(v);
 }
 function voidHitsWall(v){
   const sp=Math.hypot(v.vx,v.vy)||1, fx=v.vx/sp, fy=v.vy/sp;
@@ -2828,6 +2825,7 @@ function voidExplode(v){
   const R=v.r*3.4;
   S.purple(); S.boom(); shake=Math.max(shake,22); flashScreen('#b06cff',0.6);
   eraseCircle(v.x,v.y,R*0.7);
+  addHollowScar(v.x,v.y,R*0.8,false);   // la cicatriz hueca
   rings.push({x:v.x,y:v.y,hb:R,life:34,maxLife:34});   // explosión con la hoja del Hollow Boom (drawHbBoom)
   for(let i=0;i<46;i++){ const a=rand(0,Math.PI*2), s=rand(1,6); particles.push({x:v.x,y:v.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(24,46),maxLife:46,color:pick(['#b06cff','#5ae6ff','#e2b8ff','#1a0a2a']),size:rand(3,6)}); }
   const k=u=>1-Math.min(1,Math.max(0,dist(u,v)-u.radius)/R)*0.5;
@@ -2881,6 +2879,62 @@ function drawPurpleFires(){
   }
   ctx.globalAlpha=1;
 }
+/* LA CICATRIZ HUECA: lo que deja el Hollow Boom. No es hollín de dinamita: la Abyssalita «vacía» la materia.
+   · En el centro, un HUECO negro que se traga la luz, con un latido morado que se apaga en unos 30 s.
+   · Alrededor, el suelo VITRIFICADO: manchas de cristal negro-violeta con esquirlas de Abyssalita que centellean.
+   · Hacia fuera, estrías de hollín y grietas finas en estrella.
+   · Por donde pasó la esfera rodando queda un RASTRO de surcos negros alargados.
+   Se pinta encima de lo que haya (suelo, paredes, compuertas), así que también se ven las paredes chamuscadas. */
+let hbScars=[], hbScarMap=null;
+function hbScarSprite(R,seed,trail){
+  const S=Math.ceil(R*2.6), c=mkCanvas(S,S), g=c.getContext('2d'), m=S/2, rnd=mulberry32(seed);
+  if(trail){   // surco del rastro: mancha alargada con estrías
+    const gr=g.createRadialGradient(m,m,0,m,m,R); gr.addColorStop(0,'rgba(8,4,14,.55)'); gr.addColorStop(1,'rgba(8,4,14,0)');
+    g.save(); g.translate(m,m); g.scale(1.6,0.7); g.translate(-m,-m); g.fillStyle=gr; g.fillRect(0,0,S,S); g.restore();
+    g.strokeStyle='rgba(30,10,45,.5)'; g.lineWidth=1;
+    for(let i=0;i<4;i++){ const y=m+(rnd()-0.5)*R*0.6; g.beginPath(); g.moveTo(m-R*1.2,y); g.lineTo(m+R*1.2,y+(rnd()-0.5)*4); g.stroke(); }
+    return c;
+  }
+  let gr=g.createRadialGradient(m,m,0,m,m,R*1.25);   // hollín
+  gr.addColorStop(0,'rgba(6,3,10,.8)'); gr.addColorStop(0.5,'rgba(10,5,16,.5)'); gr.addColorStop(1,'rgba(10,5,16,0)');
+  g.fillStyle=gr; g.fillRect(0,0,S,S);
+  g.fillStyle='rgba(8,4,12,.45)';   // estrías de hollín en estrella
+  for(let i=0;i<22;i++){ const a=rnd()*Math.PI*2, L=R*(0.7+rnd()*0.6), w=0.05+rnd()*0.06;
+    g.beginPath(); g.moveTo(m+Math.cos(a-w)*R*0.4,m+Math.sin(a-w)*R*0.4); g.lineTo(m+Math.cos(a)*L,m+Math.sin(a)*L); g.lineTo(m+Math.cos(a+w)*R*0.4,m+Math.sin(a+w)*R*0.4); g.fill(); }
+  g.strokeStyle='rgba(3,2,6,.85)'; g.lineWidth=1;   // grietas finas que se ramifican
+  for(let i=0;i<7;i++){ let a=rnd()*Math.PI*2, x=m+Math.cos(a)*R*0.25, y=m+Math.sin(a)*R*0.25; g.beginPath(); g.moveTo(x,y);
+    for(let k=0;k<5;k++){ a+=(rnd()-0.5)*0.9; x+=Math.cos(a)*R*0.16; y+=Math.sin(a)*R*0.16; g.lineTo(x,y); } g.stroke(); }
+  for(let i=0;i<16;i++){ const a=rnd()*Math.PI*2, d=R*(0.3+rnd()*0.35), s=2+rnd()*4;   // suelo vitrificado
+    g.fillStyle=rnd()<0.5?'#1e0a2e':'#2e1446'; g.beginPath(); g.ellipse(m+Math.cos(a)*d,m+Math.sin(a)*d,s,s*0.6,a,0,Math.PI*2); g.fill(); }
+  g.fillStyle='#000'; g.beginPath(); g.arc(m,m,R*0.22,0,Math.PI*2); g.fill();   // el hueco
+  g.strokeStyle='#3a1458'; g.lineWidth=2; g.beginPath(); g.arc(m,m,R*0.22,0,Math.PI*2); g.stroke();
+  return c;
+}
+function addHollowScar(x,y,R,trail,ang){
+  if(hbScarMap!==map){ hbScarMap=map; hbScars=[]; }
+  if(tileAt(x,y)===WATER) return;
+  const seed=(Math.random()*1e9)|0, rnd=mulberry32(seed+7);
+  hbScars.push({x,y,R,trail,ang:ang||0,t0:t,spr:hbScarSprite(R,seed,trail),
+    gems:trail?[]:Array.from({length:9},()=>{ const a=rnd()*Math.PI*2, d=R*(0.3+rnd()*0.4); return [Math.cos(a)*d,Math.sin(a)*d,rnd()*6.28]; })});
+  if(hbScars.length>160) hbScars.splice(hbScars.findIndex(s=>s.trail),1);   // se borran antes los surcos que los cráteres
+}
+function drawHollowScars(cx,cy){
+  if(hbScarMap!==map||!hbScars.length) return;
+  for(const s of hbScars){
+    const h=s.spr.width/2;
+    if(s.x+h<cx||s.x-h>cx+W||s.y+h<cy||s.y-h>cy+H) continue;
+    if(s.ang){ ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(s.ang); ctx.drawImage(s.spr,-h,-h); ctx.restore(); }
+    else ctx.drawImage(s.spr,s.x-h,s.y-h);
+    if(s.trail) continue;
+    const age=t-s.t0, k=Math.max(0,1-age/1800);   // el latido morado se apaga en 30 s
+    if(k>0){ const p=0.6+0.4*Math.sin(t*0.12), gr=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.R*0.35);
+      gr.addColorStop(0,'rgba(155,61,255,'+(0.45*k*p).toFixed(3)+')'); gr.addColorStop(1,'rgba(155,61,255,0)'); ctx.fillStyle=gr; ctx.fillRect(s.x-s.R*0.35,s.y-s.R*0.35,s.R*0.7,s.R*0.7); }
+    for(const [gx,gy,ph] of s.gems){   // esquirlas de Abyssalita que centellean (para siempre)
+      const tw=Math.sin(t*0.05+ph); ctx.fillStyle=tw>0.85?'#e2b8ff':'#7b3dbf';
+      ctx.fillRect(Math.round(s.x+gx),Math.round(s.y+gy),2,2); if(tw>0.93){ ctx.fillStyle='rgba(226,184,255,.6)'; ctx.fillRect(Math.round(s.x+gx)-1,Math.round(s.y+gy)+0.5,4,1); }
+    }
+  }
+}
 function updateVoids(dt){
   updatePurpleFires(dt);
   for(let i=voids.length-1;i>=0;i--){
@@ -2888,7 +2942,8 @@ function updateVoids(dt){
     v.x+=v.vx*dt; v.y+=v.vy*dt; v.life-=dt; v.spin+=0.25*dt;
     if(voidHitsWall(v)){ voidExplode(v); voids.splice(i,1); continue; }
     v.trail+=Math.hypot(v.vx,v.vy)*dt;
-    if(v.trail>=16){ v.trail=0; const a=rand(0,Math.PI*2), d=rand(0,v.r*0.7); addPurpleFire(v.x-v.vx*4+Math.cos(a)*d,v.y-v.vy*4+Math.sin(a)*d,rand(330,450)); }
+    if(v.trail>=16){ v.trail=0; const a=rand(0,Math.PI*2), d=rand(0,v.r*0.7); addPurpleFire(v.x-v.vx*4+Math.cos(a)*d,v.y-v.vy*4+Math.sin(a)*d,rand(330,450));
+      v.scarT=(v.scarT||0)+1; if(v.scarT%2===0) addHollowScar(v.x,v.y,v.r*0.75,true,Math.atan2(v.vy,v.vx)); }   // surco del rastro cada ~32 px
     eraseCircle(v.x,v.y,v.r*0.95);
     if(player.alive && !v.hit.has(player) && dist(v,player)<v.r+player.radius){ v.hit.add(player); if(v.src&&v.src.tame) damagePlayer(v.dmg); else killPlayer('¡DESINTEGRADO POR EL HOLLOW BOOM!'); push(player,v.x,v.y,7); flashScreen('#b06cff',0.5); }
     for(const u of friendlies()) if(!v.hit.has(u) && dist(v,u)<v.r+u.radius){ v.hit.add(u); hurtFriendly(u,v.dmg*1.3); }
@@ -5136,6 +5191,7 @@ function render(){
   drawFactoryFx(cx,cy);
   drawLavaFx(cx,cy);
   drawWorldGround(cx,cy);
+  drawHollowScars(cx,cy);   // cicatrices del Hollow Boom (p4_units.js)
   nodes.forEach(drawNode);
   drawShip();
   drawWorldHelipads();
