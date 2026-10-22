@@ -461,7 +461,10 @@ function vehLevel(ch){ return VEH_UPS.reduce((n,k)=>n+((save.upV[ch]||{})[k]||0)
 /* NIVEL DEL VEHÍCULO (1-10, save.vtier): como las tropas de Clash of Clans, cada nivel cambia su DISEÑO y sus HABILIDADES.
    VEH_TIERS[vehículo][nivel] dice qué tiene ese nivel (los que no aparecen usan el diseño y armas de siempre). */
 const VEH_TIERS={
-  mech:{ 1:{shot:'tri', cloak:false, nade:false, map:'t1', lamp:true} },   // CENTINELA nv1: cañón en el brazo derecho (3 balas), linterna en el izquierdo, sin camuflaje ni arco
+  mech:{   // CENTINELA, hecho a mano con chatarra: cañón en el brazo derecho (ráfaga «. . .»), linterna en el izquierdo
+    1:{shot:'burst', cdMul:3, cloak:false, nade:false, map:'t1', lamp:true},
+    2:{shot:'burst', cdMul:2.2, cloak:false, nade:false, map:'t2', lamp:true},   // coraza en el pecho y recarga más rápida
+  },
 };
 function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
 function tierInfo(id,tier){ const T=VEH_TIERS[id]; return (T&&T[tier||vehTier(id)])||{}; }
@@ -474,6 +477,8 @@ function defaultWorlds(){ const o={}; for(let i=1;i<=5;i++) o['w'+i]={best:1,cle
 function normalizeSave(s){
   // mejoras por vehículo: en las partidas anteriores cada vehículo empieza con las mejoras que ya tenías compradas
   s.vtier=Object.assign({},s.vtier||{});
+  s.forge=Object.assign({built:false,q:0,next:0},s.forge||{});
+  if(s.infl==null){ let n=0; for(const k in s.up||{}) n+=s.up[k]||0; for(const v in s.upV||{}) for(const k in s.upV[v]) n+=s.upV[v][k]||0; s.infl=+Math.pow(1.08,n).toFixed(4); }   // partidas viejas: la inflación de lo ya comprado
   const uv=s.upV||{}; s.upV={};
   for(const v of VEHICLE_IDS){ s.upV[v]={}; for(const k of VEH_UPS) s.upV[v][k]=uv[v]?(uv[v][k]||0):((s.up&&s.up[k])||0); }
   const h=Object.assign(defaultHome(),s.home||{});
@@ -502,7 +507,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock, upV:p.upV, vtier:p.vtier });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -1599,7 +1604,7 @@ function makePlayer(){
 /* Lo que da el nivel del vehículo: tipo de disparo y si tiene camuflaje y ataque en arco */
 function tierLoadout(ch){
   const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp};
-  if(T.shot==='tri') o.fireCdBase=Math.round(ch.fireCd*3);   // 3 balas por disparo: recarga 3 veces más lenta (el mismo daño total que antes)
+  if(T.cdMul) o.fireCdBase=Math.round(ch.fireCd*T.cdMul);   // la ráfaga de 3 balas recarga más despacio (mismo daño total)
   return o;
 }
 function updatePlayer(dt){
@@ -1660,6 +1665,7 @@ function updatePlayer(dt){
   }
   if(p.recoil>0) p.recoil=Math.max(0,p.recoil-0.6*dt);
   if(p.fireCd>0) p.fireCd-=dt;
+  if(p.burstN>0&&(p.burstT-=dt)<=0){ p.burstN--; p.burstT=BURST_GAP; firePlayerWeapon(true); }   // resto de la ráfaga «. . .»
   if((keys[' ']||mouse.down) && p.fireCd<=0 && !stunned) firePlayerWeapon();
   if(p.nadeCd>0) p.nadeCd-=dt;
   if((mouse.right||keys.shift) && p.nadeCd<=0 && !stunned && !p.noNade) throwGrenade();
@@ -1686,7 +1692,8 @@ function updatePlayer(dt){
     }
   }
 }
-function firePlayerWeapon(){
+const BURST_GAP=2;   // fotogramas entre balas de la ráfaga (el juego va a 60 por segundo: lo mínimo es 1, unos 16 ms)
+function firePlayerWeapon(follow){
   const p=player, ch=p.ch, wl=weaponLvl, muzzle=p.radius+8;
   const dmg=ch.dmg*p.dmgMul*(1+(wl-1)*0.15);
   const side=(off)=>[Math.cos(p.aim+Math.PI/2)*off, Math.sin(p.aim+Math.PI/2)*off];
@@ -1700,18 +1707,18 @@ function firePlayerWeapon(){
     p.recoil=6; shake=Math.max(shake,2.5); S.cannon();
     p.vx-=Math.cos(p.aim)*0.5; p.vy-=Math.sin(p.aim)*0.5;
   } else {
-    const shoot=(off,da,mul)=>{
+    const shoot=(off,da,mul,exact)=>{
       const [ox,oy]=side(off);
-      fireBullet(p.x+Math.cos(p.aim)*muzzle+ox, p.y+Math.sin(p.aim)*muzzle+oy, p.aim+da+rand(-0.03,0.03),'p',
+      fireBullet(p.x+Math.cos(p.aim)*muzzle+ox, p.y+Math.sin(p.aim)*muzzle+oy, p.aim+da+(exact?0:rand(-0.03,0.03)),'p',
         {speed:9, dmg:dmg*(mul||1), radius:3, life:55, kind:'mg'});
     };
-    if(p.shot==='tri'){ const o=p.radius*2/17*4.5; shoot(o,-0.09); shoot(o,0); shoot(o,0.09); }   // cañón del brazo derecho: 3 balas en abanico estrecho
+    if(p.shot==='burst'){ shoot(p.radius*2/17*4.5,0,1,true); if(!follow){ p.burstN=2; p.burstT=BURST_GAP; } }   // cañón del brazo derecho: 3 balas seguidas en línea
     else if(ch.twin){ shoot(-4,0); shoot(4,0); }
     else { p.armAlt=!p.armAlt; shoot(p.armAlt?7:-7,0); }
     if(!p.shot) for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
     S.shoot();
   }
-  p.fireCd=p.fireCdBase;
+  if(!follow) p.fireCd=p.fireCdBase;
   makeNoise(p.x,p.y,p.cloak>0?220:320);
 }
 function throwGrenade(){
@@ -3776,26 +3783,29 @@ const MAP_MECH=[
 ".....kgggggkkkkkkk",
 ".....kghhhgk......",
 "......kkkkk......."];
-/* CENTINELA NIVEL 1: cañón en el brazo DERECHO y linterna en el IZQUIERDO (de noche espanta a las criaturas) */
+/* CENTINELA: lo construyó a mano un superviviente de la primera isla con chatarra. Chapas desparejas (azul de
+   desguace, óxido), cinta adhesiva atando la linterna (brazo izquierdo) y el tubo del cañón (brazo derecho). */
 const MAP_MECH_T1=[
 "......kkkkk.......",
-".....kgsssgkkkkkk.",
-".....kgggggkmmmyyk",
-".....kgsssgkmmmyyk",
+".....kooggokkkkkk.",
+".....kgwgggkmmmyyk",
+".....kgwsogkmwmyyk",
 "......kkkkkkkkkkk.",
-"..kkk.kmmmmk......",
-".kmmmkkgggggk.....",
-".kmmmkgggggggk....",
-".kmmmkggggcCgk....",
-".kmmmkggggcCgk....",
-".kmmmkgggggggk....",
-".kmmmkksssssk.....",
+"..kkk.kmmnmk......",
+".knnnkkgggoook....",
+".knMnkgggggogk....",
+".knnnkgmMmgcCk....",
+".knnnkgmmmgcCk....",
+".knMnkggwgggok....",
+".knnnkksssssk.....",
 "..kkk.kmmmmkkkkkkk",
-"......kkkkkkMMMMMb",
-".....kgsssgkMMMMMb",
+"......kkkkkkMwMMMb",
+".....kgoosgkMwMMMb",
 ".....kgggggkkkkkkk",
-".....kgsssgk......",
+".....kgssogk......",
 "......kkkkk......."];
+/* NIVEL 2: le atornilla una coraza de acero al pecho */
+const MAP_MECH_T2=MAP_MECH_T1.map((row,i)=>({6:".knnnkkMMMMMk.....",7:".knMnkMbMMMbMk....",8:".knnnkMgggMcCk....",9:".knnnkMgggMcCk....",10:".knMnkMbMMMbMk...."})[i]||row);
 const MAP_BRAWLER=[
 "....kkkk........",
 "...kOOOOk.kk....",
@@ -3871,8 +3881,9 @@ function robotSprite(look,color){
   }
   return null;
 }
-const MECH_PAL={k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff',y:'#fff3a0'};
-function mechSprite(tier){ return tierInfo('mech',tier).map==='t1'?pixSprite('mech_t1',MAP_MECH_T1,MECH_PAL):pixSprite('mech',MAP_MECH,MECH_PAL); }
+const MECH_PAL={k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff',y:'#fff3a0',o:'#8a4b2a',w:'#c9c2a8',n:'#4f6a7a'};
+const MECH_MAPS={t1:MAP_MECH_T1, t2:MAP_MECH_T2};
+function mechSprite(tier){ const m=tierInfo('mech',tier).map; return m?pixSprite('mech_'+m,MECH_MAPS[m],MECH_PAL):pixSprite('mech',MAP_MECH,MECH_PAL); }
 function tankHullSpr(col,dark,frame){
   const key='hull|'+col+'|'+dark+'|'+frame;
   if(sprCache[key]) return sprCache[key];
@@ -7600,7 +7611,7 @@ const DEPOSIT_TABLES={
   abismo:['hierro','apatito','fluorita','esmeralda','salmuera'],
   nucleo:['oro','fluorita','apatito','esmeralda'],
 };
-function minName(k){ const m=MINERALS[k]; return m?m.name:k; }
+function minName(k){ const m=MINERALS[k]; return m?m.name:k; }   // «lingote» no es mineral: se escribe tal cual
 function depositMinerals(table){ const t=DEPOSIT_TABLES[table]; if(!t) return []; return [...new Set(t.flat())].filter(inWorld); }
 function oreTotal(o){ let n=0; for(const k in o) n+=o[k]||0; return n; }
 
@@ -7746,12 +7757,12 @@ function bankOres(){
 }
 function oresHtml(o){ return MIN_ORDER.filter(k=>o[k]>0).map(k=>'<span style="color:'+MINERALS[k].col+'">'+minName(k)+' ×'+o[k]+'</span>').join(' · '); }
 /* Taller: cada mejora pide su mineral desde el segundo nivel (w = cuántos por nivel) */
-const SHOP_ORE={ hp:{hierro:2}, dmg:{cobre:1,estano:1}, speed:{salmuera:2}, shield:{esmeralda:1}, ally:{hierro:2},
+const SHOP_ORE={ hp:{lingote:1}, dmg:{cobre:1,estano:1}, speed:{salmuera:2}, shield:{esmeralda:1}, ally:{lingote:1},   // lingotes: de la forja (p9p_economy.js)
   regen:{apatito:1}, lives:{oro:2}, cloak:{fluorita:1}, mate:{cobre:2} };
 function shopOreCost(id,lvl){ const o={}, w=SHOP_ORE[id]||{}; if(lvl<1) return o; for(const k in w) o[k]=Math.ceil(w[k]*lvl); return o; }   // todos se consiguen en la isla cráter
 function hasOres(o){ return Object.keys(o).every(k=>(save.minerals[k]||0)>=o[k]); }
 function payOres(o){ for(const k in o) save.minerals[k]=(save.minerals[k]||0)-o[k]; }
-function oreCostHtml(o){ return Object.keys(o).map(k=>'<span style="color:'+((save.minerals[k]||0)>=o[k]?MINERALS[k].col:'#ff6b6b')+'">⛏ '+o[k]+' '+minName(k)+'</span>').join(' · '); }
+function oreCostHtml(o){ return Object.keys(o).map(k=>'<span style="color:'+((save.minerals[k]||0)>=o[k]?(MINERALS[k]?MINERALS[k].col:'#d9dde3'):'#ff6b6b')+'">'+(k==='lingote'?'▬ ':'⛏ ')+o[k]+' '+minName(k)+'</span>').join(' · '); }
 /* Almacén de minerales (se ve en el taller): icono con el trozo de cada mineral, cantidad y dónde encontrarlo */
 const ORE_WHERE={ piedra:'Isla de entrenamiento, Mundos 1, 3, 4 y 5, y el borde de la isla cráter', arena:'Borde de la isla cráter (Archipiélago)',
   calcita:'Borde de la isla cráter (Archipiélago)', yeso:'Borde de la isla cráter (Archipiélago)', salmuera:'Salinas del borde de la isla cráter (Archipiélago)',
@@ -10363,6 +10374,54 @@ function lavaLights(L){
   let n=0;
   for(let r=r0;r<=r1&&n<40;r+=2) for(let c=c0;c<=c1&&n<40;c+=2) if(map[r*WC+c]===LAVA){ L.push([c*TILE+15,r*TILE+15,46,0.55]); n++; }
 }
+/* ===================== ECONOMÍA: INFLACIÓN, FORJA Y NIVEL DE LOS VEHÍCULOS =====================
+   · INFLACIÓN: cada compra en el taller (mejoras y niveles) sube un 8% el precio en WORK de todo lo que viene después.
+   · FORJA: se construye una vez en el taller; funde 3 de HIERRO en 1 LINGOTE (20 s cada uno, sigue fundiendo aunque
+     estés en una misión). Las mejoras de blindaje y magnetismo y los niveles de vehículo piden lingotes.
+   · NIVEL DEL VEHÍCULO: cambia su diseño y armas (VEH_TIERS en p2_core.js). Solo se sube hasta el último nivel diseñado. */
+const INFL_STEP=0.08;
+function inflK(){ return save.infl||1; }
+function inflate(){ save.infl=+(inflK()*(1+INFL_STEP)).toFixed(4); }
+
+const FORGE_BUILD={work:150, piedra:10}, FORGE_IN=3, FORGE_T=20000, FORGE_MAX=5;
+function forgeTick(){
+  const F=save.forge, now=Date.now();
+  while(F.q>0&&now>=F.next){ F.q--; save.minerals.lingote=(save.minerals.lingote||0)+1; F.next+=FORGE_T; }
+}
+function maxTier(id){ return Object.keys(VEH_TIERS[id]||{}).length; }
+function tierCost(tier){ return {work:Math.round(250*tier*inflK()), lingote:3*tier}; }   // para pasar de «tier» a «tier+1»
+
+function ecoAct(act,veh){
+  const F=save.forge, m=save.minerals;
+  forgeTick();
+  if(act==='build'&&!F.built&&save.work>=FORGE_BUILD.work&&(m.piedra||0)>=FORGE_BUILD.piedra){ save.work-=FORGE_BUILD.work; m.piedra-=FORGE_BUILD.piedra; F.built=true; }
+  if(act==='smelt'&&F.built&&F.q<FORGE_MAX&&(m.hierro||0)>=FORGE_IN){ m.hierro-=FORGE_IN; if(F.q===0) F.next=Date.now()+FORGE_T; F.q++; }
+  if(act==='tier'){
+    const tier=vehTier(veh), c=tierCost(tier);
+    if(tier<maxTier(veh)&&save.work>=c.work&&(m.lingote||0)>=c.lingote){ save.work-=c.work; m.lingote-=c.lingote; save.vtier[veh]=tier+1; inflate(); }
+  }
+  saveSave(); S.upgrade();
+}
+/* Bloque del taller: nivel del vehículo elegido, la forja y la inflación */
+function ecoHtml(veh){
+  forgeTick();
+  const F=save.forge, m=save.minerals, ing=m.lingote||0, tier=vehTier(veh), mx=maxTier(veh);
+  const col=(ok,s)=>'<span style="color:'+(ok?'var(--gold)':'#ff6b6b')+'">'+s+'</span>';
+  let h='<p class="secTitle">NIVEL DE '+CHARS[veh].name+'</p><div class="shopCard" style="margin:6px 0"><div class="name">NIVEL '+tier+(mx?' / '+mx:'')+'</div>';
+  if(tier<mx){
+    const c=tierCost(tier), ok=save.work>=c.work&&ing>=c.lingote;
+    h+='<div class="lvl">Sube a nivel '+(tier+1)+': nuevo diseño y armas</div><div class="cost">'+col(save.work>=c.work,'◆ '+c.work)+' · '+col(ing>=c.lingote,'▬ '+c.lingote+' lingotes')+'</div><button class="btn small" data-eco="tier" '+(ok?'':'disabled')+'>SUBIR NIVEL</button>';
+  } else h+='<div class="lvl">'+(mx?'Nivel máximo por ahora':'Sus niveles aún no están diseñados')+' · PRÓXIMAMENTE</div>';
+  h+='</div><p class="secTitle">FORJA</p><div class="shopCard" style="margin:6px 0">';
+  if(!F.built){
+    const ok=save.work>=FORGE_BUILD.work&&(m.piedra||0)>=FORGE_BUILD.piedra;
+    h+='<div class="lvl">Funde hierro en lingotes</div><div class="cost">'+col(save.work>=FORGE_BUILD.work,'◆ '+FORGE_BUILD.work)+' · '+col((m.piedra||0)>=FORGE_BUILD.piedra,'⛏ '+FORGE_BUILD.piedra+' piedra')+'</div><button class="btn small" data-eco="build" '+(ok?'':'disabled')+'>CONSTRUIR FORJA</button>';
+  } else {
+    const ok=(m.hierro||0)>=FORGE_IN&&F.q<FORGE_MAX;
+    h+='<div class="lvl">▬ '+ing+' lingotes · ⛏ '+(m.hierro||0)+' hierro'+(F.q?'<br>🔥 Fundiendo '+F.q+' (el siguiente en '+Math.max(0,Math.ceil((F.next-Date.now())/1000))+' s)':'')+'</div><div class="cost">'+col((m.hierro||0)>=FORGE_IN,'⛏ '+FORGE_IN+' hierro → ▬ 1 lingote')+'</div><button class="btn small" data-eco="smelt" '+(ok?'':'disabled')+'>FUNDIR</button>';
+  }
+  return h+'</div><p class="subtitle" style="font-size:12px">📈 Inflación: los precios en WORK han subido un '+Math.round((inflK()-1)*100)+'% (cada compra los sube un 8%).</p>';
+}
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -11522,7 +11581,7 @@ cv.addEventListener('touchmove',e=>{ const tt=e.touches[0]; setMouse(tt.clientX,
 cv.addEventListener('touchend',()=>{ mouse.down=false; });
 
 /* ===================== TIENDA ===================== */
-function costFor(def,lvl){ return Math.round(def.base+def.step*lvl*1.15); }
+function costFor(def,lvl){ return Math.round((def.base+def.step*lvl*1.15)*inflK()); }   // con inflación (p9p_economy.js)
 let shopVeh=null;   // vehículo que estás mejorando en el taller
 function renderShop(){
   document.getElementById('shopWork').textContent=save.work;
@@ -11543,11 +11602,12 @@ function renderShop(){
       '<div class="cost">'+(maxed?'MÁXIMO':'◆ '+cost+(Object.keys(ore).length?'<br><small>'+oreCostHtml(ore)+'</small>':''))+'</div><button class="btn small" '+(ok?'':'disabled')+'>MEJORAR</button>';
     card.querySelector('button').onclick=()=>{
       if(!ok) return;
-      save.work-=cost; payOres(ore); if(own) save.upV[shopVeh][def.id]=lvl+1; else save.up[def.id]=lvl+1; saveSave(); S.upgrade(); renderShop();
+      save.work-=cost; payOres(ore); if(own) save.upV[shopVeh][def.id]=lvl+1; else save.up[def.id]=lvl+1; inflate(); saveSave(); S.upgrade(); renderShop();
     };
     grid.appendChild(card);
   });
-  document.getElementById('shopStore').innerHTML=storeHtml();
+  const st=document.getElementById('shopStore'); st.innerHTML=ecoHtml(shopVeh)+storeHtml();
+  st.querySelectorAll('[data-eco]').forEach(b=>b.onclick=()=>{ ecoAct(b.dataset.eco,shopVeh); renderShop(); });
 }
 
 /* ===================== HANGAR ===================== */
