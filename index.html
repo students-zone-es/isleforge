@@ -490,8 +490,22 @@ const MECH_STEPS=[   // CENTINELA: lo construye a mano el constructor que rescat
   {d:'Tres tubos lanzagranadas: el arco lanza 3 granadas', nades:3},
   {d:'Modelo de fábrica: el Centinela definitivo, dispara más rápido', cdMul:0.85},
 ];
+const JEEP_STEPS=[   // CHACAL: empieza como un viejo jeep de rescate y acaba como el jeep de asalto
+  {d:'Jeep de rescate: una ametralladora giratoria y dos faros', shot:'single', cloak:false, nade:false, carLights:1},
+  {d:'Parachoques de acero: +15 de vida', hp:15},
+  {d:'Ametralladora doble giratoria', shot:null},
+  {d:'Lanzamisiles en la caja: vuelve el ataque en arco (G)', nade:true},
+  {d:'Neumáticos todoterreno: +12% de velocidad', spd:1.12},
+  {d:'Placas laterales: recibe menos daño', hurt:1.1},
+  {d:'Pintura de camuflaje: vuelve el camuflaje (F)', cloak:true},
+  {d:'Barra de luces en el techo y 2 misiles por disparo', nades:2, carLights:2},
+  {d:'Puntas de energía: las balas atraviesan a un enemigo', pierce:1},
+  {d:'Chacal de asalto: el modelo definitivo, dispara más rápido', cdMul:0.85},
+];
+const tierTable=steps=>Object.fromEntries(steps.map((s,i)=>[i+1,Object.assign({},...steps.slice(0,i+1),{d:s.d,map:'t'+(i+1)})]));
 const VEH_TIERS={
-  mech:Object.fromEntries(MECH_STEPS.map((s,i)=>[i+1,Object.assign({},...MECH_STEPS.slice(0,i+1),{d:s.d,map:'t'+(i+1)})])),
+  jeep:tierTable(JEEP_STEPS),
+  mech:tierTable(MECH_STEPS),
 };
 function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
 function tierInfo(id,tier){ const T=VEH_TIERS[id]; return (T&&T[tier||vehTier(id)])||{}; }
@@ -685,10 +699,10 @@ function isBossWave(w){ return w%5===0; }
 const CHARS={
   mech:{id:'mech', name:'CENTINELA', locked:'builder', desc:'Mecha bípedo que el constructor del Mundo 1 montó con chatarra. Empieza con un cañón y una linterna; al subir de nivel gana coraza, armas y camuflaje.',
     hp:100, speed:2.6, accel:0.32, friction:0.84, radius:13, mass:2.2, fireCd:10, dmg:6, cloakDur:480, cloakCd:900, nadeCd:140, nadeDmg:30},
-  tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón letal con onda expansiva pero de recarga lenta; aplasta robots pequeños.',
-    hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
   jeep:{id:'jeep', name:'CHACAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
     hp:60, speed:4.0, accel:0.46, friction:0.9, radius:12, mass:1.6, fireCd:11, dmg:4, twin:true, hurt:1.25, cloakDur:360, cloakCd:1000, nadeCd:70, nadeDmg:24},
+  tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón letal con onda expansiva pero de recarga lenta; aplasta robots pequeños.',
+    hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
   moto:{id:'moto', name:'JINETE', locked:'jinete', desc:'Moto bandida reprogramada. La más rápida y ágil, pero la más frágil (recibe +30% de daño). El jinete dispara una pistola rápida.',
     hp:55, speed:4.8, accel:0.55, friction:0.9, radius:11, mass:1.2, fireCd:8, dmg:3, hurt:1.3, cloakDur:420, cloakCd:900, nadeCd:80, nadeDmg:22},
 };
@@ -1622,7 +1636,7 @@ function makePlayer(){
   return { kind:'player', ch, x:0, y:0, vx:0, vy:0, radius:ch.radius, mass:ch.mass,
     body:-Math.PI/2, aim:-Math.PI/2,
     hp:maxHp, maxHp, shield:up.shield*20, shieldMax:Math.max(20,up.shield*20),
-    speedMax:ch.speed*(1+up.speed*0.07), accel:ch.accel, friction:ch.friction,
+    speedMax:ch.speed*(1+up.speed*0.07)*(tierInfo(ch.id).spd||1), accel:ch.accel, friction:ch.friction,
     dmgMul:1+up.dmg*0.15, fireCdBase:ch.fireCd, fireCd:0,
     fragment:0, pierce:0, regenRate:up.regen, regenTimer:0, magnet:50+up.ally*6,
     cloak:0, cloakCd:0, cloakDur:ch.cloakDur+up.cloak*90, cloakCdBase:ch.cloakCd,
@@ -1631,7 +1645,8 @@ function makePlayer(){
 }
 /* Lo que da el nivel del vehículo: tipo de disparo y si tiene camuflaje y ataque en arco */
 function tierLoadout(ch){
-  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp, burst:T.burst||0};
+  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp, burst:T.burst||0, carLights:T.carLights||0};
+  if(T.hurt) o.hurt=T.hurt;
   if(T.pierce) o.pierce=T.pierce;
   if(T.nades) o.nadeCount=T.nades;
   if(T.cdMul) o.fireCdBase=Math.round(ch.fireCd*T.cdMul);   // la ráfaga de 3 balas recarga más despacio (mismo daño total)
@@ -1743,6 +1758,7 @@ function firePlayerWeapon(follow){
         {speed:9, dmg:dmg*(mul||1), radius:3, life:55, kind:'mg'});
     };
     if(p.shot==='burst'){ shoot(p.radius*2/17*4.5,0,1,true); if(!follow){ p.burstN=p.burst-1; p.burstT=BURST_GAP; } }   // cañón del brazo derecho: balas seguidas en línea
+    else if(p.shot==='single') shoot(0,0);   // Chacal de rescate: una sola ametralladora
     else if(ch.twin){ shoot(-4,0); shoot(4,0); }
     else { p.armAlt=!p.armAlt; shoot(p.armAlt?7:-7,0); }
     if(!p.shot) for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
@@ -1811,7 +1827,7 @@ function damagePlayer(amount,shieldPierce){
   const p=player;
   if(!p.alive||p.invuln>0||cine>0||god) return;
   amount*=bossDmgK*survK('enemigos');   // los golpes del jefe crecen con tu equipo; en supervivencia, con el nivel
-  amount*=p.ch.hurt||1;   // blindaje del vehículo (el Chacal es el más frágil)
+  amount*=p.hurt||p.ch.hurt||1;   // blindaje del vehículo (el Chacal es el más frágil)
   if(p.shield>0){ const direct=amount*(shieldPierce||0); p.hp-=direct; amount-=direct;   // parte atraviesa el escudo (vigía de nivel alto)
     p.shield-=amount; if(p.shield<0){ p.hp+=p.shield; p.shield=0; } }
   else p.hp-=amount;
@@ -3949,6 +3965,41 @@ function jeepSpr(col,frame){
   R(4,3,3,2,'#333'); R(4,7,3,2,'#333'); R(8,2,1,8,'#222');
   sprCache[key]=c; return c;
 }
+/* CHACAL por niveles: viejo jeep de rescate color arena con óxido y rueda de repuesto (1), parachoques (2), lanzamisiles
+   en la caja (4), ruedas todoterreno (5), placas laterales (6), camuflaje (7-9), barra de luces (8) y el de asalto dorado (10) */
+function chacalSpr(tier,frame){
+  const key='chacal|'+tier+'|'+frame; if(sprCache[key]) return sprCache[key];
+  const c=mkCanvas(20,14), g=c.getContext('2d'), R=(x,y,w,h,cc)=>{ g.fillStyle=cc; g.fillRect(x,y,w,h); };
+  const camo=tier>=7&&tier<10, col=tier>=10?'#c9a74a':camo?'#8a8a5a':'#a39272', ww=tier>=5?3:2;
+  for(const [x,y] of [[3,ww===3?0:1],[13,ww===3?0:1],[3,11],[13,11]]){ R(x,y,4,ww,'#111'); R(x+frame,y,1,ww,ww===3?'#777':'#555'); }
+  R(2,2,16,10,shade(col,-0.45)); R(3,3,14,8,col);
+  R(3,3,14,1,shade(col,tier>=10?0.45:0.3)); R(3,10,14,1,shade(col,-0.25));
+  R(13,3,1,8,'#7fd8ff'); R(13,3,1,1,'#ffffff');
+  R(14,4,3,6,shade(col,0.1)); R(17,4,1,2,'#ffeeaa'); R(17,8,1,2,'#ffeeaa');
+  R(5,4,3,2,'#333'); R(5,8,3,2,'#333'); R(9,3,1,8,'#222');
+  if(tier<7){ R(4,9,2,1,'#8a4b2a'); R(11,3,2,1,'#8a4b2a'); R(15,9,1,1,'#8a4b2a'); }   // óxido
+  if(tier<4){ R(1,5,2,4,'#1a1a1a'); R(1,6,1,2,'#444'); }   // rueda de repuesto
+  if(tier>=2){ R(18,3,1,8,'#2a2a2a'); R(19,4,1,2,'#555'); R(19,8,1,2,'#555'); }   // parachoques
+  if(camo){ R(6,4,2,2,'#5a6a3a'); R(10,7,3,2,'#6a5a3a'); R(14,5,2,2,'#5a6a3a'); R(4,8,2,1,'#6a5a3a'); }
+  if(tier>=10){ R(3,6,6,2,'#2a1a06'); R(14,6,3,2,'#2a1a06'); }   // franjas del modelo de asalto
+  if(tier>=4){ R(2,4,4,6,'#3a3f46'); R(2,5,4,1,'#111'); R(2,8,4,1,'#111'); R(1,5,1,1,'#ff4757'); R(1,8,1,1,'#ff4757'); }   // lanzamisiles
+  if(tier>=6){ R(4,2,8,1,'#7a8088'); R(4,11,8,1,'#7a8088'); R(6,2,1,1,'#b0b6be'); R(10,2,1,1,'#b0b6be'); R(6,11,1,1,'#b0b6be'); R(10,11,1,1,'#b0b6be'); }   // placas
+  if(tier>=8){ R(9,4,1,1,'#fff6c8'); R(9,6,1,1,'#fff6c8'); R(9,7,1,1,'#fff6c8'); R(9,9,1,1,'#fff6c8'); }   // barra de luces
+  sprCache[key]=c; return c;
+}
+function chacalGunSpr(tier){
+  const key='chacalgun|'+tier; if(sprCache[key]) return sprCache[key];
+  const c=mkCanvas(14,6), g=c.getContext('2d'), R=(x,y,w,h,cc)=>{ g.fillStyle=cc; g.fillRect(x,y,w,h); }, tip=tier>=9?'#bfffff':'#888';
+  R(0,1,5,4,'#2a2a2a'); R(1,2,3,2,'#555');
+  if(tier<3){ R(4,2,10,2,'#333'); R(4,2,10,1,'#222'); R(13,2,1,2,tip); }   // una sola ametralladora
+  else { R(4,1,10,1,'#222'); R(4,4,10,1,'#222'); R(4,2,9,2,'#333'); R(13,1,1,1,tip); R(13,4,1,1,tip); }
+  sprCache[key]=c; return c;
+}
+function drawChacal(u){
+  const tier=u.tier!=null?u.tier:vehTier('jeep'), sc=u.radius*2/13, a=u.body!=null?u.body:u.angle;
+  blit(chacalSpr(tier,Math.floor(Math.abs(u.tread||0))%3),u.x,u.y,a,sc);
+  blit(chacalGunSpr(tier),u.x-Math.cos(a)*2*sc,u.y-Math.sin(a)*2*sc,u.aim,sc,3,3);
+}
 function gunMountSpr(){
   const key='gunmount'; if(sprCache[key]) return sprCache[key];
   const c=mkCanvas(14,6), g=c.getContext('2d'), R=(x,y,w,h,cc)=>{ g.fillStyle=cc; g.fillRect(x,y,w,h); };
@@ -4159,7 +4210,7 @@ function drawPlayer(){
   if(p.ch.id==='mech') drawMech(p);
   else if(p.ch.id==='tank') drawTankUnit(p,'#d9a53a','#3a2a05',p.body,p.aim,12);
   else if(p.ch.id==='moto') drawPlayerMoto(p);
-  else drawJeep(p,'#c9a74a');
+  else drawChacal(p);
   ctx.restore();
   ctx.filter='none';
   if(p.cloak>0){
@@ -5668,7 +5719,7 @@ function drawUpgradeStation(){
   ctx.fillStyle='#2a2f36'; ctx.fillRect(x+4,y+4,w-8,h-8);
   for(let i=0;i<w;i+=16){ ctx.fillStyle=(i/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x+i,y,16,5); ctx.fillRect(x+i,y+h-5,16,5); }
   for(let j=0;j<h;j+=16){ ctx.fillStyle=(j/16)%2?'#1a1a1a':'#f5c518'; ctx.fillRect(x,y+j,5,16); ctx.fillRect(x+w-5,y+j,5,16); }
-  const ids=['mech','tank','jeep','moto'], bw=(w-16)/ids.length, cur=sel().char;
+  const ids=['mech','jeep','tank','moto'], bw=(w-16)/ids.length, cur=sel().char;
   ids.forEach((id,i)=>{
     const ch=CHARS[id], bx=x+8+i*bw, by=y+44, bh=h-56, cx=bx+bw/2, cy=by+bh/2+4, mine=id===cur, locked=ch.locked&&!save[ch.locked];
     // plaza: líneas blancas y su número
@@ -5685,7 +5736,7 @@ function drawUpgradeStation(){
       ctx.fillStyle='#ffd76e'; ctx.font='bold 13px Rajdhani, monospace'; ctx.fillText('?',cx,cy+5);
     } else {
       const sc=id==='tank'?1.25:1.4, u={x:cx,y:cy,radius:ch.radius*sc,body:-Math.PI/2,aim:-Math.PI/2+(mine?Math.sin(t*0.02)*0.5:0),walk:0,tread:0,angle:-Math.PI/2};
-      if(id==='mech') drawMech(u); else if(id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else if(id==='moto') drawPlayerMoto(u); else drawJeep(u,'#c9a74a');
+      if(id==='mech') drawMech(u); else if(id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12); else if(id==='moto') drawPlayerMoto(u); else drawChacal(u);
     }
     // cartel con el nombre y el nivel de mejoras
     ctx.fillStyle=mine?'rgba(8,40,44,.92)':'rgba(13,20,32,.85)'; ctx.fillRect(bx+3,y+8,bw-6,30);
@@ -10078,8 +10129,9 @@ function nightLights(){
     return L;
   }
   const p=player;
-  if(p&&p.alive&&!p.lamp) L.push([p.x,p.y,140*dreadLightK(),1]);   // halo de luz (el Centinela con linterna no lo tiene)
+  if(p&&p.alive&&!p.lamp&&!p.carLights) L.push([p.x,p.y,140*dreadLightK(),1]);   // halo de luz (no con linterna ni con faros)
   if(p&&p.alive&&p.lamp) L.push(...lampBeam(p));
+  if(p&&p.alive&&p.carLights) L.push(...headLights(p));
   L.push(...enemyLamps());   // linternas enemigas (LED): también abren la oscuridad, con sus sombras
   if(orb) L.push([orb.x,orb.y,110,0.95]);
   if(mate&&mate.alive) L.push([mate.x,mate.y,70,0.8]);
@@ -10144,7 +10196,7 @@ function updateDread(dt){
     if(u&&!w.gone&&(Math.hypot(u.x-w.x,u.y-w.y)<150||w.t>w.life||L<2)) w.gone=true;
     if(w.gone) w.out-=0.05*dt;
   }
-  if(u&&u.lamp&&!inHome) lampScare(u);
+  if(u&&(u.lamp||u.carLights)&&!inHome) lampScare(u);
   D.watchers=D.watchers.filter(w=>!w.gone||w.out>0);
   if(D.flickerT>0) D.flickerT-=dt;
   if(!u||L<2) return;
@@ -10207,12 +10259,22 @@ function lampBeam(p){
   const fl=Math.random()<0.012?0.45:0.86+0.14*Math.sin(t*0.9)*Math.sin(t*0.37);   // parpadeo de bombilla vieja
   return [[ox,oy,270*dreadLightK(),fl,a,0.36],[ox,oy,26,0.55*fl]];
 }
-/* Tinte cálido amarillento del haz (bombilla barata), encima de la oscuridad */
+/* FAROS del Chacal: dos conos paralelos desde las esquinas delanteras; con la barra del techo (nivel 8), un tercero ancho */
+function headLights(p){
+  const a=p.body, fx=Math.cos(a), fy=Math.sin(a), sx=-fy, sy=fx, f=p.radius*0.95, w=p.radius*0.7, k=dreadLightK();
+  const L=[-1,1].map(s=>[p.x+fx*f+sx*w*s, p.y+fy*f+sy*w*s, 240*k, 0.85, a+s*0.07, 0.16, 'hq']);   // cada faro un poco hacia su lado
+  if(p.carLights>=2) L.push([p.x+fx*2, p.y+fy*2, 320*k, 0.6, a, 0.5, 'hq']);
+  return L;
+}
+/* Tinte del haz encima de la oscuridad: amarillento en la linterna casera, blanco cálido en los faros */
 function drawLampTint(cx,cy){
-  const p=player; if(!p||!p.alive||!p.lamp||inHome) return;
-  const [[x,y,r,s,a,sp]]=lampBeam(p), sx=x-cx, sy=y-cy, gr=ctx.createRadialGradient(sx,sy,4,sx,sy,r);
-  gr.addColorStop(0,'rgba(255,214,140,'+(0.16*s).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,214,140,0)');
-  ctx.fillStyle=gr; conePath(ctx,x,y,cx,cy,a,sp,r); ctx.fill();
+  const p=player; if(!p||!p.alive||inHome||(!p.lamp&&!p.carLights)) return;
+  const cones=p.lamp?[lampBeam(p)[0]]:headLights(p), rgb=p.lamp?'255,214,140':'255,244,214';
+  for(const [x,y,r,s,a,sp] of cones){
+    const sx=x-cx, sy=y-cy, gr=ctx.createRadialGradient(sx,sy,4,sx,sy,r);
+    gr.addColorStop(0,'rgba('+rgb+','+(0.16*s).toFixed(3)+')'); gr.addColorStop(1,'rgba('+rgb+',0)');
+    ctx.fillStyle=gr; conePath(ctx,x,y,cx,cy,a,sp,r); ctx.fill();
+  }
 }
 function lampScare(u){
   for(const w of dread.watchers){
@@ -10563,7 +10625,7 @@ function menuCursor(){
   menuCurFor=ch;
   const c=previewCanvas(()=>{
     const u={x:28,y:28,radius:ch==='mech'?23:21,body:0,aim:0,walk:0.6,tread:0,angle:0};
-    if(ch==='mech') drawMech(u); else if(ch==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',0,0,12); else if(ch==='moto') drawPlayerMoto(u); else drawJeep(u,'#c9a74a');
+    if(ch==='mech') drawMech(u); else if(ch==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',0,0,12); else if(ch==='moto') drawPlayerMoto(u); else drawChacal(u);
   });
   document.getElementById('scrMenu').style.setProperty('--mcur','url('+c.toDataURL()+')');
 }
@@ -11724,7 +11786,7 @@ function renderHangar(){
       if(ch.id==='mech') drawMech(u);
       else if(ch.id==='tank') drawTankUnit(u,'#d9a53a','#3a2a05',u.body,u.aim,12);
       else if(ch.id==='moto') drawPlayerMoto(u);
-      else drawJeep(u,'#c9a74a');
+      else drawChacal(u);
     });
     card.appendChild(cvs);
     const info=document.createElement('div');
