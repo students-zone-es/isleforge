@@ -461,7 +461,7 @@ function vehLevel(ch){ return VEH_UPS.reduce((n,k)=>n+((save.upV[ch]||{})[k]||0)
 /* NIVEL DEL VEHÍCULO (1-10, save.vtier): como las tropas de Clash of Clans, cada nivel cambia su DISEÑO y sus HABILIDADES.
    VEH_TIERS[vehículo][nivel] dice qué tiene ese nivel (los que no aparecen usan el diseño y armas de siempre). */
 const VEH_TIERS={
-  mech:{ 1:{shot:'tri', cloak:false, nade:false, map:'t1'} },   // CENTINELA nv1: un cañón central, 3 balas por disparo, sin camuflaje ni arco
+  mech:{ 1:{shot:'tri', cloak:false, nade:false, map:'t1', lamp:true} },   // CENTINELA nv1: cañón en el brazo derecho (3 balas), linterna en el izquierdo, sin camuflaje ni arco
 };
 function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
 function tierInfo(id,tier){ const T=VEH_TIERS[id]; return (T&&T[tier||vehTier(id)])||{}; }
@@ -1598,7 +1598,7 @@ function makePlayer(){
 }
 /* Lo que da el nivel del vehículo: tipo de disparo y si tiene camuflaje y ataque en arco */
 function tierLoadout(ch){
-  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false};
+  const tier=vehTier(ch.id), T=tierInfo(ch.id,tier), o={tier, shot:T.shot||null, noCloak:T.cloak===false, noNade:T.nade===false, lamp:!!T.lamp};
   if(T.shot==='tri') o.fireCdBase=Math.round(ch.fireCd*3);   // 3 balas por disparo: recarga 3 veces más lenta (el mismo daño total que antes)
   return o;
 }
@@ -1705,7 +1705,7 @@ function firePlayerWeapon(){
       fireBullet(p.x+Math.cos(p.aim)*muzzle+ox, p.y+Math.sin(p.aim)*muzzle+oy, p.aim+da+rand(-0.03,0.03),'p',
         {speed:9, dmg:dmg*(mul||1), radius:3, life:55, kind:'mg'});
     };
-    if(p.shot==='tri'){ shoot(0,-0.09); shoot(0,0); shoot(0,0.09); }   // un solo cañón central: 3 balas en abanico estrecho
+    if(p.shot==='tri'){ const o=p.radius*2/17*4.5; shoot(o,-0.09); shoot(o,0); shoot(o,0.09); }   // cañón del brazo derecho: 3 balas en abanico estrecho
     else if(ch.twin){ shoot(-4,0); shoot(4,0); }
     else { p.armAlt=!p.armAlt; shoot(p.armAlt?7:-7,0); }
     if(!p.shot) for(let i=1;i<wl-1;i++){ shoot(0,i*0.13,0.5); shoot(0,-i*0.13,0.5); }   // el abanico de balas extra empieza en el nivel 3
@@ -3776,24 +3776,24 @@ const MAP_MECH=[
 ".....kgggggkkkkkkk",
 ".....kghhhgk......",
 "......kkkkk......."];
-/* CENTINELA NIVEL 1: sin cañones en los hombros (hombreras lisas), mochila sin luces y UN cañón central que sale del pecho */
+/* CENTINELA NIVEL 1: cañón en el brazo DERECHO y linterna en el IZQUIERDO (de noche espanta a las criaturas) */
 const MAP_MECH_T1=[
 "......kkkkk.......",
-".....kgsssgk......",
-".....kgggggk......",
-"......kkkkk.......",
-"..................",
-"..kkk.kkkkkk......",
+".....kgsssgkkkkkk.",
+".....kgggggkmmmyyk",
+".....kgsssgkmmmyyk",
+"......kkkkkkkkkkk.",
+"..kkk.kmmmmk......",
 ".kmmmkkgggggk.....",
-".kmmmkgggggggkkkkk",
-".kmmmkggggcCMMMMMb",
-".kmmmkggggcCMMMMMb",
-".kmmmkgggggggkkkkk",
+".kmmmkgggggggk....",
+".kmmmkggggcCgk....",
+".kmmmkggggcCgk....",
+".kmmmkgggggggk....",
 ".kmmmkksssssk.....",
-"..kkk.kkkkkk......",
-"..................",
-"......kkkkk.......",
-".....kgggggk......",
+"..kkk.kmmmmkkkkkkk",
+"......kkkkkkMMMMMb",
+".....kgsssgkMMMMMb",
+".....kgggggkkkkkkk",
 ".....kgsssgk......",
 "......kkkkk......."];
 const MAP_BRAWLER=[
@@ -3871,7 +3871,7 @@ function robotSprite(look,color){
   }
   return null;
 }
-const MECH_PAL={k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff'};
+const MECH_PAL={k:'#1a1206',g:'#e0a832',h:'#ffe08a',s:'#9a6a1a',m:'#5a5f66',M:'#a9b0b8',b:'#2a2a2a',r:'#ff4757',c:'#1fb5b5',C:'#bfffff',y:'#fff3a0'};
 function mechSprite(tier){ return tierInfo('mech',tier).map==='t1'?pixSprite('mech_t1',MAP_MECH_T1,MECH_PAL):pixSprite('mech',MAP_MECH,MECH_PAL); }
 function tankHullSpr(col,dark,frame){
   const key='hull|'+col+'|'+dark+'|'+frame;
@@ -10032,6 +10032,7 @@ function nightLights(){
   }
   const p=player;
   if(p&&p.alive) L.push([p.x,p.y,140*dreadLightK(),1]);
+  if(p&&p.alive&&p.lamp) for(const [x,y,r] of lampBeam(p)) L.push([x,y,r*dreadLightK(),0.95]);
   if(orb) L.push([orb.x,orb.y,110,0.95]);
   if(mate&&mate.alive) L.push([mate.x,mate.y,70,0.8]);
   for(const tu of turrets) if(tu.alive) L.push([tu.x,tu.y,50,0.7]);
@@ -10093,6 +10094,7 @@ function updateDread(dt){
     if(u&&!w.gone&&(Math.hypot(u.x-w.x,u.y-w.y)<150||w.t>w.life||L<2)) w.gone=true;
     if(w.gone) w.out-=0.05*dt;
   }
+  if(u&&u.lamp&&!inHome) lampScare(u);
   D.watchers=D.watchers.filter(w=>!w.gone||w.out>0);
   if(D.flickerT>0) D.flickerT-=dt;
   if(!u||L<2) return;
@@ -10102,6 +10104,21 @@ function updateDread(dt){
   }
   const near=D.watchers.some(w=>!w.gone&&Math.hypot(u.x-w.x,u.y-w.y)<300);
   if(L>=3&&near&&(D.beatT-=dt)<=0){ D.beatT=52; beep(55,0.13,'sine',0.11); beep(47,0.13,'sine',0.08,null,0.17); }
+}
+/* LINTERNA del Centinela: haz de luz hacia delante desde el brazo izquierdo; los ojos que alumbra huyen */
+function lampBeam(p){
+  const a=p.body, ox=p.x+Math.cos(a-Math.PI/2)*p.radius*0.5, oy=p.y+Math.sin(a-Math.PI/2)*p.radius*0.5;
+  return [[70,40],[140,55],[220,72]].map(([d,r])=>[ox+Math.cos(a)*d,oy+Math.sin(a)*d,r]);
+}
+function lampScare(u){
+  for(const w of dread.watchers){
+    if(w.gone) continue;
+    const d=Math.hypot(w.x-u.x,w.y-u.y);
+    if(d<300&&Math.abs(angDiff(u.body,Math.atan2(w.y-u.y,w.x-u.x)))<0.4){
+      w.gone=true; beep(rand(520,620),0.25,'sawtooth',0.03,rand(180,240));   // chillido al huir
+      popup(w.x,w.y-10,'¡huye!','#8fc8ff',11);
+    }
+  }
 }
 function spawnWatcher(u,close){
   const lights=nightLights();
