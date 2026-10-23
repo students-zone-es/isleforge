@@ -363,6 +363,7 @@
         <div class="abil" id="abF"><span class="k">F</span><span class="ic">👻</span><span class="cost">CAMUFLA</span><div class="cd"></div></div>
         <div class="abil" id="abG"><span class="k">CLIC DER</span><span class="ic">💣</span><span class="cost">ARCO</span><div class="cd"></div></div>
         <div class="abil" id="abR"><span class="k">R</span><span class="ic">🤖</span><span class="cost">◆20</span><div class="cd"></div></div>
+        <div class="abil" id="abV"><span class="k">V</span><span class="ic">⚡</span><span class="cost">◆15</span><div class="cd"></div></div>
         <div class="abil" id="abE"><span class="k">E</span><span class="ic">🛸</span><span class="cost">◆8</span><div class="cd"></div></div>
         <div class="abil" id="abT"><span class="k">T</span><span class="ic">🗼</span><span class="cost">◆12</span><div class="cd"></div></div>
         <div class="abil" id="abQ"><span class="k">Q</span><span class="ic">🪖</span><span class="cost">◆10</span><div class="cd"></div></div>
@@ -2113,6 +2114,7 @@ function slashFx(x,y,a,r,color){ slashes.push({x,y,a,r,life:10,color}); }
 /* ===================== DAÑO A ENEMIGOS ===================== */
 function damageEnemy(en,dmg,o){
   if(!en.alive) return;
+  if(en.shieldGate!=null&&isShielded(en)){ shieldBlock(en); return; }   // cúpula del generador de escudos (p9q_defenses.js)
   o=o||{};
   if(en.def.armor) dmg=en.def.armor(en,dmg,o);   // escudos frontales (Mundo 5)
   if(en.def.tank&&!o.purple&&o.bx!=null){   // blindaje de tanque de verdad: frontal grueso, laterales normales, trasera débil
@@ -4375,19 +4377,17 @@ function drawEnemy(en){
     if(en.spawnFx>0) glowCircle(x,y+17,6+en.spawnFx*0.3,VISOR);
     hitFlashOff(); return;
   }
+  if(d.look==='shieldgen'){ hitFlashOn(en); drawShieldGen(en); hitFlashOff(); return; }   // p9q_defenses.js
+  if(d.look==='hut'){ hitFlashOn(en); drawHut(en); hitFlashOff(); if(isShielded(en)) drawShieldDome(en); return; }
   if(d.look==='emplacement'){
     hitFlashOn(en);
-    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(en.x-12,en.y-10,30,30);
-    ctx.fillStyle='#3a3f46'; ctx.fillRect(en.x-15,en.y-15,30,30);
-    ctx.fillStyle='#5a6068'; ctx.fillRect(en.x-13,en.y-13,26,26);
-    ctx.fillStyle='#6b727c'; ctx.fillRect(en.x-13,en.y-13,26,3);
-    for(const [ox,oy] of [[-11,-11],[9,-11],[-11,9],[9,9]]){ ctx.fillStyle='#9aa0a8'; ctx.fillRect(en.x+ox,en.y+oy,2,2); }
+    drawTurretPad(en);   // plataforma octogonal (p9q_defenses.js)
     ctx.fillStyle='#22262c'; ctx.beginPath(); ctx.arc(en.x,en.y,9,0,Math.PI*2); ctx.fill();
     ctx.save(); ctx.translate(en.x,en.y); ctx.rotate(en.aim);
     ctx.fillStyle='#1a1d22'; ctx.fillRect(4,-6,18,3); ctx.fillRect(4,3,18,3);
     ctx.fillStyle=en.burst>0?'#ffd76e':'#ff5a6a'; ctx.fillRect(20,-6,2,3); ctx.fillRect(20,3,2,3);
     ctx.fillStyle='#4a5059'; ctx.fillRect(-6,-6,12,12); ctx.fillStyle=VISOR; ctx.fillRect(2,-2,3,4);
-    ctx.restore(); hitFlashOff(); return;
+    ctx.restore(); hitFlashOff(); if(isShielded(en)) drawShieldDome(en); return;
   }
   if(d.look==='alarm'){
     hitFlashOn(en);
@@ -6497,6 +6497,7 @@ function updateWorld(dt){
     if(en.reinf){ if(dist(en,player)>1300){ en.alive=false; const sq=squads[en.squad]; if(sq) sq.alive--; } continue; }
     if(en.ai==='hunt'||en.ai==='search'||en.ai==='combat'){ en.ai='patrol'; en.home={x:en.x,y:en.y}; en.wp=null; en.aware=0; en.lastKnown=null; }
   }
+  worldDefenses(dt);   // generadores de escudos y casetas de rehenes (p9q_defenses.js)
   worldAlarms(dt);   // alarmas de la compuerta (antes: refuerzos al retroceder)
   // Durante el combate contra el jefe la compuerta de la arena queda cerrada a tu espalda
   if(w.bossSpawned&&boss&&boss.alive){
@@ -11210,6 +11211,149 @@ function ecoHtml(veh){
   }
   return h+'</div><p class="subtitle" style="font-size:12px">📈 Inflación: los precios en WORK han subido un '+Math.round((inflK()-1)*100)+'% (cada compra los sube un 8%).</p>';
 }
+/* ===================== DEFENSAS DE LA COMPUERTA (inspiradas en Boom Beach) =====================
+   · Cada TORRETA está sobre su plataforma y al lado tiene una CASETA con 2 rehenes (rómpela para liberarlos).
+   · Cerca de cada compuerta, junto a las alarmas, hay un GENERADOR DE ESCUDOS: mientras funcione, las torretas y las
+     casetas de esa sección están bajo una cúpula y no reciben daño (una línea punteada muestra a quién protege).
+   · Para quitar los escudos: DESTRUYE el generador (para siempre) o lánzale una BOMBA DE CHOQUE (tecla V, desde el
+     barco): lo apaga 10 s y aturde 3 s a los enemigos y torretas de alrededor. */
+EDEFS.shieldgen={name:'GENERADOR DE ESCUDOS', role:'structure', hp:70, speed:0, radius:14, mass:99, view:0, fov:0, dmg:0, score:250, work:6, color:'#3ee6e6', look:'shieldgen', purple:0,
+  onDeath:en=>{ popup(en.x,en.y-30,'¡ESCUDOS DESACTIVADOS!','#3ee6e6',16); S.zap(); rings.push({x:en.x,y:en.y,r:10,max:120,life:24,maxLife:24,color:'#3ee6e6'}); }};
+EDEFS.hut={name:'CASETA DE REHENES', role:'structure', hp:30, speed:0, radius:13, mass:99, view:0, fov:0, dmg:0, score:60, work:1, color:'#8a6a4a', look:'hut', purple:0,
+  onDeath:en=>freePows(en.x,en.y+6,2)};
+const SHIELD_OFF=600, SHOCK_COST=15, SHOCK_CD=1200, SHOCK_R=110;
+let shockReadyAt=0;
+
+/* La compuerta que corresponde a una posición: la primera por encima (la de su sección) */
+function gateIdxAt(y){
+  if(!world) return -1;
+  const r=y/TILE; let best=-1;
+  world.gates.forEach((g,i)=>{ if(g.row<r&&(best<0||g.row>world.gates[best].row)) best=i; });
+  return best;
+}
+/* Un hueco libre cerca de (c0,r0): ni sólido, ni peligroso, ni pegado a otra estructura */
+function freeSpotNear(c0,r0,offs,minRow){
+  const bad=v=>SOLID[v]||v===MOLTEN||v===LAVA||v===FIRE||v===QSAND||v===BELT||v===WATER;
+  for(const [dc,dr] of offs){
+    const c=clamp(c0+dc,1,WC-2), r=r0+dr; if(minRow!=null&&r<minRow) continue;
+    const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
+    if(bad(tileAtC(c,r))) continue;
+    if(enemies.some(o=>o.alive&&o.static&&Math.hypot(o.x-x,o.y-y)<o.radius+36)) continue;
+    return [x,y];
+  }
+  return null;
+}
+function shieldOn(gi){
+  const g=world&&world.gates[gi]; if(!g||g.open) return false;
+  const s=g.shieldGen; return !!(s&&s.alive&&!(s.offT>0));
+}
+function isShielded(en){ return en.shieldGate!=null&&en.shieldGate>=0&&shieldOn(en.shieldGate); }
+
+/* Cada fotograma en los mundos: pone los generadores, las casetas junto a las torretas nuevas y cuenta el apagado */
+function worldDefenses(dt){
+  const w=world; if(!w) return;
+  w.gates.forEach((g,gi)=>{
+    if(g.shieldGen!==undefined) return;
+    const ring=[[4,2],[-4,2],[5,3],[-5,3],[6,2],[-6,2],[3,4],[-3,4],[7,3],[-7,3]];
+    const s=freeSpotNear(20,g.row+3,ring,g.row+2);
+    g.shieldGen=null;
+    if(s){ const en=addEnemy('shieldgen',s[0],s[1],newSquad(),true); en.static=true; en.ai='structure'; en.spawnGrace=0; en.offT=0; g.shieldGen=en; }
+  });
+  for(const en of enemies){
+    if(!en.alive) continue;
+    if(en.def.look==='shieldgen'&&en.offT>0) en.offT-=dt;
+    if(en.def.look==='emplacement'&&en.shieldGate===undefined){
+      en.shieldGate=gateIdxAt(en.y);
+      const c=Math.floor(en.x/TILE), r=Math.floor(en.y/TILE);
+      const s=freeSpotNear(c,r,[[2,1],[-2,1],[2,-1],[-2,-1],[3,0],[-3,0],[0,2],[0,-2],[3,2],[-3,2],[3,-2],[-3,-2]]);
+      if(s){ const h=addEnemy('hut',s[0],s[1],newSquad(),true); h.static=true; h.ai='structure'; h.spawnGrace=0; h.shieldGate=en.shieldGate; }
+    }
+  }
+}
+/* Golpe contra un escudo: no hace daño; la cúpula brilla y avisa (sin llenar la pantalla de avisos) */
+function shieldBlock(en){
+  en.shieldHit=10;
+  if((en.shieldMsgT||0)<t){ en.shieldMsgT=t+90; popup(en.x,en.y-30,'🛡 ESCUDO · destruye el generador o usa la bomba de choque (V)','#3ee6e6',11); }
+}
+
+/* BOMBA DE CHOQUE (V): el barco la lanza adonde apuntas */
+function launchShock(){
+  const p=player; if(!p||!p.alive) return;
+  if(t<shockReadyAt){ popup(p.x,p.y-24,'Bomba de choque recargando ('+Math.ceil((shockReadyAt-t)/60)+' s)','#8ea0b8',12); return; }
+  if(runWork<SHOCK_COST){ popup(p.x,p.y-24,'WORK insuficiente ('+SHOCK_COST+')','#ff6b6b',12); return; }
+  runWork-=SHOCK_COST; shockReadyAt=t+SHOCK_CD;
+  const tx=mouse.x, ty=mouse.y;
+  addLob({x0:tx+rand(-30,30),y0:ty-420,x1:tx,y1:ty,dur:50,h:20,owner:'n',kind:'shock',marker:true,
+    draw:(x,y)=>{ ctx.fillStyle='#1d2433'; ctx.fillRect(x-4,y-6,8,12); ctx.fillStyle='#3ee6e6'; ctx.fillRect(x-3,y-2,6,3); if(Math.random()<0.5){ ctx.fillStyle='#bff'; ctx.fillRect(x+rand(-7,5),y+rand(-8,6),2,2); } },
+    onLand:l=>shockBlast(l.x1,l.y1)});
+  popup(p.x,p.y-26,'⚡ BOMBA DE CHOQUE EN CAMINO','#3ee6e6',13); S.launch();
+}
+function shockBlast(x,y){
+  S.zap(); shake=Math.max(shake,6);
+  rings.push({x,y,r:10,max:SHOCK_R,life:22,maxLife:22,color:'#3ee6e6'}); rings.push({x,y,r:4,max:SHOCK_R*0.6,life:16,maxLife:16,color:'#bff'});
+  for(const en of enemies){
+    if(!en.alive||Math.hypot(en.x-x,en.y-y)>SHOCK_R+en.radius) continue;
+    bolts.push(makeBolt(x,y,en.x,en.y));
+    if(en.def.look==='shieldgen'){ en.offT=SHIELD_OFF; popup(en.x,en.y-34,'ESCUDOS APAGADOS 10 s','#3ee6e6',14); }
+    else en.stun=Math.max(en.stun||0,180);
+  }
+}
+
+/* ---------- dibujos ---------- */
+function drawShieldDome(en){
+  const r=en.radius+14, hit=(en.shieldHit||0)>0; if(hit) en.shieldHit-=1;
+  const g=ctx.createRadialGradient(en.x,en.y,r*0.4,en.x,en.y,r);
+  g.addColorStop(0,'rgba(62,230,230,0)'); g.addColorStop(0.8,'rgba(62,230,230,'+(hit?0.28:0.1)+')'); g.addColorStop(1,'rgba(160,250,255,'+(hit?0.7:0.35)+')');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(en.x,en.y,r,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(190,255,255,'+(0.35+0.2*Math.sin(t*0.1+en.x)).toFixed(2)+')'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(en.x,en.y,r,t*0.03,t*0.03+1.2); ctx.stroke();
+}
+/* Generador de escudos: base octogonal, mástil con anillos que giran y núcleo cian; apagado echa chispas.
+   Líneas punteadas hasta lo que protege. */
+function drawShieldGen(en){
+  const x=en.x, y=en.y, off=en.offT>0, gi=world?world.gates.findIndex(g=>g.shieldGen===en):-1;
+  if(!off&&gi>=0&&!world.gates[gi].open){
+    ctx.save(); ctx.strokeStyle='rgba(62,230,230,.28)'; ctx.lineWidth=1; ctx.setLineDash([4,6]); ctx.lineDashOffset=-t*0.6;
+    for(const o of enemies) if(o.alive&&o.shieldGate===gi){ ctx.beginPath(); ctx.moveTo(x,y-14); ctx.lineTo(o.x,o.y); ctx.stroke(); }
+    ctx.restore();
+  }
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x+3,y+8,16,8,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#2a3038'; ctx.beginPath(); for(let i=0;i<8;i++){ const a=i/8*Math.PI*2+Math.PI/8; ctx.lineTo(x+Math.cos(a)*15,y+Math.sin(a)*12); } ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#4a5260'; ctx.fillRect(x-4,y-20,8,22); ctx.fillStyle='#6a7480'; ctx.fillRect(x-4,y-20,3,22);
+  const core=off?'#2a4a4a':'#3ee6e6';
+  for(let k=0;k<2;k++){ const yy=y-16+k*8, wv=off?0:Math.sin(t*0.15+k*1.5)*2;
+    ctx.strokeStyle=off?'#3a5050':'#8ff'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(x,yy,9+wv,3,0,0,Math.PI*2); ctx.stroke(); }
+  glowCircle(x,y-22,off?2:4+Math.sin(t*0.2)*1,core);
+  if(off){
+    if(Math.random()<0.3){ ctx.strokeStyle='#bff'; ctx.lineWidth=1; const a=rand(0,Math.PI*2); ctx.beginPath(); ctx.moveTo(x,y-14); ctx.lineTo(x+Math.cos(a)*12,y-14+Math.sin(a)*12); ctx.stroke(); }
+    ctx.fillStyle='#3ee6e6'; ctx.font='bold 10px Rajdhani, monospace'; ctx.textAlign='center'; ctx.fillText(Math.ceil(en.offT/60)+' s',x,y-32); ctx.textAlign='left';
+  }
+}
+/* Caseta de rehenes (3/4): tejado de tablas, fachada con ventana con barrotes, puerta con candado y cartel SOS */
+function drawHut(en){
+  const x=en.x, y=en.y;
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(x-13,y+6,28,8);
+  ctx.fillStyle='#5a3a22'; ctx.fillRect(x-14,y-14,28,12);   // tejado
+  ctx.fillStyle='#6e4a2c'; for(let i=0;i<4;i++) ctx.fillRect(x-14,y-14+i*3,28,1);
+  ctx.fillStyle='#3a2414'; ctx.fillRect(x-15,y-3,30,2);
+  ctx.fillStyle='#8a6a4a'; ctx.fillRect(x-13,y-1,26,13);   // fachada
+  ctx.fillStyle='#2a1a10'; ctx.fillRect(x-10,y+1,8,6);   // ventana con barrotes y una cara asomando
+  ctx.fillStyle='#ffd0a0'; ctx.fillRect(x-8,y+3,3,3);
+  ctx.fillStyle='#9aa0a8'; for(let i=0;i<3;i++) ctx.fillRect(x-9+i*3,y+1,1,6);
+  ctx.fillStyle='#4a2a14'; ctx.fillRect(x+2,y+1,8,11); ctx.fillStyle='#c8ccd2'; ctx.fillRect(x+7,y+6,2,3);   // puerta y candado
+  ctx.fillStyle='#e8e0cc'; ctx.fillRect(x-6,y-12,12,6); ctx.fillStyle='#d33'; ctx.font='bold 6px monospace'; ctx.textAlign='center'; ctx.fillText('SOS',x,y-7); ctx.textAlign='left';
+}
+/* Plataforma de la torreta: hormigón octogonal con anillo de peligro, tornillos, sacos terreros y caja de munición */
+function drawTurretPad(en){
+  const x=en.x, y=en.y;
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); for(let i=0;i<8;i++){ const a=i/8*Math.PI*2+Math.PI/8; ctx.lineTo(x+3+Math.cos(a)*20,y+4+Math.sin(a)*20); } ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#3a3f46'; ctx.beginPath(); for(let i=0;i<8;i++){ const a=i/8*Math.PI*2+Math.PI/8; ctx.lineTo(x+Math.cos(a)*20,y+Math.sin(a)*20); } ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#5a6068'; ctx.beginPath(); for(let i=0;i<8;i++){ const a=i/8*Math.PI*2+Math.PI/8; ctx.lineTo(x+Math.cos(a)*17,y+Math.sin(a)*17); } ctx.closePath(); ctx.fill();
+  for(let i=0;i<16;i++){ const a=i/16*Math.PI*2; ctx.strokeStyle=i%2?'#1a1a1a':'#f5c518'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,13.5,a,a+Math.PI/8); ctx.stroke(); }
+  for(let i=0;i<4;i++){ const a=i/4*Math.PI*2+Math.PI/4; ctx.fillStyle='#9aa0a8'; ctx.fillRect(Math.round(x+Math.cos(a)*16)-1,Math.round(y+Math.sin(a)*16)-1,2,2); }
+  ctx.fillStyle='#8a7a5a'; ctx.fillRect(x-22,y+12,9,5); ctx.fillRect(x-22,y+8,5,5); ctx.fillStyle='#6e6044'; ctx.fillRect(x-22,y+15,9,2);   // sacos
+  ctx.fillStyle='#4a5a32'; ctx.fillRect(x+14,y-20,9,7); ctx.fillStyle='#f5c518'; ctx.fillRect(x+16,y-18,5,1);   // caja de munición
+}
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -12289,6 +12433,7 @@ function updateHUD(){
   const canEvo=mate&&mate.alive&&mate.lvl<2;
   abil('abR',!canEvo?'off':runWork>=20?'ready':'',0);
   abil('abE',!alive?'off':runWork>=DRONE_COST?'ready':'',0);
+  abil('abV',!alive?'off':t<shockReadyAt?'':runWork>=SHOCK_COST?'ready':'',Math.max(0,(shockReadyAt-t)/SHOCK_CD));
   const curDef=curDefense(), abTel=document.getElementById('abT');
   if(abTel._d!==curDef.id){ abTel._d=curDef.id; abTel.children[1].textContent=curDef.ic; abTel.children[2].textContent='◆'+curDef.cost; abTel.title=curDef.name+(survLvl?' · B: cambiar defensa':''); }
   abil('abT',!alive?'off':runWork>=curDef.cost&&(curDef.wall||turrets.length<towerMax())?'ready':'',0);
@@ -12411,6 +12556,7 @@ window.addEventListener('keydown',e=>{
   if(k==='b') cycleDefense();
   if(k==='q') deploySquad();
   if(k==='x') callOrbHere();
+  if(k==='v') launchShock();   // bomba de choque (p9q_defenses.js)
   if(k==='g') startEscort();
 });
 window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
