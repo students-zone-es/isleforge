@@ -6391,6 +6391,7 @@ function startWorldRun(id,section){
   resetRun(); wave=def.wave; tut=null; renderTutBox();
   clearMissionLists();
   def.build();
+  reshapeTurretBunkers(); buildMapCanvas();   // sin búnker alrededor de las torretas: bloques sueltos para cubrirse (p9q_defenses.js)
   section=clamp(section||1,1,4);
   for(let g=0;g<section-1;g++) openGate(world.gates[g],true);
   world.section=section;
@@ -11353,6 +11354,38 @@ function drawTurretPad(en){
   for(let i=0;i<4;i++){ const a=i/4*Math.PI*2+Math.PI/4; ctx.fillStyle='#9aa0a8'; ctx.fillRect(Math.round(x+Math.cos(a)*16)-1,Math.round(y+Math.sin(a)*16)-1,2,2); }
   ctx.fillStyle='#8a7a5a'; ctx.fillRect(x-22,y+12,9,5); ctx.fillRect(x-22,y+8,5,5); ctx.fillStyle='#6e6044'; ctx.fillRect(x-22,y+15,9,2);   // sacos
   ctx.fillStyle='#4a5a32'; ctx.fillRect(x+14,y-20,9,7); ctx.fillStyle='#f5c518'; ctx.fillRect(x+16,y-18,5,1);   // caja de munición
+}
+
+/* SIN BÚNKER: al crear el mundo se quitan los muros que encerraban cada torreta (se queda el suelo de hormigón) y en
+   su lugar se reparten por la zona 5 BLOQUES SUELTOS del mismo hormigón (1x1, 2x1 o 1x2) para cubrirse, con huecos entre
+   ellos para pasar. No toca las compuertas, el borde del mapa ni los edificios. */
+function reshapeTurretBunkers(){
+  const w=world; if(!w) return;
+  const gateRows=new Set(); w.gates.forEach(g=>{ gateRows.add(g.row); gateRows.add(g.row+1); });
+  const turrets=[]; for(const e of w.enc) for(const u of e.units) if(u[0]==='emplacement') turrets.push([u[1],u[2]]);
+  const unitAt=new Set(); for(const e of w.enc) for(const u of e.units) unitAt.add(u[1]+','+u[2]);
+  const wallOk=(c,r)=>inB(c,r)&&map[idx(c,r)]===WALL&&c>1&&c<WC-2&&!gateRows.has(r)&&!gateRows.has(r-1)&&!gateRows.has(r+1);
+  for(const [tc,tr] of turrets){
+    // 1) los muros del búnker: los que tocan la zona de la torreta y los unidos a ellos (sin salir de un recuadro)
+    const seen=new Set(), stack=[];
+    for(let r=tr-4;r<=tr+4;r++) for(let c=tc-5;c<=tc+5;c++) if(wallOk(c,r)) stack.push([c,r]);
+    while(stack.length){ const [c,r]=stack.pop(), k=c+','+r; if(seen.has(k)) continue; seen.add(k);
+      for(const [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nc=c+dc, nr=r+dr; if(Math.abs(nc-tc)<=7&&Math.abs(nr-tr)<=6&&wallOk(nc,nr)) stack.push([nc,nr]); } }
+    for(const k of seen){ const [c,r]=k.split(',').map(Number); setTile(c,r,FLOOR); }
+    // 2) bloques sueltos para cubrirse
+    const free=(c,r)=>{ if(!inB(c,r)||gateRows.has(r)||gateRows.has(r-1)||gateRows.has(r+1)||unitAt.has(c+','+r)) return false;
+      const v=map[idx(c,r)]; if(![G,FLOOR,SAND,SOIL,SCORCH].includes(v)) return false;
+      for(let y=-1;y<=1;y++) for(let x=-1;x<=1;x++){ const n=tileAtC(c+x,r+y); if(n===WALL||n===CAGE||n===BLD) return false; }   // siempre con hueco alrededor
+      return true; };
+    const shapes=[[[0,0]],[[0,0],[1,0]],[[0,0],[0,1]]];
+    let placed=0;
+    for(let i=0;i<40&&placed<5;i++){
+      const a=hash2(tc*7+i,tr*3+i)*Math.PI*2, d=3+hash2(tr+i,tc-i)*2.5, c=Math.round(tc+Math.cos(a)*d), r=Math.round(tr+Math.sin(a)*d*0.8);
+      const sh=shapes[Math.floor(hash2(c+i,r)*3)];
+      if(!sh.every(([x,y])=>free(c+x,r+y))) continue;
+      sh.forEach(([x,y])=>setTile(c+x,r+y,WALL)); placed++;
+    }
+  }
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
