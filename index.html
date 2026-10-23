@@ -3396,6 +3396,7 @@ function canAttack(en){
 }
 /* Emplazamiento fijo: gira, vigila y dispara ráfagas dobles */
 function turretAI(en,dt){
+  if(en.def.look==='rocketlauncher'){ rocketAI(en,dt); return; }   // p9q_defenses.js
   en.fireCd-=dt;
   // si no te ve, solo contesta 2,5 s hacia donde le dispararon; luego vuelve a vigilar (antes seguía disparando para siempre
   // al sitio de un aliado que ya había muerto)
@@ -4381,6 +4382,7 @@ function drawEnemy(en){
     hitFlashOff(); return;
   }
   if(d.look==='shieldgen'){ hitFlashOn(en); drawShieldGen(en); hitFlashOff(); return; }   // p9q_defenses.js
+  if(d.look==='rocketlauncher'){ hitFlashOn(en); drawRocketLauncher(en); hitFlashOff(); if(isShielded(en)) drawShieldDome(en); return; }
   if(d.look==='hut'){ hitFlashOn(en); drawHut(en); hitFlashOff(); if(isShielded(en)) drawShieldDome(en); return; }
   if(d.look==='emplacement'){
     hitFlashOn(en);
@@ -6394,7 +6396,7 @@ function startWorldRun(id,section){
   resetRun(); wave=def.wave; tut=null; renderTutBox();
   clearMissionLists();
   def.build();
-  reshapeTurretBunkers(); buildMapCanvas();   // sin búnker alrededor de las torretas: bloques sueltos para cubrirse (p9q_defenses.js)
+  upgradeTurrets(); reshapeTurretBunkers(); buildMapCanvas();   // sin búnker alrededor de las torretas: bloques sueltos para cubrirse (p9q_defenses.js)
   section=clamp(section||1,1,4);
   for(let g=0;g<section-1;g++) openGate(world.gates[g],true);
   world.section=section;
@@ -11266,7 +11268,7 @@ function worldDefenses(dt){
   for(const en of enemies){
     if(!en.alive) continue;
     if(en.def.look==='shieldgen'&&en.offT>0) en.offT-=dt;
-    if(en.def.look==='emplacement'&&en.shieldGate===undefined){
+    if((en.def.look==='emplacement'||en.def.look==='rocketlauncher')&&en.shieldGate===undefined){
       en.shieldGate=gateIdxAt(en.y);
       const c=Math.floor(en.x/TILE), r=Math.floor(en.y/TILE);
       const s=freeSpotNear(c,r,[[2,1],[-2,1],[2,-1],[-2,-1],[3,0],[-3,0],[0,2],[0,-2],[3,2],[-3,2],[3,-2],[-3,-2]]);
@@ -11365,7 +11367,7 @@ function drawTurretPad(en){
 function reshapeTurretBunkers(){
   const w=world; if(!w) return;
   const gateRows=new Set(); w.gates.forEach(g=>{ gateRows.add(g.row); gateRows.add(g.row+1); });
-  const turrets=[]; for(const e of w.enc) for(const u of e.units) if(u[0]==='emplacement') turrets.push([u[1],u[2]]);
+  const turrets=[]; for(const e of w.enc) for(const u of e.units) if(u[0]==='emplacement'||u[0]==='rocketpad') turrets.push([u[1],u[2]]);
   const unitAt=new Set(); for(const e of w.enc) for(const u of e.units) unitAt.add(u[1]+','+u[2]);
   const wallOk=(c,r)=>inB(c,r)&&map[idx(c,r)]===WALL&&c>1&&c<WC-2&&!gateRows.has(r)&&!gateRows.has(r-1)&&!gateRows.has(r+1);
   for(const [tc,tr] of turrets){
@@ -11389,6 +11391,56 @@ function reshapeTurretBunkers(){
       sh.forEach(([x,y])=>setTile(c+x,r+y,WALL)); placed++;
     }
   }
+}
+
+/* LANZACOHETES (como el de Boom Beach): en los Mundos 3, 4 y 5 una de cada dos torretas lo es. Cuando te ve, gira y
+   dispara una RÁFAGA DE 5 COHETES (uno cada 0,2 s) que caen en arco donde estás, con marca de impacto y onda expansiva;
+   después RECARGA 3,5 s. No puede disparar a menos de 90 px: pegarse a él es la forma de destruirlo sin recibir. */
+EDEFS.rocketpad={name:'LANZACOHETES', role:'turret', hp:75, speed:0, radius:14, mass:99, view:470, fov:7, dmg:11, score:220, work:4, color:'#7a7f88', look:'rocketlauncher', purple:0};
+const ROCKET_SALVO=5, ROCKET_GAP=12, ROCKET_RELOAD=210, ROCKET_MIN=90, ROCKET_MAX=520;
+function rocketAI(en,dt){
+  if(!en.seen&&en.ai!=='patrol'&&t-Math.max(en.hurtT||-1e9,en.lastSeen||-1e9)>150){ en.ai='patrol'; en.lastKnown=null; en.salvo=0; }
+  en.fireCd-=dt; if(en.loaded==null) en.loaded=ROCKET_SALVO;
+  if(!en.salvo&&en.fireCd<=0) en.loaded=ROCKET_SALVO; else if(!en.salvo) en.loaded=Math.floor(ROCKET_SALVO*(1-en.fireCd/ROCKET_RELOAD));   // se recargan de uno en uno
+  const has=en.ai!=='patrol'&&player.alive&&(en.seen||en.lastKnown);
+  if(has){
+    const tx=en.seen?player.x:en.lastKnown.x, ty=en.seen?player.y:en.lastKnown.y, want=Math.atan2(ty-en.y,tx-en.x), d=Math.hypot(tx-en.x,ty-en.y);
+    en.aim=turnTo(en.aim,want,0.06*dt); en.tx=tx; en.ty=ty;
+    if(!en.salvo&&en.fireCd<=0&&d>ROCKET_MIN&&d<ROCKET_MAX&&Math.abs(angDiff(en.aim,want))<0.25&&canAttack(en)){ en.salvo=ROCKET_SALVO; en.salvoT=0; }
+  } else en.aim+=0.008*dt;
+  if(en.salvo>0){
+    en.salvoT-=dt;
+    if(en.salvoT<=0){
+      const i=ROCKET_SALVO-en.salvo; en.salvo--; en.salvoT=ROCKET_GAP; en.loaded=en.salvo;
+      const side=(i%2?1:-1)*(3+(i>>1)*3), ox=Math.cos(en.aim+Math.PI/2)*side, oy=Math.sin(en.aim+Math.PI/2)*side;
+      const x0=en.x+Math.cos(en.aim)*14+ox, y0=en.y+Math.sin(en.aim)*14+oy, x1=en.tx+rand(-30,30), y1=en.ty+rand(-30,30), d=Math.hypot(x1-x0,y1-y0);
+      addLob({x0,y0,x1,y1,dur:Math.max(28,d/7),h:30+d*0.12,owner:'e',kind:'missile',dmg:en.def.dmg,splash:38,stunMul:1,marker:true});
+      for(let k=0;k<4;k++) particles.push({x:x0,y:y0,vx:-Math.cos(en.aim)*rand(0.5,1.5)+rand(-0.4,0.4),vy:-Math.sin(en.aim)*rand(0.5,1.5)+rand(-0.4,0.4),life:22,maxLife:22,color:'#777',size:4,smoke:true});
+      S.launch();
+      if(en.salvo===0) en.fireCd=ROCKET_RELOAD;
+    }
+  }
+}
+/* Dibujo: la plataforma y encima una caja lanzadora que gira, con 5 tubos; las puntas rojas son los cohetes cargados */
+function drawRocketLauncher(en){
+  drawTurretPad(en);
+  ctx.save(); ctx.translate(en.x,en.y); ctx.rotate(en.aim);
+  ctx.fillStyle='#22262c'; ctx.beginPath(); ctx.arc(0,0,9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#3a4a32'; ctx.fillRect(-8,-11,20,22); ctx.fillStyle='#4e6042'; ctx.fillRect(-8,-11,20,4);
+  ctx.fillStyle='#2a3424'; ctx.fillRect(-8,9,20,2);
+  for(let i=0;i<5;i++){ const y=[-7,-1,5,-4,2][i], x=i<3?8:3;
+    ctx.fillStyle='#14181c'; ctx.fillRect(x,y,4,3);
+    if(i<(en.loaded==null?5:en.loaded)){ ctx.fillStyle='#e0473a'; ctx.fillRect(x+2,y,2,3); ctx.fillStyle='#ffb0a0'; ctx.fillRect(x+3,y,1,1); } }
+  ctx.fillStyle='#f5c518'; ctx.fillRect(-6,-9,2,18);   // franja de peligro
+  ctx.fillStyle=VISOR; ctx.fillRect(-3,-2,3,4);
+  ctx.restore();
+}
+/* Mundos 3-5: una de cada dos torretas se convierte en lanzacohetes */
+function upgradeTurrets(){
+  const w=world; if(!w||w.id<3) return;
+  let n=0;
+  for(const e of w.enc){ e.units=e.units.map(u=>u.slice());   // copia: la lista del mundo es compartida entre partidas
+    for(const u of e.units) if(u[0]==='emplacement'&&(n++)%2===1) u[0]='rocketpad'; }
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
