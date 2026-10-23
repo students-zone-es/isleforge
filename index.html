@@ -3397,6 +3397,9 @@ function canAttack(en){
 /* Emplazamiento fijo: gira, vigila y dispara ráfagas dobles */
 function turretAI(en,dt){
   en.fireCd-=dt;
+  // si no te ve, solo contesta 2,5 s hacia donde le dispararon; luego vuelve a vigilar (antes seguía disparando para siempre
+  // al sitio de un aliado que ya había muerto)
+  if(!en.seen&&en.ai!=='patrol'&&t-Math.max(en.hurtT||-1e9,en.lastSeen||-1e9)>150){ en.ai='patrol'; en.lastKnown=null; en.burst=0; }
   if(en.ai!=='patrol' && player.alive && (en.seen||en.lastKnown)){   // también mientras te busca (al perderte de vista pasa a «buscar»)
     // si no te ve pero le han disparado, gira hacia donde vino el disparo y contesta
     const tx=en.seen?player.x:en.lastKnown.x, ty=en.seen?player.y:en.lastKnown.y, want=Math.atan2(ty-en.y,tx-en.x);
