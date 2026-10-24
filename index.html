@@ -1135,16 +1135,16 @@ function dirtStamp(i){
   return tileCache[ck]=c;
 }
 const GRASSY=v=>v===G||v===BUSH||v===TREE;
-function decorateDirt(c,r){
+function decorateDirt(c,r,edgesOnly){
   const x0=c*TILE, y0=r*TILE, S=GRASS_PX, N=TILE/S;
   // grietas finas (1 píxel de arte) en el marrón más oscuro, como las del dibujo
-  if(hash2(c+33,r+77)<0.22){
+  if(!edgesOnly&&hash2(c+33,r+77)<0.22){
     const rnd=mulberry32((c*73856093)^(r*19349663)); let x=2+Math.floor(rnd()*(N-4)), y=2+Math.floor(rnd()*(N-4));
     mapG.fillStyle=DIRT_PAL[0];
     for(let i=0;i<10;i++){ mapG.fillRect(x0+x*S,y0+y*S,S,S); const d=rnd(); if(d<0.45) x+=rnd()<0.5?1:-1; else if(d<0.9) y+=1; else { x+=1; y+=1; } x=clamp(x,0,N-1); y=clamp(y,0,N-1); }
   }
   // piedrecitas del dibujo
-  for(let n=0;n<2;n++){
+  for(let n=0;n<(edgesOnly?0:2);n++){
     const h=hash2(c+211+n*31,r+59+n*17); if(h>=(n?0.15:0.38)) continue;
     const s=dirtStamp(Math.floor(hash2(c+7+n,r+101)*DIRT_STONES.length)%DIRT_STONES.length);
     mapG.drawImage(s,x0+Math.floor(hash2(c+13,r+5+n)*(TILE+1-s.width)),y0+Math.floor(hash2(c+3+n,r+41)*(TILE+1-s.height)));
@@ -1162,6 +1162,69 @@ function decorateDirt(c,r){
       }
     }
   });
+}
+/* ===================== TERRENO AGRIETADO (hoja del usuario terreno_agrietado.jpg, recortada con tools/extraer_terreno.py) =====================
+   · La TIERRA (SOIL) de los mundos con el dibujo del usuario es barro seco agrietado: placas separadas por grietas oscuras,
+     con la luz arriba a la izquierda y la sombra abajo a la derecha de cada placa (Voronoi en coordenadas del mundo: las
+     grietas siguen de una casilla a la siguiente). Encima, guijarros; en la isla cráter, esquirlas de roca; y matas de hierba
+     donde el césped se encuentra con la tierra. (El huerto de la base sigue con su tierra de cultivo.)
+   · En la BASE, la costa sur es un ACANTILADO en 3/4: borde de césped (o arena) que cuelga y la cara de tierra del bloque. */
+const TERRA={"crackPal":["#3c0f04","#642f18","#7b401d","#8f5225","#a36734","#b77f44"],"cliffPal":["#261511","#3f2a23","#664530","#9b7047","#ab9078"],"cliffGrass":["#203618","#39562b","#5c7245","#8d9676"],"spr":{"guijarros1":{"pal":["#391d11","#4f3222","#6c4a32","#8e6a4d","#c0905e"],"rows":["...............2.....",".....3333.....332....","....3444323...231....","...24444321....2.....","...24443221..........","...22342210..........","...212210243.........",".....00014442........","........23430...332..",".42......1210..23430.","232............123320",".....43.........01113","....34431........013.","....24421............","....11101....342.....",".............320.....",".............223....."]},"guijarros2":{"pal":["#2c1813","#442c21","#5d4131","#8b684d","#897d75"],"rows":["...............11...",".............33332..",".........4..3333320.","..33....23223333310.",".1331...24323333100.",".4110...1211121100..","...........100002...",".......322....44....","......2333212....21.",".4...123333331..1221","2334.022133220..4110","2330..0012111.......","0120....2001........",".004...........22...",".....4121.....2321..","....22332......100..","....01210...........",".....333............"]},"esquirlas":{"pal":["#2e1913","#482a1d","#60412e","#7d5336","#8e6141","#776f6c"],"rows":["............................01..................","..........................22340.................","........................2334440.................","...................553334434420.................",".................22444432334100.................","................134444323444002.................",".............11334432334344200..................","..........2123334422334444200...................",".......5223341421133344331000...................","...33334443223312333333320000...................","..244444331333333223444400000...................",".233333322333333334444400001....................","523333313333444344444100000..........501........","444443133334440341100000000..........144215.....","344401334444400000000000002.........344423331...","01320343332011111110000000......513014423444431.","5011022333211344444400100......12311321444444410","2001034333123444444011105.....233303331444431110","444002444133444443110005.....1334404344144111100","1212012404444344011100......0344440444402111100.",".11151011111123011110.......011110013220000005..",".......111111100000.........20000000100000......","........3111110055...........55555...222........","...........0001................................."]},"mata1":{"pal":["#1b381c","#2e4b28","#425f39","#577546","#728a63"],"rows":["...04.........41...","...134....1..443...","....13...32..43....",".....14..34243.....",".124..33141342.220.","..133.23041311022..","...4323104130032...",".01.04210311031....",".22301310110330303.","...220130001300031.","...0010310120033221",".310000120110310143",".13320013020200111.","4.00032020113222..0",".4.00410101330001..","...403100012002.4..","....1200000102.....",".....11004301......"]},"mata2":{"pal":["#284322","#344f2e","#425f33","#55703e","#6b8651"],"rows":["....................31.....","...................424.....","..................333......","..................32.......","...24......1.....23........","....34.....2..13332.31.....","....32.0...1..2.33133......","....4312330244424242.......","33...43.342104033334.1...21","334..344.3403302130124.3114","..34.2432244230202121.032..","..4301343234221101210032...","...222324124210101102312...","..012031331431110110330331.","...1121332124111110222101..","...020022011301011012200...","...21101211031201220201....","....10011110221111100......",".......211110100104........",".............11............"]}}};
+function terraStamp(name,flip){
+  const ck='terra|'+name+(flip?'|f':''); if(tileCache[ck]) return tileCache[ck];
+  const s=TERRA.spr[name], w=s.rows[0].length, h=s.rows.length, c=mkCanvas(w,h), g=c.getContext('2d');
+  s.rows.forEach((row,y)=>{ for(let x=0;x<w;x++){ const ch=row[x]; if(ch==='.') continue; g.fillStyle=s.pal[+ch]; g.fillRect(flip?w-1-x:x,y,1,1); } });
+  return tileCache[ck]=c;
+}
+const CRACK_CELL=12;   // tamaño medio de una placa (en píxeles de arte)
+function crackPt(cx,cy){ return [cx*CRACK_CELL+1+hash2(cx*13+5,cy*7+3)*(CRACK_CELL-2), cy*CRACK_CELL+1+hash2(cx*3+11,cy*17+1)*(CRACK_CELL-2)]; }
+function paintCracked(c,r){
+  const S=GRASS_PX, N=TILE/S, P=TERRA.crackPal, x0=c*TILE, y0=r*TILE;
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const gx=c*N+i+0.5, gy=r*N+j+0.5, cx=Math.floor(gx/CRACK_CELL), cy=Math.floor(gy/CRACK_CELL);
+    let d1=1e9, d2=1e9, b=null;
+    for(let y=cy-1;y<=cy+1;y++) for(let x=cx-1;x<=cx+1;x++){ const p=crackPt(x,y), d=(p[0]-gx)**2+(p[1]-gy)**2; if(d<d1){ d2=d1; d1=d; b=[x,y,p]; } else if(d<d2) d2=d; }
+    const e=Math.sqrt(d2)-Math.sqrt(d1);   // distancia al borde de la placa
+    let col;
+    if(e<0.75) col=P[0];   // grieta principal (fina)
+    else { const tone=hash2(b[0]*7+1,b[1]*5+2), lit=(gx-b[2][0])+(gy-b[2][1])<0, n=hash2(Math.floor(gx*0.5)*3+b[0],Math.floor(gy*0.5)*5+b[1]);
+      col=P[tone<0.3?3:4];
+      if(n>0.86) col=P[tone<0.3?4:5]; else if(n<0.08) col=P[tone<0.3?2:3];   // manchas del barro
+      if(e<1.6) col=lit?P[5]:P[1];   // borde: luz arriba-izquierda, sombra abajo-derecha
+      else { const f=hash2(Math.floor(gx/3)+b[0]*9,Math.floor(gy/3)+b[1]*9); if(f<0.05&&((Math.floor(gx)+Math.floor(gy))%3===0)) col=P[1]; } }   // grietas finas dentro de la placa
+    mapG.fillStyle=col; mapG.fillRect(x0+i*S,y0+j*S,S,S);
+  }
+}
+/* Acantilado de la costa sur de la base (se pinta en la parte de arriba de la casilla de agua) */
+function paintCliff(c,r){
+  const x=c*TILE, y=r*TILE, S=GRASS_PX, N=TILE/S, CP=TERRA.cliffPal, GP=TERRA.cliffGrass, Hc=10;
+  const lip=tileAtC(c,r-1)===SAND?['#cdb878','#e6d39a']:[GP[1],GP[2]];
+  for(let i=0;i<N;i++){
+    const gx=c*N+i, drip=Math.floor(hash2(gx,r*3+1)*2.4);
+    for(let j=0;j<=Hc;j++){
+      let col;
+      if(j<1+drip) col=j===0?lip[1]:lip[0];   // el borde que cuelga
+      else if(j===Hc) col=CP[0];   // el pie, en sombra
+      else { const k=j/Hc, n=hash2(gx*7+Math.floor(j/2),r*11+Math.floor(j/2));   // vetas: tierra clara arriba, oscura abajo
+        col=k<0.35?(n<0.35?CP[4]:CP[3]):k<0.7?(n<0.3?CP[3]:n<0.85?CP[2]:CP[1]):(n<0.4?CP[2]:n<0.85?CP[1]:CP[0]); }
+      mapG.fillStyle=col; mapG.fillRect(x+i*S,y+j*S,S,S);
+    }
+  }
+  mapG.fillStyle=era.foam; mapG.globalAlpha=0.55; mapG.fillRect(x,y+(Hc+1)*S,TILE,2); mapG.globalAlpha=1;   // espuma al pie
+}
+/* Segunda pasada (cuando ya están pintadas todas las casillas, para que lo grande no se corte): guijarros, esquirlas y matas */
+function terrainOverlay(){
+  if(!SHEET_GRASS_ERAS[era.id]||era.id==='base') return;
+  for(let r=1;r<WR-1;r++) for(let c=1;c<WC-1;c++){
+    const v=map[idx(c,r)], x=c*TILE, y=r*TILE;
+    if(v===SOIL){
+      const h=hash2(c+91,r+57);
+      if(h<0.11){ const s=terraStamp(h<0.055?'guijarros1':'guijarros2',hash2(c,r+3)<0.5); mapG.drawImage(s,x+Math.floor(hash2(c+4,r)*(TILE-s.width/2)),y+Math.floor(hash2(c,r+8)*(TILE-s.height/2))); }
+      else if((survLvl||(mission&&mission.type==='arch'))&&h<0.14&&tileAtC(c+1,r)===SOIL&&tileAtC(c,r+1)===SOIL){ const s=terraStamp('esquirlas',hash2(c+2,r)<0.5); mapG.drawImage(s,x+4,y+6); }   // isla cráter
+    } else if(v===G&&hash2(c+17,r+29)<0.2&&[[0,1],[1,0],[0,-1],[-1,0]].some(([dx,dy])=>tileAtC(c+dx,r+dy)===SOIL)){
+      const s=terraStamp(hash2(c,r+5)<0.5?'mata1':'mata2',hash2(c+9,r)<0.5); mapG.drawImage(s,x+Math.floor((TILE-s.width)/2),y+TILE-s.height);   // mata en el borde del césped
+    }
+  }
 }
 function tileSpr(key){
   const ck=era.id+'|'+key;
@@ -1340,7 +1403,7 @@ function paintTile(c,r){
   mapG.drawImage(tileSpr(tileKey(c,r)),x,y);
   if(v===G) decorateGrass(c,r);
   if(SHEET_GRASS_ERAS[era.id]){
-    if(v===SOIL) decorateDirt(c,r);
+    if(v===SOIL){ if(era.id==='base') decorateDirt(c,r); else { paintCracked(c,r); decorateDirt(c,r,true); } }   // tierra agrietada (el huerto de la base, no)
     if(v===TREE){ mapG.fillStyle='rgba(0,0,0,.22)'; mapG.beginPath(); mapG.ellipse(x+TILE/2,y+TILE-5,13,4,0,0,Math.PI*2); mapG.fill(); }   // sombra al pie del pino
     if(v===G&&stumpSet().has(k)){ const s=artSprite('tocon',PINE_SPR.tocon,PINE_PAL,h<0.5); mapG.drawImage(s,Math.round(x+TILE/2-s.width/2),y+TILE-4-s.height); }
   }
@@ -1359,8 +1422,10 @@ function paintTile(c,r){
     if(tileAtC(c+1,r)===WATER) mapG.fillRect(x+TILE-4,y,4,TILE);
   }
   if(v===WATER){
+    const cliff=era.id==='base'&&r>0&&tileAtC(c,r-1)!==WATER&&tileAtC(c,r-1)!==BRIDGE;
+    if(cliff) paintCliff(c,r);   // costa sur de la base: acantilado en 3/4
     mapG.fillStyle=era.foam; mapG.globalAlpha=0.45;
-    if(tileAtC(c,r-1)!==WATER) mapG.fillRect(x,y,TILE,3);
+    if(tileAtC(c,r-1)!==WATER&&!cliff) mapG.fillRect(x,y,TILE,3);
     if(tileAtC(c,r+1)!==WATER) mapG.fillRect(x,y+TILE-3,TILE,3);
     if(tileAtC(c-1,r)!==WATER) mapG.fillRect(x,y,3,TILE);
     if(tileAtC(c+1,r)!==WATER) mapG.fillRect(x+TILE-3,y,3,TILE);
@@ -1417,6 +1482,7 @@ function buildMapCanvas(){
   mapCanvas=mkCanvas(WW,WH); mapG=mapCanvas.getContext('2d');
   mapG.imageSmoothingEnabled=false;
   for(let r=0;r<WR;r++) for(let c=0;c<WC;c++) paintTile(c,r);
+  terrainOverlay();   // guijarros, esquirlas y matas encima
   miniBase=mkCanvas(WC,WR);
   buildMini();
 }
