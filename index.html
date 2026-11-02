@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ISLEFORGE: Echoes of the Core</title>
+<title>ISLEFORGE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap">
 <style>
@@ -272,11 +272,6 @@
     background-size:300% 100%,100% 100%; background-repeat:no-repeat; -webkit-background-clip:text; background-clip:text;
     filter:drop-shadow(calc(.4*var(--u)) calc(.4*var(--u)) 0 #000) drop-shadow(0 0 calc(1.6*var(--u)) #f5c51866); animation:mShine 5s ease-in-out infinite; }
   @keyframes mShine{ 0%,55%{ background-position:160% 0,0 0; } 100%{ background-position:-70% 0,0 0; } }
-  .mTag{ position:relative; display:inline-block; margin:calc(1*var(--u)) 0 0; font-family:var(--font-head); font-size:calc(1.8*var(--u)); letter-spacing:calc(1*var(--u)); color:var(--cyan);
-    text-shadow:0 0 calc(1*var(--u)) #3ee6e6aa, calc(.25*var(--u)) calc(.25*var(--u)) 0 #000; }
-  .mTag::before,.mTag::after{ content:attr(data-t); position:absolute; inset:0; color:transparent; -webkit-text-stroke:1px #3ee6e6; text-shadow:none; opacity:0; animation:mEcho 3.2s ease-out infinite; }
-  .mTag::after{ animation-delay:1.6s; }
-  @keyframes mEcho{ 0%{ transform:scale(1); opacity:.6; } 100%{ transform:scale(1.1,2); opacity:0; } }
   .mPress{ position:absolute; left:50%; top:74%; transform:translateX(-50%); font-family:var(--font-head); font-size:calc(1.6*var(--u)); color:#fff; white-space:nowrap;
     text-shadow:calc(.25*var(--u)) calc(.25*var(--u)) 0 #000, 0 0 calc(1*var(--u)) #f5c51888; animation:mBlink 1.2s steps(2,start) infinite; cursor:pointer; }
   .menuScreen.main .mPress{ display:none; }
@@ -388,7 +383,7 @@
 
     <div id="scrMenu" class="overlay menuScreen press">
       <div class="mShade"></div>
-      <div class="mLogo"><h1 class="mTitle">ISLEFORGE</h1><p class="mTag" data-t="ECHOES OF THE CORE">ECHOES OF THE CORE</p></div>
+      <div class="mLogo"><h1 class="mTitle">ISLEFORGE</h1></div>
       <div class="mPress">PULSA CUALQUIER TECLA</div>
       <div class="mList" id="mList"></div>
       <div class="mCard" id="mCard"></div>
