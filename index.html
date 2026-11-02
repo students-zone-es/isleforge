@@ -120,6 +120,36 @@
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
+  .arcCab{ width:min(620px,94%); padding:12px 16px 16px; background:linear-gradient(#262b6e,#14163a); border:4px solid #0a0b1c; border-radius:16px 16px 6px 6px; box-shadow:0 0 44px #3ee6e633; }
+  .arcMarquee{ font-family:var(--font-head); font-size:46px; line-height:1; letter-spacing:4px; padding:8px 4px; text-align:center; color:#1a1400; background:linear-gradient(#ffe88a,#f5a623); border-radius:6px; box-shadow:0 0 20px #f5c51899; }
+  .arcScreen{ position:relative; margin-top:10px; padding:14px 18px; height:320px; overflow:hidden; display:flex; flex-direction:column; justify-content:center; background:radial-gradient(#0a2230,#03070c); border:7px solid #05060e; border-radius:18px; font-family:var(--font-head); color:#9ff5e0; text-align:center; }
+  .arcScreen::after, #gameWrap.arcadeOn::after{ content:''; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 1px,transparent 1px 3px); box-shadow:inset 0 0 70px rgba(0,0,0,.75); }
+  #gameWrap.arcadeOn::after{ z-index:30; box-shadow:inset 0 0 140px rgba(0,0,0,.8); }
+  .arcHead{ font-size:29px; color:#ffd76e; letter-spacing:2px; }
+  .arcTop{ list-style:none; margin:8px auto; padding:0; width:300px; font-size:25px; counter-reset:n; }
+  .arcTop li{ display:flex; gap:12px; counter-increment:n; }
+  .arcTop li::before{ content:counter(n)'.'; color:#6fb8ac; }
+  .arcTop b{ font-weight:400; color:#fff; width:58px; text-align:left; }
+  .arcTop span{ flex:1; text-align:right; color:#ffd76e; }
+  .arcTop i{ font-style:normal; width:58px; text-align:right; color:#6fb8ac; }
+  .arcCoin{ margin-top:6px; font-size:31px; color:#fff; animation:mBlink 1.2s steps(2,start) infinite; }
+  .arcGain{ font-size:25px; color:#3ee67a; }
+  .arcNote{ margin-top:4px; font-family:var(--font-body); font-weight:700; font-size:15px; color:#8fc9bf; }
+  .arcCount{ font-size:130px; line-height:1; color:#ff4757; }
+  .arcScore{ font-size:37px; color:#fff; }
+  .arcBtns{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+  .arcName{ display:flex; justify-content:center; gap:16px; margin-top:8px; }
+  .arcSlot{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .arcSlot b{ font-size:58px; font-weight:400; line-height:1; color:#fff; }
+  .arcSlot.on b{ color:#ffd76e; }
+  .arcSlot button{ width:48px; padding:3px 0; color:#9ff5e0; background:#0d2a35; border:1px solid #2c6a70; border-radius:4px; cursor:pointer; }
+  .arcPrizes{ display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+  .arcPrize{ display:flex; align-items:center; gap:10px; padding:7px 12px; font-family:var(--font-head); font-size:23px; color:#fff; background:#0d2a35; border:1px solid #2c6a70; border-radius:6px; cursor:pointer; }
+  .arcPrize u{ width:24px; height:24px; border-radius:3px; }
+  .arcPrize b{ flex:1; font-weight:400; text-align:left; }
+  .arcPrize span{ color:#ffd76e; }
+  .arcPrize.off{ opacity:.45; cursor:default; }
+  .arcPrize.own span{ color:#3ee67a; }
   .lkRow{ display:flex; align-items:center; gap:8px; font-family:var(--font-body); }
   .lkRow b{ width:78px; font-size:14px; color:var(--text-dim); letter-spacing:1px; }
   .lkRow span{ display:flex; gap:4px; flex-wrap:wrap; }
@@ -456,6 +486,13 @@
       <div class="row"><button class="btn" id="btnStoryOk">CONTINUAR</button></div>
     </div>
     <div id="scrSeed" class="overlay hidden"></div>
+    <div id="scrArcade" class="overlay hidden">
+      <div class="arcCab">
+        <div class="arcMarquee">ARCHIPIÉLAGO</div>
+        <div class="arcScreen"><div id="arcBody"></div></div>
+        <div class="arcBtns" id="arcBtns"></div>
+      </div>
+    </div>
 
     <div id="homeHud" class="hidden">
       <div class="homeInfo">
@@ -488,13 +525,14 @@ const ASSETS={"pulso_hadal": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggA
 (function(){
 "use strict";
 const DEBUG = /[?&]debug/.test(location.search);
+let arcadeRun=false, arcDemo=false;   // partida en la máquina recreativa, y su demostración (p9u_arcade.js)
 
 /* ===================== PERSISTENCIA ===================== */
 const SAVE_KEY='omnialoya_save_v4', OLD_SAVE_KEY='omnialoya_save_v3';   // se mantienen para no perder la partida guardada
 const UP_KEYS=['hp','dmg','speed','shield','ally','regen','lives','cloak','mate'];
 /* Cada VEHÍCULO tiene sus propias mejoras (save.upV[vehículo]); el Orbe Vital y el aliado son de todos (save.up) */
 const VEH_UPS=['hp','dmg','speed','shield','ally','regen','cloak'], VEHICLE_IDS=['mech','tank','jeep','moto'];
-function upOf(id,ch){ return VEH_UPS.includes(id)?((save.upV[ch||sel().char]||{})[id]||0):(save.up[id]||0); }
+function upOf(id,ch){ if(arcadeRun) return 0; return VEH_UPS.includes(id)?((save.upV[ch||sel().char]||{})[id]||0):(save.up[id]||0); }
 function vehLevel(ch){ return VEH_UPS.reduce((n,k)=>n+((save.upV[ch]||{})[k]||0),0); }
 /* NIVEL DEL VEHÍCULO (1-10, save.vtier): como las tropas de Clash of Clans, cada nivel cambia su DISEÑO y sus HABILIDADES.
    VEH_TIERS[vehículo][nivel] dice qué tiene ese nivel (los que no aparecen usan el diseño y armas de siempre). */
@@ -577,7 +615,7 @@ const VEH_TIERS={
   moto:tierTable(MOTO_STEPS),
   mech:tierTable(MECH_STEPS),
 };
-function vehTier(id){ return (save.vtier&&save.vtier[id])||1; }
+function vehTier(id){ return (!arcadeRun&&save.vtier&&save.vtier[id])||1; }
 function tierInfo(id,tier){ const T=VEH_TIERS[id]; return (T&&T[tier||vehTier(id)])||{}; }
 const DEFAULT_SEL={char:'jeep', mate:'car', mode:'robots', tutorial:true};
 function blankUp(){ const o={}; UP_KEYS.forEach(k=>o[k]=0); return o; }
@@ -606,6 +644,8 @@ function normalizeSave(s){
   s.worlds=dw;
   s.rescuedTotal=s.rescuedTotal||0;
   s.sectorBest=s.sectorBest||0;
+  s.arcade=Object.assign({tickets:0,prizes:[]},s.arcade||{});
+  if(!Array.isArray(s.arcade.top)) s.arcade.top=[['ISF',6000,6],['MNT',4500,5],['RSC',3000,4],['BOT',1500,3],['ORB',500,2]].map(([n,p,l])=>({n,s:p,l}));
   s.loreSeen=!!s.loreSeen;
   s.minerals=Object.assign({},s.minerals||{});
   if(s.vol==null) s.vol=1;
@@ -622,7 +662,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ look:p.look, work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, sectorBest:p.sectorBest, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, sectorBest:p.sectorBest, arcade:p.arcade, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -635,7 +675,7 @@ function ensureAudio(){
   if(actx && actx.state==='suspended') actx.resume();
 }
 function beep(freq,dur,type,vol,slideTo,delay){
-  if(!actx || !save.sound) return;
+  if(!actx || !save.sound || arcDemo) return;
   const v=(vol||0.05)*(save.vol==null?1:save.vol); if(v<0.002) return;
   const t0=actx.currentTime+(delay||0);
   const o=actx.createOscillator(), g=actx.createGain();
@@ -646,7 +686,7 @@ function beep(freq,dur,type,vol,slideTo,delay){
   o.start(t0); o.stop(t0+dur+0.02);
 }
 function noise(dur,vol,freq){
-  if(!actx || !save.sound) return;
+  if(!actx || !save.sound || arcDemo) return;
   const v=(vol||0.1)*(save.vol==null?1:save.vol); if(v<0.002) return;
   if(!noiseBuf){
     noiseBuf=actx.createBuffer(1,actx.sampleRate,actx.sampleRate);
@@ -2587,7 +2627,7 @@ function updateEscort(dt){
 
 /* ===================== ALIADO ASIGNADO ===================== */
 function makeMate(kind,x,y,lvl){
-  const hpMul=1+save.up.mate*0.3;
+  const hpMul=1+(arcadeRun?0:save.up.mate)*0.3;
   const m={kind:'mate',mk:kind,lvl:1,x,y,vx:0,vy:0,alive:true,angle:-Math.PI/2,aim:-Math.PI/2,flash:0,fireCd:30,walk:0,tread:0,trail:[]};
   if(kind==='car'){ const T=tierInfo('car'); Object.assign(m,{radius:11,mass:1.8,hp:70*hpMul*(T.hpMul||1),speedMax:3.3,accel:0.3,friction:0.88,cannonCd:60,tier:vehTier('car'),T,fireBase:T.fireCd||7,ramCd:0,rocketCd:90}); }
   else if(kind==='ninja') Object.assign(m,{tier:vehTier('ninja'),T:tierInfo('ninja'),invis:0,cloneCd:240,clones:[],radius:9,mass:1,hp:55*hpMul*(tierInfo('ninja').hpMul||1),speedMax:3.6,accel:0.45,friction:0.84,dashCd:0,nadeCd:90,slashCd:0,flankSide:1,flankT:200,dash:0});
@@ -3179,9 +3219,10 @@ function spawnSquad(){
 let dropsInAir=0;
 function survDropSquad(ground,size,sid){
   let s=null;
+  const o=player.alive?player:landing;   // al empezar la isla aún no has aterrizado
   for(let i=0;i<40&&!s;i++){
-    const a=rand(0,Math.PI*2), d=rand(460,720), q=randomWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,80);
-    if(q&&(!orb||Math.hypot(q.x-orb.x,q.y-orb.y)>320)&&Math.hypot(q.x-player.x,q.y-player.y)>400) s=q;
+    const a=rand(0,Math.PI*2), d=rand(460,720), q=randomWalkable(o.x+Math.cos(a)*d,o.y+Math.sin(a)*d,80);
+    if(q&&(!orb||Math.hypot(q.x-orb.x,q.y-orb.y)>320)&&Math.hypot(q.x-o.x,q.y-o.y)>400) s=q;
   }
   if(!s) return false;
   let hasSpotter=false;
@@ -3193,7 +3234,7 @@ function survDropSquad(ground,size,sid){
     addLob({x0:p.x+rand(-40,40),y0:p.y-420,x1:p.x,y1:p.y,dur:70+i*8,h:30,owner:'n',kind:'drop',onLand:l=>{
       dropsInAir=Math.max(0,dropsInAir-1);
       const e=addEnemy(id,l.x1,l.y1,sid,true); e.noCount=false;   // ya se contó al soltarlo
-      e.ai='hunt'; e.aware=1; e.lastKnown={x:player.x,y:player.y}; e.spawnGrace=40; }});
+      e.ai='hunt'; e.aware=1; e.lastKnown={x:o.x,y:o.y}; e.spawnGrace=40; }});
   }
   S.spawn(); return true;
 }
@@ -5358,6 +5399,7 @@ function render(){
   drawMuzzles(cx,cy);
   drawAlarmHud();   // p9_campaign.js
   drawSectorHud();   // p9t_sector.js
+  drawArcadeHud();   // p9u_arcade.js
   drawScreenFx();
   drawReticle();
 }
@@ -7013,11 +7055,11 @@ function deliveryPoints(){
 /* ---------- misiones, raciones y resultados ---------- */
 function resetRun(){
   score=0; wave=1; combo=0; comboTimer=0; runWork=0; runOres={}; shake=0;
-  lives=3+(save.up.lives||0)+(save.home.house>=4?1:0);
+  lives=arcadeRun?3:3+(save.up.lives||0)+(save.home.house>=4?1:0);
   rescued=0; weaponLvl=1; survLvl=0; sector=null; mate=null; mateTimer=0; mateLvl=1;
   respawnTimer=0; gameOverT=0; helis=[];
   player=makePlayer();
-  applyRations();
+  if(!arcadeRun) applyRations();
 }
 function applyRations(){
   const pack=save.home.pack||[]; if(!pack.length) return;
@@ -7067,6 +7109,7 @@ function showResults(o){
 function missionFailed(){
   const m=mission||{type:'arch'};
   if(m.type==='sector') return sectorLost();
+  if(arcadeRun) return arcadeDown();
   const w=bankRun();
   const stats='Puntuación: <span style="color:var(--gold)">'+score+'</span> · WORK: <span style="color:var(--gold)">◆'+w+'</span> · '+(survLvl?'Nivel: <span style="color:var(--gold)">'+survLvl:'Rehenes: <span style="color:var(--gold)">'+rescued)+'</span>';
   const home=['⌂ VOLVER A LA BASE',()=>enterHome('triste'),false];
@@ -7095,6 +7138,7 @@ function finishTutorial(){
 }
 function abandonMission(){
   if(sector) return sectorAbandon();
+  if(arcadeRun) return arcadeOver();
   bankRun();
   enterHome();
   announce('MISIÓN ABANDONADA','#ff8a8a','El WORK recogido se ha guardado');
@@ -7126,7 +7170,6 @@ function renderWorldMap(){
     if(m==='home') closeHomeUI();
     else if(m==='tutorial') startMission({type:'tutorial'});
     else if(m==='sector') startMission({type:'sector'});
-    else if(m==='arch'){ save.archPlayed=true; saveSave(); startMission({type:'arch'}); }
     else if(/^w\d+c?$/.test(m)){
       const id=parseInt(m.slice(1),10);
       if(worldUnlocked(id)) startMission({type:'world',world:id,section:m.endsWith('c')?worldSave(id).best:1});
@@ -7140,10 +7183,7 @@ function opsPanelHtml(k){
   if(k==='base') return head('🏠 BASE ISLEFORGE','Tu isla hogar')+'<div class="wmDesc">Taller militar con su garaje, tu casa y el huerto. Aquí vuelves después de cada misión.</div><div class="row"><button class="btn small" data-m="home">QUEDARME EN LA BASE</button></div>';
   if(k==='tutorial') return head('📘 ISLA DE ENTRENAMIENTO'+(s.tutorial===false?' <span class="wmOk">✔</span>':' <span class="wmTag">RECOMENDADO</span>'),'Islote junto a la base')+
     '<div class="wmDesc">Isla abierta para aprender: moverte, disparar, el ataque en arco, los rehenes, el sigilo, tu aliado y el Pulso Hadal.</div><div class="row"><button class="btn small" data-m="tutorial">ENTRENAR</button></div>';
-  if(k==='arch') return head('♾️ ARCHIPIÉLAGO · SUPERVIVENCIA','Las islas del este')+'<div class="wmDesc">Sin rehenes: aguanta isla tras isla (jefe cada 5). Cada isla es un nivel más para todos, en vida y daño: enemigos +'+SURV_PCT.enemigos+'%, tú +'+SURV_PCT.tu+'% y tus aliados +'+SURV_PCT.aliados+'% por nivel. Récord: nivel '+save.bestWave+'.</div><div class="wmDesc">Clima posible: '+weatherIcons('arch')+'</div>'+(depositMinerals('isla').length?'<div class="wmDesc">⛏ '+depositMinerals('isla').map(minName).join(', ')+'</div>':'')+
-    '<div class="row"><button class="modeBtn'+(s.mode!=='tanks'?' sel':'')+'" data-mode="robots">🤖 ROBOTS</button><button class="modeBtn'+(s.mode==='tanks'?' sel':'')+'" data-mode="tanks">🛡️ TANQUES</button></div>'+
-    '<div class="row"><button class="btn small" data-m="arch">JUGAR</button></div>';
-  if(k==='sector') return head('🧭 EXPEDICIÓN <span class="wmTag">PRUEBA</span>','Islas sin cartografiar')+'<div class="wmDesc">Cada isla se genera al llegar, y cada sector es más peligroso y paga más que el anterior. El botín solo es tuyo si te saca el helicóptero: si caes o abandonas, salvas el '+SEC_KEEP*100+' %.</div><div class="wmDesc">Sector más lejano: '+save.sectorBest+'</div><div class="row"><button class="btn small" data-m="sector">SALIR DE EXPEDICIÓN</button></div>';
+  if(k==='sector') return head('🧭 EXPEDICIÓN <span class="wmTag">PRUEBA</span>','Islas sin cartografiar')+'<div class="wmDesc">Cada isla se genera al llegar, y cada sector es más peligroso y paga más que el anterior. El botín solo es tuyo si te saca el helicóptero: si caes o abandonas, salvas el '+SEC_KEEP*100+' %.</div><div class="wmDesc">Sector más lejano: '+save.sectorBest+'</div><div class="wmDesc">⛏ Minerales: cuanto más lejos, mejores</div><div class="row"><button class="modeBtn'+(s.mode!=='tanks'?' sel':'')+'" data-mode="robots">🤖 ROBOTS</button><button class="modeBtn'+(s.mode==='tanks'?' sel':'')+'" data-mode="tanks">🛡️ TANQUES</button></div><div class="row"><button class="btn small" data-m="sector">SALIR DE EXPEDICIÓN</button></div>';
   if(k==='ocean') return head('🌊 ???','Bajo el océano')+'<div class="wmDesc">Algo brilla en el fondo del mar, bajo la niebla... Dicen que ahí abajo está <b style="color:#7fd8ff">BÉNTICA FANTASMA</b>, la ciudad que extrae la Afotita.</div><div class="wmDesc" style="color:var(--gold)">Primero hay que liberar la superficie.</div>';
   const w=WORLD_LIST.find(x=>'w'+x.id===k); if(!w) return '';
   const sv=worldSave(w.id);
@@ -7880,7 +7920,6 @@ function opsPinList(){
     {k:'tutorial',pos:OPS_PTS.tutorial,label:'📘 ENTRENAMIENTO',cls:tutDone?'done':'avail',play:true},
     ...WORLD_LIST.map(w=>{ const un=worldUnlocked(w.id), sv=worldSave(w.id);
       return {k:'w'+w.id,pos:w.pos,label:(un?w.icon:'🔒')+' MUNDO '+w.id,cls:!un?'locked':(sv.cleared?'done':'avail'),play:un}; }),
-    {k:'arch',pos:OPS_PTS.arch,label:'♾️ ARCHIPIÉLAGO',cls:'',play:true},
     {k:'sector',pos:OPS_PTS.sector,label:'🧭 EXPEDICIÓN',cls:'avail',play:true},
     {k:'ocean',pos:OPS_PTS.ocean,label:'🌊 ???',cls:'locked',play:false},
   ];
@@ -8265,7 +8304,7 @@ weather.id=weather.prev=homeWeatherNow();   // al arrancar, el clima que haga en
    - En las misiones hay YACIMIENTOS: rocas sólidas de 2x2 casillas. Al dispararles se agrietan y, al
      romperse, sueltan trozos que recoges pasando por encima (como el WORK). Se guardan al volver a la base.
    - Cada lugar tiene sus minerales: la playa y la jungla dan materiales de obra y metales comunes,
-     la fábrica metales, y las islas del Archipiélago las gemas y la salmuera (litio).
+     la fábrica metales, y las expediciones las gemas y la salmuera (litio).
    - Sirven para mejorar la CASA (materiales de obra) y el TALLER MILITAR (metales y gemas, a partir del
      segundo nivel de cada mejora: el primero sigue costando solo WORK). */
 const MIN_SPR={"piedra":{"roca":["...........aa...........",".........651118.........",".......41bbbbb900.......","......16bbbbbbbb81......",".....3abbbbbbbbbb75.....","....19bbbbbbbbbba782....","...63bbbbbbbbbb977881...","...1abbbbbbbbba7888821..","..0aaaa7abbcb978878870..","..0aa77aaa87787ba98871..",".69a988aaacdddaba888612.",".18889ccccccddb9a999931.","a1889ccccccccc99b9993314","0188bccccddcb999b9993324","032bbbccddda99999aa65534","0335bbbbddd9999999955334","026668bb7679999993333336","11666651222aaa8562223336",".1556555555333333222220.","..01333555333333322210..","...112232233333321200...",".....000000133320001....","..........100000........"],"pal":["#1a1b27","#282b36","#333844","#393e4a","#3f3f45","#3e4550","#444c55","#48575f","#4d5d65","#5a6970","#68767d","#77868d","#7e8c92","#829096"],"trozo":["..........532111147.......",".........625667775433215..",".......526666777788888864.","......2688887777778888883.",".....488888887788777778432","....2578888888877777775331","..617777888888888777753331","..028777777888888898333321","..02899977777879994443331.","..5435559999997465444441..",".4665333333333344444442...","2758999933333333333322....","15549999333333333223......","314435543333333112........",".31134442111112...........","....111123................"],"palT":["#121420","#1c1e2a","#2a2e38","#393c47","#414650","#4d565f","#5e6a71","#738187","#77858a","#86949a"]},"arena":{"roca":["...............00000..........","..............169a671.........","...........217b679cdd70.......",".........202ddb77acdd620......",".......406dddd779ccdc5550.....",".....518ddddd986bccd75560.....",".....2bcdddda98acccb655511....","....2cccddc9888bccc9653342....","...2ddddda9999bccb863335541...","..27ddda89cb89cca86634553340..","..1ddd88aa777ccc644355545660..",".31c98bb899abcb8578864477861..",".07878868bccca553886447887621.","0156688bcccc7766797599aab7621.","04669ccccca56dba994bcccbb8453.","0559ccccc956cdd9877bcccbb83530","0a6bccca859bcdb767689bba834430","098bbba755accc8997666998444420","0889a96659dda6acba764674445310","0699755479986bcccca75444356210","00a965438986abbbbcb84444674210",".07665246757aaaabb964444673210",".06542366448679a9766523453320.",".31542455399999a555552353222..","..04425536999998555542242220..","..0323543689998555543223210...","...122332687798555533222210...",".....0324667a9655533222100....","......113556a665533221........","........0034444322210.........","..........000000000..........."],"pal":["#3a1e14","#604133","#825b46","#986d52","#a97e5c","#b68965","#c1966d","#caa075","#d3a97a","#ddb583","#e5bf8c","#ecca96","#f2d5a3","#f7e0b3"],"trozo":[".......2222..............","......399951.............","....369999962............","...35999988815...........","..259995487750...........","..399954787760...........",".2799887779870....322....",".19977777798711..29980...",".5976647779866127899980..",".9975467778857117899985..",".8999887776677862688875..",".5888786778888881477771..",".1777755788898888034421..","..15664888899778800000...","...214788886747740..24431",".....3167889776530.467981",".......1168864431..788974","..34434400433200...577872",".5999951..0000.....236632","37999860.............000.","44888640......764........","5.365430.....6885........","...1430.....265650.......","....22.......2331........","..............0.........."],"palT":["#3c2316","#523725","#5b4437","#715440","#85684e","#9d8064","#b59472","#d0af86","#e5c79a","#f7e4bc"]},"calcita":{"roca":["...............00000..........","..............13a85a200.......","............01cb88cddc00......","..........10ddc98adddc80......",".......200bcdda8acdddb650.....",".....310cddddc8abdddb66510....","....128dddddc89ac452a65550....","....16dddddbaaa94bd2555445....","...29ddddcaaba57dcc72445643...","..11dddcbadd94cdcd7924554351..","..0cdd9abcb57ddcdd67725545640.","..1bcaabb94ddcccdc55914888860.",".068888a47ddcccdd656736888880.",".0568883cdccccddd556753aaa9612","04588c6cbbcdddddd666791bcb8550","0558cdac977779dd79667b47ca5550","086bcdd2977777b63b9779b1a55550","086accb1977799c5334c99b2546630","068abba2997779d3443479b7467640",".0aba6662c799c6334444579267540","00aaa6542b999d3333455566267530",".09986343b99bc3334455722466320",".06654354c99c63454475245554220","..06554651bbb3344573233663220.","..05534671cbc344692555352321..","..004245529c5357225565243210..","...01233432d456246765423320...",".....023331953156764332200....","......10341432565533321.......",".........021234333220.0.......","..........0000000000.........."],"pal":["#442c21","#6d5a4c","#89796b","#9c8e7e","#ac9e8c","#bdad9a","#c7b9a6","#cfc6b6","#dac8af","#dbd1c0","#e8dac1","#ebe0cd","#f4ead9","#fbf5e6"],"trozo":[".......2221...............",".....4277772..............","....389877852.............","..333986667914............","..279966666870............","..49996666678.............",".1999996666681...32112....",".1999798666683..3299704...",".4999669776678.17999970...","19997666976678308999984...","19976666697777861899985...","16966666678777882467774...",".2866666669977888235420...","..156666777988888111013...","...115666768988760332554..",".....32666688966404599983.","....4422466675540.47888840",".13575..01555200..36778740",".499997............157752.","38989860......22......00..","45889650.....2763.........",".1467630.....79843........","..2253......376651........","....21......43454.........","..............11.........."],"palT":["#402a1e","#544135","#655042","#7a6556","#8e7a6a","#a7927e","#beae97","#d1c1ab","#e3d7c2","#f7f1e2"]},"yeso":{"roca":["...............00000...........","...............377671..........",".............2a667ccdb0........","..........00ccc658ccd830.......","........00ddcc955cccc6440......","......10ddddcc66accc854420.....",".....18ccdddb787bccc654330.....","....19ccddc9687bccc9643233.....","...18dddcb96969ccc763223431....","..11dddc98aa76bcb6541244323....","..0ddd878b665bbb6422334235530..","..1aa78c7778abb7527654356753...",".05877866bbcca642376435777550..",".0465598cccc75555774578aa7640..","04458bcccca55dc97848bbbbb76250.","0346bbbcc975cdd77639bcbbb73350.","0a4abbbb8649ddb656568bba9222500","0979bba6537cdd78a75448973333300","0887ab5536cd979cca6554522335200","00888444489a58bcccb644332255100","00aa643257969bbbbcb943223762100",".05543224554aaabba874223473210.",".04432144427559ba7655224432210.","..0333235278889a5444412321120..","..03222323889989444451221110...","...0313323789955444421112110...","....111114566a94444221111100...",".....011255589544431111100.....","......002355865444211100.......","........00123333211100.........","..........000000000............"],"pal":["#40281e","#896f56","#9e8162","#ad9171","#b89e7b","#c2aa86","#cbb591","#d4bf9c","#dcc7a4","#e2cfab","#ebd9b6","#f3e4c2","#f6e8ca","#f8eed4"],"trozo":[".....34443...............","....44999822.............","...399999871.............","...999999764.............",".389999987650............","3599888879870.....22.....","2999888768772...26642....","3999988668875..4799831...","9999888669876126889961...","7788887667766635679865...","7777887677899771476664...","2777865589999775145551...",".16666888899977611111....","..145687889987750..1332..","...12566798777630..36862.",".....225577554310.477975.",".2223..1366431....6767631",".79984......1....216665..","4999860.............00...","5888650......22..........","2665540.....3982.........","..2441......78761........","...00......24664.........",".............1..........."],"palT":["#362114","#4a3528","#624d3e","#796452","#97816a","#bba487","#d5c1a0","#e5d4b3","#f2e4c3","#f9f0d5"]},"talco":{"roca":["...............000000.........","..............16665600........","...........215a767ccd60.......",".........102cca68accc730......",".......203bbcc878cccc6550.....",".....211cddcca68bccd76541.....",".....18cddddb789cccb75543.....","....19ddddc9788bccb8554342....","...2cdddda8999accb765335441...","..13dddb7aca7accb7653454333...","..0ccb78a9777ccc765455544550..",".21b87aa889abcb8667765456661..",".07667878cccb9654787566777621.","0156678acccb76566876899997651.","04558bbccc957b98885acddba85532","0557ccccb856cdc8766bdddca74540","076bccca868bccb76768accb844540","066bba9766acba8796767887555530","0668987568cc87abba765664556530","0688756569b979bccc965555556430","008975537987abbbccb75545566320",".08765356767aaabba975455565320",".06553366468999aa777644555330.","..255346648999aa7666644543320.","..04435645888899666664343321..","..03334535888896666544342210..","...023433577798666644323220...","....1033366799666644322200....","......0145669666544322........","........00334444333200........","..........0000000000.........."],"pal":["#422a1f","#6f5444","#977d6a","#b0977f","#c4ac92","#d2bca1","#ddcab0","#e7d6bc","#eedec5","#f2e3cc","#f6ead4","#f8efdb","#faf3e2","#fcf7e8"],"trozo":[".......2211...............",".....4388851..............","....358999862.............","...3399999880.............","..269999998750............","...99999988770............","..899999777771....2212....",".18999877677731.4288704...",".59988777677760.6899970...",".8998877766776217899975...",".89988677767877636788750..","16898876778888883566665...",".2777777778998877245520...","..06667777789988710001....","...1157778768876604425541.",".....216787677664044689810","..3....246776555004788975.","..3555..12555200..36778750",".5999862..000.....1156752.","46999860.............000..","45887760.....266..........",".1366630.....6985.........","..22441.....376661........","....2.......4.5540........","..............10.........."],"palT":["#452f22","#574133","#695242","#806753","#8a7567","#a89078","#cebca5","#e4d4bf","#f3e8d6","#fbf7eb"]},"hierro":{"roca":["..............00000...........",".............31887540.........","...........627586abbb00.......",".........417ba587abbb20.......",".......21aabb988abbb52220.....",".....409bbbbb987bbb944220.....","....c5abbbbb9c89bbb244221.....","....2aabbba98c9abba4222660....","...4bbbbba7dc8bbb542213661....","..1bbbba7ccc9bbb54223666121...","..2bb979d8855ab5421666614420..","..7977cc5779a9742ccc63454420..","12888cc89aaa94226cc634555440..","1688457abbb94386cc6255997421..","188479aaba44cdccc84aaaa994230.","1849aaaa744cdddcc659aaa992180.","2379aa95428ddd6388855797513210","1557aa5428cddc5958864444163210","0755a44468dd859a97886423612210","079722228cc857abaa466333322210","029522168c857999aa523662452200",".15422368629999aa544266244220.",".1222388814445aa4442236242210.",".112236632544574222213632220..","..14336334555552222413611200..","..1246631455544222221132220...","...133314444572222211111110...","....1131244475222211111103....","......01122444422211101.......",".......001222422221001........",".........0000000000..........."],"pal":["#1a0606","#361919","#4d2323","#3f3131","#612d28","#74372c","#504948","#814435","#685953","#8b4e3c","#9b5741","#a7634c","#807770","#d0c5b3"],"trozo":[".....335..............","..74888444......9454..",".4688988886.....49963.",".287999898835...797631",".2879995579831..233210","1289777774444...02210.","12777466668630..1000..",".1226646677320........",".2123344522220........","..012463233210..3323..","...1233332110..189942.","...001221100...699741.","....000000...249777420",".............267755340","............0233433460","............0333334740","............022222100.",".............10001101.","..............10000..."],"palT":["#291513","#37201d","#452822","#533228","#633d31","#564644","#74412c","#745144","#8d5139","#8c5e4a"]},"cobre":{"roca":["..............0273210.........","...........1043797a840........","..........14a8795bba810.......","........16aba8797bba62210.....","......13abbba799aaa822220.....",".....27abbbb79c7aab222220.....","....17aabaa89c9bbba2222570....","...1abbba75cc7abb422225991....","..18bbba7ccc78ab22221599510...","..28aa49dc9788b4222299932301..","..4647cc77764aa22cc999333320..",".1559cc58abbb6433ccc52343220..","11995538aaaa6335ccc233444220..","199548aaaa43cccccc36666662110.","19768a88a63cddccc348886663150.","17388888425cddc599366666613500","14488a8325cddc443c944244295100","044486325cdd936647c92223931210","044442229cd5368886299219522210","02662225ccc7666666329993222210","01422219cc2664488622299122110.",".1222199912323688222199121110.",".122259952221266222115511110..","..03355532333342222315911210..","..1335551233334222221351110...","..0123522223342222211111110...","....13212222442222111111012...",".....00122233222211111000.....","......0002222222211000........",".........00000000000.........."],"pal":["#210e0f","#412121","#522e2f","#693b33","#704940","#974b30","#805e4e","#925943","#8e6753","#ba5b38","#996e58","#9f735b","#dc7b4b","#f9c491"],"trozo":["......31111...............",".......87970..............","....1.6899730.............","...1466677741.............","..142224777420............","..344244455210....11......",".05557442162220..1551.....",".07877542164440138887.0...","044244442255840166687511..","044244664283342026247521..","046222289844446501444420..",".1444429976666575022200...","..01554174444577700010....","...045424442457330...011..","....10232444643310..35830.","......001264221101.1778611","..1110..01770100...3774201","..46683...0000.....015220.","53668530............0000..","15844520......01..........",".1552220.....1931.........","..00110.....173771........","....00......195551........",".............0011........."],"palT":["#261310","#3e2b24","#41483e","#6a4835","#535f4f","#81644c","#688064","#ad6c49","#998a65","#cb8857"]},"estano":{"roca":["..............11733.1.........","............133b98aa70........","..........1587597aaaa10.......","........178aa8768aaa72211.....","......13aaaaa5b78aa833320.....",".....37aaaaa7b97aaa333330.....","....17aaaaa76c98aaa2332490....","...2aaaaa87cc98aa732224991....","..2aaaa88bcc68aa53322999931...","..2aa877dd967aa7322299932311..","..3757cd677757732ccc9b435330..",".196bcc678aaa5334ccc93353330..","12999558aaa87244ccc443555330..","199957aaaa54bdcccc47788783210.","2b678aaaa74bdddcc457878773190.","24588887549cddc4cb455887516610","24578a7526cddc474cb33333294210","055587524cddc47876cb4332942210","05555222bcdb4788874bb329422210","01773226bcc6788778549bb4222210","0173322bbb266677a73329b233220.",".132229bb2244378732229b232220.",".122249962332377222216622221..","..23499643555352222316612220..","..1334662355535222221261220...","..1224412333352222211111110...","...11241333355222211111110....",".....00112355332211111100.....","......0012323332221100........",".........00000000001.........."],"pal":["#1a0809","#301a1d","#41292d","#523233","#4f4546","#68433e","#625b5a","#7b5549","#8b6150","#706f6f","#9c6b55","#838381","#9fa09d","#e9eae4"],"trozo":[".......44245..............",".......88881..............","......9.88852.............",".....99.88653.............",".....79.866732............",".....7.....932....42......",".4........99322..4.62.....",".4.......377..42...88.1...","1..7......9...22...66644..","4.7............2....6..3..","2.9.............00....30..",".4.............6513..21...","..23555.....9966512121....","..34555....9776650..4444..","....22237..9955542..56652.","......00333535342..468663.","..4424..10552332...666..24","...9992...1100.........30.","5.999651.............030..","45777540......44..........",".4555440.....3..4.........","..22442.....4....2........","....11...........2........",".............3323........."],"palT":["#160c16","#231215","#2b1c23","#2e2939","#3c2b2a","#5d4744","#7a5a4d","#5c6173","#9c775e","#909eac"]},"oro":{"roca":["................0000..........","..............0abaaa0.........",".............accaaabb8........","...........8ddcbaaaaab........",".........6ddcccaaaaaab80......",".......3dddccccaaaaaba56......","......bdcddcccaaa66ab6456.....",".....ddccccccbaa6dd6844446....","....bdccddcbbb8bdddc6444261...","...adccccbbb88ddcd994364456...","...cccbbbbb6bdccdd7744664491..","...cbaaab86ddcccdb5794666576..",".09888a86bdccccdd54594668779..",".3866888ddcccdddd544948888971.","08668a6dccdddddd9754776aaa958.","0868ab6d99779cddcc75595aab5480",".888bb8c975579c749c75788a86470",".88abb89975579c2245c9796a66450","088bb884c7557c7222447774886350","08ab888495557c5224422598666440","00a8888297559d2542225592466430","00866844295799242225572446632.",".08474442957c4422257924466421.",".13443464979c4224574223486221.","..1333464779c442772233336311..","...34333429c545952336322621...","...03333329c559224446324210...",".....133332c74223466411110....",".......1132522433433211.......","..........11333333311.........","..........000000000..........."],"pal":["#291f1b","#59402c","#76491e","#775532","#8b5d2d","#a26e2a","#9b7949","#c08e3a","#b1925b","#d9ab50","#b5ab7d","#cabd84","#f0d672","#faec98"],"trozo":["...115991................","..298888991..............","..9877788881.............","6987777786661............","1987777893355............","09877779932354...........","09887789532234..289962...","0999999833223510888784...","06998434543335037877760..",".266433335544511378784...",".1553333336445400355430..","..25444334565560.12310...","...1445444457660...112...","....134444446764....8962.",".....21444434642..2887660","...212213443342...177665.",".288862.1000021...038653.","2888864.............1221.","2888740.......12.........","2565641......6962........",".135530.....68651........","...100......3442.........",".............11.........."],"palT":["#3e2419","#503626","#664a35","#7d5128","#925f2d","#ab793b","#c59d58","#f2d25f","#f4de81","#f8e9a3"]},"esmeralda":{"roca":[".......234.................",".....2ab9962...............","...4addc9a862..............","..4acddbaa7962.............",".3aa988aba76531............",".8aa7779bb765331...........","27799777ba76322451.........","253566777b85021365501......",".23331368ba50235766654.....",".12220137ab600256655684....","..33110068b81012566aa962...","..22011037a95113567cca651..","..2000005689731026adda862..","..1044003677773236adda9761.","..304300367777777adcc68862.",".05311115a967778acbbb658620","23533202ab76668bb8538679321","25533229cb667abb8100038a221","3788229dd877bab50000019911.","26863add976aa9420002008211.","23337bda998311100011016100.","122669a89a224000000002200..","1213677510088012221121000..","12115763111420121221100....",".010122111100111100000.....","..0100000111100..0.........","...0000001110..............",".....0000000..............."],"pal":["#082c29","#0b3a31","#0f4c38","#0f6340","#266c4d","#18804c","#1b9350","#1ea454","#32ab5e","#41ba67","#5acb72","#74e084","#97ec9d","#baf6bb"],"trozo":[".....9994................","..29877789...............","..8777777852.............","4977777775351............","4977777793134............","49777778911133...086.....","29877789411113..289982...","09999895311113.2887775...",".4891111131113..587775...",".23311111131110.148863...","..33311111331130.11322...","..13331111153340.........","....1331111354510........",".....11111113551...48886.",".......111111330...877530","..2632..1111111....46553.","..8886...0.........26551.",".888852..............00..","2588640......462.........",".23553.......886.........","..1331......46320........",".............22.........."],"palT":["#122521","#103b35","#224632","#13543a","#256442","#288253","#4b9e69","#35cb74","#66d68e","#99ecb5"]},"fluorita":{"roca":["...............0000...........","..............1bb8a61.........","...........11bb87aabc1........",".........11bcba78abb9a1.......",".......01ccb9aa8bbbbbb71......","......0bcbb99b88b99ab7521.....",".....6ccbbbbba8aa65b85552.....","....3b9bbbba8aa8bcc5745551....","...3b999bba8887bccc55444471...","..1b99bbaaba7bcbbc885444451...","..1cbbaaab75cbb9bc58444444a0..","..8baa8aa6acbb9cc65826654581..","01a878a74cb99bccc347a5665582..","0777786bcbbbcccc9645869667741.","0777895cbccccddd666574998a550.","0778995b86966bdd99955a6bb8420.","088a9b5a866669c33c965a5bb55410","1888aa8b86669b9313996787775420","0a88aa8b86669c6333369aa5567420","0aba8884a666bc13333346b4575420","07aaa874b666b633332457a4566410",".5878555a869b3332244a84556621.",".27774542b69b3322448245576220.",".34774554a6b9324478444485221..","..1544454a9c3444a54454454211..","..124244559b347a45557447210...","...1224444c9577455557442210...","....325444b8a455777542210.....","......12445745775554221.......",".......112224556342101........",".........1000000000..........."],"pal":["#100f36","#1f1e4f","#212b6e","#3c2770","#23377f","#2e438c","#4b3c99","#39539b","#4961ad","#7252c0","#5d73bf","#8479d5","#b293ec","#e9c8fc"],"trozo":[".....311113..............",".....689893..............","...399776783.............","..38987425771............",".379986222770............",".399985222280............",".699997222250....3770....","3999629422257..179998....","39992229442471.18999960..","39962222844558616999970..","19654222495557803788860..","3665544247755778116640...",".35444555577577810010....","..125544555877770.....33.","....1454445887640..199960",".....33444787621..198887.","..3223.13666401...168874.",".79998...0000.....138861.","3999881......3......0001.","3898760......163.........",".376740.....3898.........","..1640......69631........","...10.......1633.........",".............11.........."],"palT":["#1b163f","#2c2c55","#27337f","#3e3c67","#3e368a","#4c40a0","#53599a","#656eb8","#7f8dc6","#9bb1dd"]},"apatito":{"roca":["................0000..........",".............50baaab00........","...........a1ccc7bccc53.......","..........35dca99ccccc35......",".......30addcab9accccca3......","......33dcccacbabcccc9670.....",".....3ddcccccb9ba79ab74550....","....5dccccccbaaa9dd49556550...","...3cccccdbaaa9bbbdb65542708..","..88ccccdaaba6bbad7a45552470..","..0dcdbaaba79ba9bd4745554290..",".80baaaaa77db99ad74695585268..",".0a997a97dbaaabcd624965884695.",".397798adbabbccdd422948888975.","09799.4dabdddddd9924796aab9683","0978..7b97469addaa72294aac4250","0a8...8a742247d41ba7477aba6450","0.8...a7972249b1114b7497988450","0.a..aa4b7224bb11124a796688450","0...a8a497246b2112222499688550","00..8a7697467b14422246b148.530",".0.8875629469a222224671348.330",".0.585551b67b222124762336..333",".....5354769b462449233355...0.","..3..335546aa442aa23.353...0..","..0..333849b6669425..533..00..","...3.333529b67925....43...0...","....3035532a923.....3333.0....","......3333393.....333.33......",".......33033........0.........",".........8000000000..........."],"pal":["#152233","#09384e","#114b55","#28454b","#1c575f","#365858","#2a6567","#367376","#56756f","#458584","#60978e","#6aaca4","#88ad9f","#96cdc2"],"trozo":[".....1114................","..80399947...............","..599889995..............",".39777689881.............","4976666686780............","1966366683265............","19763366622371...1114....","1976636622223517589977...","09876663222337018898870..","08989892222355047888870..","42985766333655301789750..",".1255744666555300478411..",".522257466555570700100...","..002355475557701110058..","...43234555525530.8187750","....8403455723400.4988751","..434770323333200.1888740",".58885480020010...1187741","4889874...000......10311.","4888770......45......77..","4457750.....4897.........",".145520....578754........","..7000.....84754.........","............711.........."],"palT":["#0d263c","#1f3648","#103e52","#1a4c5b","#2e4c5a","#3a6063","#2a6a70","#4f7979","#6fa09a","#90cfc4"]},"salmuera":{"roca":[".......1.7ccccccc..........","......aaa111111117aca......","....c5111111111111115aa....","..7a1111122222222111111a...","..a111223699999986322111a..",".a1122689bddddddb9996221a..",".c12688ddddddbddbbdb88621c.",".c2669bdddbbbddbbbbbb9862c.",".a568bbbbbbbbbbbbdbbdd992a.","..6bbbbbbbbdbbbbbdbbbbbd170","..38ddbbbbbbbbbdbbbbbdd927.","..368dddbbbbbbbbbbdddb9627.","..348889bddddddddb999b4427.","..346888888888999889844427.","..344688899999999964444427.","0734444868b999bb6644444427.",".7344444444666644444994357.",".77444446644444684466643a..","0172444498444469444b44327..","..a73344464446964449442a...","..5aa23444444444444435a5...","..157a523333443344327a11...","...5557a75222222557a111....","....55555aaaaaa7751111.....",".....55555555551111111.....","......55555555511111.......","........5555515111........."],"pal":["#271c1e","#66544d","#4d635e","#2b7274","#1b8b8c","#7b665b","#35a599","#968779","#42c0a8","#55c9ae","#b5a695","#73d9ba","#d8c8b3","#a4ecd4"],"trozo":["..........863..........",".........89810.........","........7887101........",".......588830211.......","......99989836003......",".....89999994200.1.....","....68631297223........","...677632586211.0501...","..8768654621211..1.02..","0553423569961166...2420","1428619988982057..5.321","..14139851011..1.......","....365502731.56.......","....343424671.43.......","..........221.........."],"palT":["#a9abab","#b2b4b4","#bbbfbe","#c4c8c8","#d1d4d3","#dcdfde","#e5e7e7","#ebedeb","#eff1f0","#f4f6f5"]}};
@@ -8406,7 +8445,7 @@ function seedDepositsWorld(id){
 }
 /* ISLA CRÁTER (supervivencia): un fragmento del meteorito de la Afotita cayó aquí y su imitación convirtió la roca
    en todos los minerales. Están por ANILLOS: cuanto más al centro, mejores (y más lejos de tu base, que está en el borde).
-   Es el único sitio donde salen los minerales que no son piedra. Al empezar cada oleada se reponen los agotados. */
+   Las expediciones reparten estos mismos anillos: el sector 1 da el primero, y lejos de la base salen los mejores. */
 const CRATER_RINGS=[
   {u:[0.62,0.92], list:['piedra','arena','calcita','yeso','salmuera'], n:6},   // la salmuera: salinas junto a la costa
   {u:[0.36,0.62], list:['hierro','cobre','estano','talco'], n:5},
@@ -8414,6 +8453,7 @@ const CRATER_RINGS=[
 ];
 function craterU(c,r){ const S=islandShape; if(!S) return 0; const rx=ISLE_W(S.grow)*0.42, ry=ISLE_H(S.grow)*0.40; return Math.hypot((c+1-S.cx)/rx,(r+1-S.cy)/ry); }
 function seedCraterDeposits(){
+  if(arcadeRun) return;   // la máquina solo da puntos
   depState();
   for(const R of CRATER_RINGS){
     const have=depList.filter(d=>d.alive&&R.list.includes(d.min)).length, sel=[];
@@ -8427,9 +8467,13 @@ function seedDepositsStage(){
   const av=[{x:landing.x,y:landing.y,d:220}];
   if(mission.type==='tutorial'){
     placeDeposits(DEPOSIT_TABLES.tutorial,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],avoid:av,avoidRect:[landing.c-12,landing.r-19,landing.c+12,landing.r+1]});
-  } else if(mission.type==='arch'||mission.type==='sector'){
+  } else if(sector){   // los minerales de la isla cráter: cuanto más lejos llegas, mejores
+    const sel=[];
+    for(let i=0;i<6;i++) sel.push(pick(CRATER_RINGS[Math.min(irand(0,2),Math.floor(wave/2))].list));
+    placeDeposits(sel,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],any:true,avoid:av});
+  } else if(mission.type==='arch'){
     const list=(DEPOSIT_TABLES[era.id]||DEPOSIT_TABLES.isla).filter(inWorld), sel=[];
-    if(list.length) for(let i=0;i<(sector?4:2);i++) sel.push(pick(list));
+    if(list.length) for(let i=0;i<2;i++) sel.push(pick(list));
     placeDeposits(sel,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],avoid:av});
   }
 }
@@ -8450,17 +8494,16 @@ function hasOres(o){ return Object.keys(o).every(k=>(save.minerals[k]||0)>=o[k])
 function payOres(o){ for(const k in o) save.minerals[k]=(save.minerals[k]||0)-o[k]; }
 function oreCostHtml(o){ return Object.keys(o).map(k=>'<span style="color:'+((save.minerals[k]||0)>=o[k]?(MINERALS[k]?MINERALS[k].col:'#d9dde3'):'#ff6b6b')+'">'+(k==='lingote'?'▬ ':'⛏ ')+o[k]+' '+minName(k)+'</span>').join(' · '); }
 /* Almacén de minerales (se ve en el taller): icono con el trozo de cada mineral, cantidad y dónde encontrarlo */
-const ORE_WHERE={ piedra:'Isla de entrenamiento, Mundos 1, 3, 4 y 5, y el borde de la isla cráter', arena:'Borde de la isla cráter (Archipiélago)',
-  calcita:'Borde de la isla cráter (Archipiélago)', yeso:'Borde de la isla cráter (Archipiélago)', salmuera:'Salinas del borde de la isla cráter (Archipiélago)',
-  hierro:'Anillo medio de la isla cráter (Archipiélago)', cobre:'Anillo medio de la isla cráter (Archipiélago)', estano:'Anillo medio de la isla cráter (Archipiélago)', talco:'Anillo medio de la isla cráter (Archipiélago)',
-  oro:'Interior de la isla cráter (Archipiélago)', fluorita:'Interior de la isla cráter (Archipiélago)', esmeralda:'Interior de la isla cráter (Archipiélago)', apatito:'Interior de la isla cráter (Archipiélago)' };
+const ORE_WHERE={ piedra:'Isla de entrenamiento, Mundos 1, 3, 4 y 5, y expediciones', arena:'Expediciones desde el sector 1', calcita:'Expediciones desde el sector 1', yeso:'Expediciones desde el sector 1', salmuera:'Expediciones desde el sector 1',
+  hierro:'Expediciones desde el sector 2', cobre:'Expediciones desde el sector 2', estano:'Expediciones desde el sector 2', talco:'Expediciones desde el sector 2',
+  oro:'Expediciones desde el sector 4', fluorita:'Expediciones desde el sector 4', esmeralda:'Expediciones desde el sector 4', apatito:'Expediciones desde el sector 4' };
 function oreIconUrl(min){ const ck='url|'+min; if(tileCache[ck]) return tileCache[ck]; return tileCache[ck]=oreChunk(min).toDataURL(); }
 function storeHtml(){
   let h='<p class="secTitle">ALMACÉN DE MINERALES</p><div class="oreGrid">';
   MIN_ORDER.forEach(k=>{ const n=save.minerals[k]||0, M=MINERALS[k];
  const where=ORE_WHERE[k]||'';
     h+='<div class="oreCell'+(n?'':' none')+'" title="'+(M.veta?M.veta+' → '+M.name:M.name)+': '+where+'"><img src="'+oreIconUrl(k)+'" alt=""><b style="color:'+M.col+'">'+n+'</b><small>'+M.name+'</small></div>'; });
-  return h+'</div><p class="subtitle" style="font-size:12px">Rompe los yacimientos a tiros en las misiones y recoge los trozos. Pasa el ratón por un mineral para ver dónde se encuentra: casi todos salen en la isla cráter del Archipiélago. Las mejoras del taller los piden desde su segundo nivel.</p>';
+  return h+'</div><p class="subtitle" style="font-size:12px">Rompe los yacimientos a tiros en las misiones y recoge los trozos. Pasa el ratón por un mineral para ver dónde se encuentra: casi todos salen en las expediciones. Las mejoras del taller los piden desde su segundo nivel.</p>';
 }
 
 /* ===================== MUNDOS 3-5: PIEZAS COMUNES =====================
@@ -11201,10 +11244,11 @@ function castMission(cx,cy){
    La sala se centra en un mapa al menos del tamaño de la pantalla; lo de fuera es negro. */
 const INTERIORS={
   house:{name:'CASA', w:12, h:8, floor:'wood',
-    solid:[[1,0,3,2],[8,0,3,1],[5,3,2,2]],
+    solid:[[1,0,3,2],[8,0,3,1],[5,3,2,2],[5,0,2,2]],
     spots:[
       {id:'house', c:9.5, r:1.6, label:'COCINA Y DESPENSA · MEJORAR LA CASA', act:()=>{ renderHouse(); openHomeUI('scrHouse'); guideEvent('house'); }},
       {id:'bed', c:2.5, r:2.6, label:'DORMIR', act:sleepInBed},
+      {id:'arcade', c:6, r:2.6, label:'MÁQUINA RECREATIVA · ARCHIPIÉLAGO', act:()=>{ S.pickup(); openArcade(); }},
     ],
     paint:(g,o)=>{
       paintBlock(g,o,1,0,3,2,'#6a3a1c','#b8423a');                       // cama con manta roja
@@ -11212,7 +11256,9 @@ const INTERIORS={
       paintBlock(g,o,8,0,3,1,'#4a3424','#8a6a4a');                       // encimera de la cocina
       g.fillStyle='#2a2a2a'; g.fillRect((o.ox+9)*TILE+6,(o.oy)*TILE+8,18,14); g.fillStyle='#ff8a3a'; g.fillRect((o.ox+9)*TILE+9,(o.oy)*TILE+15,12,4);   // fogón
       paintBlock(g,o,5,3,2,2,'#5a3a20','#9a6a3a');                       // mesa
-    }},
+      paintArcade(g,o);
+    },
+    live:drawArcadeScreen},
   workshop:{name:'TALLER MILITAR', w:20, h:10, floor:'concrete',
     solid:[[1,0,5,2],[6,0,4,1],[11,0,8,1],[0,5,1,3],[19,6,1,3]],
     spots:[
@@ -12142,6 +12188,7 @@ function renderLook(){
   document.getElementById('lookFace').innerHTML=chips(LOOK_FACE.map(f=>f[1]),LOOK_FACE.findIndex(f=>f[0]===lookU.moodFix),'data-face');
 }
 function openLook(done){
+  arcadeSuits();
   lookW=Object.assign({},LOOK_DEF,save.look); lookDone=done; lookPose=0; lookSky=0; lookSpin=true; lookU.moodFix='normal';
   lookU.vx=lookU.vy=0; lookU.sc=null; lookU.prFr=null;
   applyLook(lookW); renderLook(); showOnly('scrLook');
@@ -12309,6 +12356,194 @@ function drawSectorHud(){
   ctx.fillStyle='#f5c518'; ctx.fillRect(bx+3,by+21,(bw-6)*clamp(k,0,1),2);
   ctx.restore();
 }
+/* ===================== MÁQUINA RECREATIVA =====================
+   El Archipiélago vive en una máquina del salón de tu casa: una partida rápida solo por puntos. Todos juegan igual (sin las mejoras
+   del taller, ni raciones, ni niveles de vehículo), con 3 vidas; al caer hay cuenta atrás para continuar perdiendo la mitad de los
+   puntos. No da WORK ni minerales: da boletos, que se cambian por trajes para TU PILOTO, y deja tus 3 iniciales en la tabla.
+   Si nadie la toca, se juega sola: arcadeRun y arcDemo (p2_core.js) apagan las mejoras y el sonido mientras tanto. */
+const ARC_TOP=5, ARC_CONT=600, ARC_IDLE=900, ARC_DEMO=1500, ARC_TICKET=500;
+const ARC_DEF=[['ISF',6000,6],['MNT',4500,5],['RSC',3000,4],['BOT',1500,3],['ORB',500,2]];
+const ARC_PRIZES=[{id:'oro',name:'TRAJE DORADO',col:'#f0c23a',cost:30},{id:'neon',name:'TRAJE NEÓN',col:'#2df5c8',cost:60},{id:'magma',name:'TRAJE MAGMA',col:'#ff4a1e',cost:100}];
+const ARC_ABC='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+let arcPhase='title', arcT=0, arcIdle=0, arcDemoT=0, arcGod=false, arcName=[0,0,0], arcI=0, arcWaveT=0, arcGain=0;
+
+const arcadeHi=()=>save.arcade.top[0].s;
+const arcTickets=(pts,lvl)=>Math.floor(pts/ARC_TICKET)+lvl;
+/* Dónde entra esa puntuación en la tabla (-1 si no entra) */
+function arcRank(top,pts){ if(pts<=0) return -1; const i=top.findIndex(e=>pts>e.s); return i>=0?i:top.length<ARC_TOP?top.length:-1; }
+/* Los trajes ganados aparecen en TU PILOTO */
+function arcadeSuits(){
+  const r=LOOK_ROWS.find(x=>x.k==='suit');
+  for(const p of ARC_PRIZES) if(save.arcade.prizes.includes(p.id)&&!r.c.includes(p.col)) r.c.push(p.col);
+}
+function openArcade(msg){
+  arcPhase='title'; arcIdle=0; arcGain=msg||0; state='arcade';
+  for(const k in keys) delete keys[k];
+  showOnly('scrArcade'); renderArcade();
+}
+function closeArcade(){ S.pickup(); closeHomeUI(); }
+function arcadeBegin(demo){
+  interior=null; arcadeRun=true; arcDemo=demo; save.archPlayed=true;
+  gameWrapEl.classList.add('arcadeOn');
+  startMission({type:'arch'});
+}
+function arcadeStart(){ S.upgrade(); saveSave(); arcadeBegin(false); }
+function arcadeWaveBonus(){ return 20*Math.max(0,60-Math.round((t-arcWaveT)/60)); }
+/* Sin vidas: se abre la cuenta atrás */
+function arcadeDown(){
+  if(arcDemo) return arcDemoEnd();
+  arcPhase='continue'; arcT=ARC_CONT; state='arcade'; showOnly('scrArcade'); renderArcade();
+}
+function arcadeContinue(){
+  score=Math.floor(score/2); lives=3; gameOverT=0; S.upgrade();
+  if(!orb) orb={x:landing.x,y:landing.y,r:14,pulse:24};
+  state='playing'; showOnly(null); respawnPlayer();
+}
+function arcadeOver(){
+  arcGain=arcTickets(score,wave); save.arcade.tickets+=arcGain; saveSave();
+  if(arcRank(save.arcade.top,score)<0) return arcadeLeave();
+  arcPhase='initials'; arcName=[0,0,0]; arcI=0; state='arcade'; showOnly('scrArcade'); S.upgrade(); renderArcade();
+}
+function arcadeSign(){
+  const top=save.arcade.top;
+  top.splice(arcRank(top,score),0,{n:arcName.map(i=>ARC_ABC[i]).join(''),s:score,l:wave}); top.length=Math.min(top.length,ARC_TOP);
+  saveSave(); S.upgrade(); arcadeLeave();
+}
+/* Vuelves al salón, delante de la máquina */
+function arcadeLeave(){
+  const gain=arcGain;
+  runWork=0; runOres={}; arcadeRun=false; arcDemo=false;
+  gameWrapEl.classList.remove('arcadeOn');
+  enterHome(); enterInterior('house');
+  human.x=(interior.o.ox+6)*TILE; human.y=(interior.o.oy+2.6)*TILE; snapCamera(human.x,human.y);
+  openArcade(gain);
+}
+function arcDemoStart(){
+  arcGod=god; god=true; arcDemoT=ARC_DEMO;
+  arcadeBegin(true); skipIntro();
+}
+function arcDemoEnd(){
+  god=arcGod; arcGain=0; mouse.down=false;
+  arcadeLeave();
+}
+/* La demostración: va a por el enemigo más cercano y dispara */
+function arcDemoBot(){
+  const p=player; for(const k of 'wasd') keys[k]=false;
+  mouse.down=false; if(!p||!p.alive) return;
+  let T=null, best=1e9; for(const e of enemies){ const d=dist(e,p); if(e.alive&&d<best){ best=d; T=e; } }
+  if(!T) return;
+  mouse.sx=T.x-cam.x; mouse.sy=T.y-cam.y; mouse.down=best<430;
+  const go=best>230?1:best<120?-1:0, dx=(T.x-p.x)*go, dy=(T.y-p.y)*go;
+  if(Math.abs(dx)>30) keys[dx>0?'d':'a']=true;
+  if(Math.abs(dy)>30) keys[dy>0?'s':'w']=true;
+}
+function arcadeTick(dt){
+  if(arcDemo){
+    arcDemoT-=dt;
+    if(arcDemoT<=0||state==='levelup') arcDemoEnd(); else arcDemoBot();
+    return;
+  }
+  if(state!=='arcade') return;
+  if(arcPhase==='continue'){
+    const s0=Math.ceil(arcT/60); arcT-=dt;
+    if(arcT<=0) arcadeOver(); else if(Math.ceil(arcT/60)!==s0){ S.tick(); renderArcade(); }
+  } else if(arcPhase==='title'){ arcIdle+=dt; if(arcIdle>ARC_IDLE) arcDemoStart(); }
+}
+function arcTyped(k){
+  if(k==='arrowup'||k==='w') arcName[arcI]=(arcName[arcI]+1)%ARC_ABC.length;
+  else if(k==='arrowdown'||k==='s') arcName[arcI]=(arcName[arcI]+ARC_ABC.length-1)%ARC_ABC.length;
+  else if(k==='arrowleft'||k==='a') arcI=Math.max(0,arcI-1);
+  else if(k==='arrowright'||k==='d') arcI=Math.min(2,arcI+1);
+  else return false;
+  S.tick(); renderArcade(); return true;
+}
+function arcKey(k){
+  arcIdle=0;
+  const go=k==='enter'||k===' ';
+  if(arcPhase==='title'){ if(go) arcadeStart(); else if(k==='escape') closeArcade(); else if(k==='b'){ arcPhase='prizes'; renderArcade(); } }
+  else if(arcPhase==='prizes'){ if(k==='escape'||k==='b'){ arcPhase='title'; renderArcade(); } }
+  else if(arcPhase==='continue'){ if(go) arcadeContinue(); else if(k==='escape') arcadeOver(); }
+  else if(arcPhase==='initials'){
+    if(go) return arcadeSign();
+    if(arcTyped(k)) return;
+    const i=ARC_ABC.indexOf(k.toUpperCase());
+    if(k.length===1&&i>=0){ arcName[arcI]=i; arcI=Math.min(2,arcI+1); S.tick(); renderArcade(); }
+  }
+}
+function renderArcade(){
+  const el=document.getElementById('arcBody'), A=save.arcade, btn=(a,t,c)=>'<button class="btn small'+(c?' '+c:'')+'" data-a="'+a+'">'+t+'</button>';
+  let h='', b='';
+  if(arcPhase==='title'){
+    h='<div class="arcHead">MEJORES PUNTUACIONES</div><ol class="arcTop">'+A.top.map(e=>'<li><b>'+e.n+'</b><span>'+e.s+'</span><i>NV '+e.l+'</i></li>').join('')+'</ol>'+
+      (arcGain?'<div class="arcGain">+'+arcGain+' BOLETOS</div>':'')+'<div class="arcCoin">INSERTA MONEDA</div>'+
+      '<div class="arcNote">3 vidas · todos sin mejoras · los puntos dan boletos</div>';
+    b=btn('start','▶ JUGAR')+btn('prizes','🎟 PREMIOS · '+A.tickets)+btn('exit','← SALIR');
+  } else if(arcPhase==='prizes'){
+    h='<div class="arcHead">PREMIOS · TIENES 🎟 '+A.tickets+'</div><div class="arcNote">Aparecen en TU PILOTO, en la fila TRAJE</div><div class="arcPrizes">'+ARC_PRIZES.map(p=>{
+      const own=A.prizes.includes(p.id), can=A.tickets>=p.cost;
+      return '<button class="arcPrize'+(own?' own':can?'':' off')+'" data-p="'+p.id+'"><u style="background:'+p.col+'"></u><b>'+p.name+'</b><span>'+(own?'✔ TUYO':'🎟 '+p.cost)+'</span></button>'; }).join('')+'</div>';
+    b=btn('title','← VOLVER');
+  } else if(arcPhase==='continue'){
+    h='<div class="arcHead">¿CONTINUAR?</div><div class="arcCount">'+Math.ceil(arcT/60)+'</div><div class="arcNote">Sigues en el nivel '+wave+' con la mitad de tus puntos ('+Math.floor(score/2)+' de '+score+')</div>';
+    b=btn('cont','▶ CONTINUAR')+btn('over','TERMINAR');
+  } else {
+    h='<div class="arcHead">¡NUEVO RÉCORD!</div><div class="arcScore">'+score+' · NIVEL '+wave+'</div><div class="arcNote">+'+arcGain+' boletos · pon tus iniciales</div><div class="arcName">'+
+      arcName.map((v,i)=>'<div class="arcSlot'+(i===arcI?' on':'')+'"><button data-up="'+i+'">▲</button><b>'+ARC_ABC[v]+'</b><button data-dn="'+i+'">▼</button></div>').join('')+'</div>';
+    b=btn('sign','✔ GUARDAR');
+  }
+  el.innerHTML=h;
+  document.getElementById('arcBtns').innerHTML=b;
+}
+function arcBuy(id){
+  const p=ARC_PRIZES.find(x=>x.id===id), A=save.arcade;
+  if(!p||A.prizes.includes(id)||A.tickets<p.cost) return;
+  A.tickets-=p.cost; A.prizes.push(id); arcadeSuits(); saveSave(); S.upgrade(); renderArcade();
+}
+document.getElementById('scrArcade').addEventListener('click',e=>{
+  arcIdle=0;
+  const q=e.target.closest('button'); if(!q) return;
+  const d=q.dataset;
+  if(d.p) return arcBuy(d.p);
+  if(d.up!=null||d.dn!=null){ arcI=+(d.up!=null?d.up:d.dn); arcTyped(d.up!=null?'arrowup':'arrowdown'); return; }
+  ({start:arcadeStart,exit:closeArcade,cont:arcadeContinue,over:arcadeOver,sign:arcadeSign,
+    prizes(){ arcPhase='prizes'; renderArcade(); },title(){ arcPhase='title'; renderArcade(); }}[d.a]||(()=>{}))();
+});
+document.getElementById('gameWrap').addEventListener('pointerdown',()=>{ if(arcDemo) arcDemoEnd(); },true);
+arcadeSuits();
+/* La máquina en el salón */
+function paintArcade(g,o){
+  const x=(o.ox+5)*TILE+3, y=o.oy*TILE-34, w=54, h=90;
+  g.fillStyle='#0c0e22'; g.fillRect(x-2,y-2,w+4,h+4);
+  g.fillStyle='#232866'; g.fillRect(x,y,w,h);
+  g.fillStyle='#343b8c'; g.fillRect(x,y,5,h); g.fillRect(x+w-5,y,5,h);
+  g.fillStyle='#f5c518'; g.fillRect(x+5,y+3,w-10,15);
+  g.fillStyle='#14100a'; g.font='15px "Jersey 15", monospace'; g.textAlign='center'; g.fillText('ARCADE',x+w/2,y+15); g.textAlign='left';
+  g.fillStyle='#05070c'; g.fillRect(x+7,y+21,w-14,32);
+  g.fillStyle='#454c9c'; g.fillRect(x+4,y+56,w-8,13);
+  g.fillStyle='#14161f'; g.fillRect(x+11,y+64,3,2); g.fillStyle='#ff4757'; g.fillRect(x+10,y+59,5,5);
+  g.fillStyle='#3ee6e6'; g.fillRect(x+27,y+60,5,5); g.fillStyle='#ffd76e'; g.fillRect(x+36,y+60,5,5);
+  g.fillStyle='#0c0e22'; g.fillRect(x+21,y+74,12,8); g.fillStyle='#ffd76e'; g.fillRect(x+26,y+75,2,6);
+}
+/* Su pantalla: se juega sola, con la luz que suelta al salón */
+function drawArcadeScreen(o){
+  const x=(o.ox+5)*TILE+10, y=o.oy*TILE-13, w=40, h=30, f=Math.floor(t/8);
+  ctx.save();
+  ctx.fillStyle='#0a3a4a'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle='#d8c38a'; ctx.fillRect(x+7,y+7,26,17);
+  ctx.fillStyle='#569b3f'; ctx.fillRect(x+9,y+9,22,13);
+  ctx.fillStyle='#ffd76e'; ctx.fillRect(x+18+Math.round(Math.sin(f*0.3)*7),y+15+Math.round(Math.cos(f*0.2)*4),3,3);
+  for(let i=0;i<4;i++){ ctx.fillStyle='#ff3df0'; ctx.fillRect(x+10+((f*(i+1)+i*9)%20),y+10+((i*5+f)%10),2,2); }
+  if(f%2){ ctx.fillStyle='rgba(0,0,0,.2)'; ctx.fillRect(x,y,w,h); }
+  ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.05+0.02*Math.sin(t*0.1); ctx.fillStyle='#3ee6e6';
+  ctx.beginPath(); ctx.ellipse(x+w/2,y+h+36,62,38,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawArcadeHud(){
+  if(!arcDemo||cine>0) return;
+  ctx.save(); ctx.font='30px "Jersey 15", monospace'; ctx.textAlign='center';
+  if(Math.floor(t/30)%2){ ctx.fillStyle='#000'; ctx.fillText('DEMOSTRACIÓN · PULSA UNA TECLA',W/2+2,H*0.2+2); ctx.fillStyle='#ffd76e'; ctx.fillText('DEMOSTRACIÓN · PULSA UNA TECLA',W/2,H*0.2); }
+  ctx.restore();
+}
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -12330,7 +12565,7 @@ function menuNextGoal(){
   if(save.sel.tutorial!==false) return 'Siguiente: Isla de entrenamiento';
   const w=WORLD_LIST.find(x=>worldUnlocked(x.id)&&!worldSave(x.id).cleared);
   if(w){ const sv=worldSave(w.id); return 'Siguiente: Mundo '+w.id+' · '+w.name+(sv.best>1?' (sección '+sv.best+')':''); }
-  return 'Siguiente: el Archipiélago infinito';
+  return 'Siguiente: una expedición';
 }
 function menuBuildItems(){
   const p=hasProgress(), vol=save.vol==null?1:save.vol;
@@ -13123,6 +13358,7 @@ function startStage(){
   tut=(wave===1 && mission && mission.type==='tutorial')?{step:0,t:0,d:{},moved:0,wait:0,started:false}:null;
   renderTutBox();
   wallKind=new Map();
+  arcWaveT=t;
   buildIsland();
   introHeli=!!survLvl;   // supervivencia: llegas en helicóptero, no en barco
   carryDefenses(keep);
@@ -13159,7 +13395,7 @@ function survApplyLevel(){
 /* SUPERVIVENCIA CONTINUA: al superar una oleada NO se rehace la isla. Sigues donde estabas, con tus muros, torres,
    aliados y el Orbe (que se repara un 30%), y la siguiente oleada cae sobre el mismo mapa. */
 function nextWaveInPlace(){
-  wave++; survApplyLevel();
+  wave++; survApplyLevel(); arcWaveT=t;
   const grown=growIslandInPlace(Math.floor((wave-1)/3));   // cada 3 oleadas la isla gana tierra al mar
   seedCraterDeposits();   // se reponen los yacimientos agotados del cráter
   bullets=[]; pulsos=[]; parasites=[]; enemies=enemies.filter(e=>e.alive&&e.static);
@@ -13267,6 +13503,7 @@ function checkStageClear(dt){
     if(follow.length){ follow.forEach(p=>p.alive=false); rescued+=follow.length; save.rescuedTotal+=follow.length; score+=300*follow.length; runWork+=3*follow.length; }
     while(weaponLvl<4 && Math.floor(rescued/4)>=weaponLvl) weaponLvl++;
     if(tut){ tut=null; renderTutBox(); announce('¡ENTRENAMIENTO SUPERADO!','#3ee67a','Vuelves a la base...'); }
+    else if(arcadeRun){ const b=arcadeWaveBonus(); score+=b; announce('¡OLEADA SUPERADA!','#3ee67a','Bonificación por rapidez: +'+b); }
     else if(survLvl) announce('¡OLEADA SUPERADA!','#3ee67a','Prepárate: la siguiente cae aquí mismo');
     else announce('¡ISLA LIBERADA!','#3ee67a',follow.length?('+'+follow.length+' rehenes evacuados'):'');
     S.upgrade();
@@ -13343,7 +13580,7 @@ function updateHUD(){
     setText('stagePre',tut?'ENTRENAMIENTO':sector?'SECTOR':'STAGE'); setText('waveV',tut?'':String(wave).padStart(2,'0'));
     setText('enemyLbl',sector?'BOTÍN × '+sectorMul(wave):'ENEMY LEFT'); setText('enemyV',sector?'◆'+runWork:remaining);
   }
-  setText('hiScoreV',Math.max(save.bestScore,score));
+  setText('hiScoreV',Math.max(arcadeRun?arcadeHi():save.bestScore,score));
   setText('livesV2',Math.max(0,lives));
   setText('allyV',drones.length); setText('turV',turrets.length); setText('solV',soldiers.length);
   const following=pows.filter(pw=>pw.follow&&!pw.escort).length, escorted=pows.filter(pw=>pw.escort).length;
@@ -13481,6 +13718,7 @@ function loop(now){
     t+=dt;
     if(state==='playing') step(dt);
     else if(state==='home') stepHome(dt);
+    if(arcadeRun||state==='arcade') arcadeTick(dt);
     if(innerWidth!==fitVW||innerHeight!==fitVH) fitGame();   // por si el navegador no avisó del cambio de tamaño
     if(state==='playing'||state==='home'||state==='homeui'||state==='menu') updateWeather(dt);
     if(state==='playing'||state==='home') updateClock(dt);   // el día avanza solo mientras juegas (p9m_daynight.js)
@@ -13495,6 +13733,8 @@ function loop(now){
 /* ===================== ENTRADA ===================== */
 window.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
+  if(arcDemo){ arcDemoEnd(); e.preventDefault(); return; }
+  if(state==='arcade'){ arcKey(k); e.preventDefault(); return; }
   keys[k]=true;
   if(k===' '||k.startsWith('arrow')) e.preventDefault();
   if(state==='menu'){ if(menuKey(k)) e.preventDefault(); return; }
@@ -13621,7 +13861,7 @@ function renderHangar(){
 }
 
 /* ===================== NAVEGACIÓN ===================== */
-const SCREENS=['scrMenu','scrLook','scrHangar','scrShop','scrLevelUp','scrGameOver','scrPause','scrWorldMap','scrHouse','scrSeed','scrStory'];
+const SCREENS=['scrMenu','scrArcade','scrLook','scrHangar','scrShop','scrLevelUp','scrGameOver','scrPause','scrWorldMap','scrHouse','scrSeed','scrStory'];
 function showOnly(id){ SCREENS.forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id)); }
 document.getElementById('btnHShop').onclick=()=>{ renderShop(); showOnly('scrShop'); };
 document.getElementById('btnHBack').onclick=()=>closeHomeUI();
