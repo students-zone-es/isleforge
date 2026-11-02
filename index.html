@@ -115,7 +115,7 @@
   .overlay.top{ justify-content:flex-start; }
   .lookWrap{ display:flex; gap:16px; align-items:center; justify-content:center; flex-wrap:wrap; max-width:100%; }
   .lookStage{ display:flex; flex-direction:column; align-items:center; gap:6px; max-width:420px; }
-  #lookCv{ height:340px; aspect-ratio:320/380; image-rendering:pixelated; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 42%, #24364c, #0d1420 72%); border:1px solid var(--border); border-radius:6px; }
+  #lookCv{ height:340px; aspect-ratio:320/380; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 42%, #24364c, #0d1420 72%); border:1px solid var(--border); border-radius:6px; }
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
@@ -398,7 +398,7 @@
     <div id="scrLook" class="overlay hidden">
       <h1 class="title" style="font-size:16px;">TU PILOTO</h1>
       <div class="lookWrap">
-        <div class="lookStage"><canvas id="lookCv" width="320" height="380"></canvas><div class="lookPose" id="lookPose"></div><div class="lookPose" id="lookFace"></div></div>
+        <div class="lookStage"><canvas id="lookCv" width="480" height="570"></canvas><div class="lookPose" id="lookPose"></div><div class="lookPose" id="lookFace"></div></div>
         <div class="lookOpts" id="lookOpts"></div>
       </div>
       <div class="row"><button class="btn small" id="btnLookBack">← VOLVER</button><button class="btn small" id="btnLookRand">🎲 AL AZAR</button><button class="btn small" id="btnLookReset">↺ ORIGINAL</button><button class="btn" id="btnLookOk">✔ LISTO</button></div>
@@ -5279,7 +5279,10 @@ function drawOffscreenArrow(x,y,col,label){
 }
 function render(){
   ctx=mainCtx;
-  ctx.setTransform(1,0,0,1,0,0);
+  const rs=inHome&&state!=='menu'&&fitDpp>=1.4?2:1;   // la base dobla los píxeles del lienzo si la pantalla puede mostrarlos: el personaje los aprovecha
+  if(cv.width!==W*rs){ cv.width=W*rs; cv.height=H*rs; }
+  prRes=rs;
+  ctx.setTransform(rs,0,0,rs,0,0);
   ctx.imageSmoothingEnabled=false;
   ctx.fillStyle='#05070c'; ctx.fillRect(0,0,W,H);
   if(state==='menu'||!map||!mapCanvas){ drawMenuScene(); return; }
@@ -11616,9 +11619,9 @@ const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,scarf:9,belt
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
 const PR_SCARF_N=7, PR_SCARF_L=3.2;
-const prCache={}, prArea=PR_W*PR_H;
+const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
 const prZ=new Float32Array(prArea), prNX=new Int8Array(prArea), prNY=new Int8Array(prArea), prNZ=new Int8Array(prArea), prM=new Uint8Array(prArea);
-let prCv=null, prG=null, prImg=null;
+let prRes=1;   // píxeles del muñeco por cada píxel del juego: 2 en la base si la pantalla los muestra, 4 en la vista previa
 const prRampCache=new Map();
 
 /* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
@@ -11740,7 +11743,7 @@ function prParts(pal,P,yaw,w,expr){
       return zr>1.8?PM.helm:PM.metal;
     }
     if(pal.goggles&&Math.abs(zr-3.8)<1.3) return PM.helmD;                      // correa de las gafas
-    const hl=fem?1.2+0.24*fx:2.4;                                               // la frente despejada en él, el flequillo de lado en ella
+    const hl=fem?1.9+0.2*fx:2.4;                                               // la frente despejada en él, el flequillo de lado en ella
     if(hd==='casco'){
       if(zr>1.5||fy<1.2) return ax<0.5&&zr>5?PM.helmD:PM.helm;                  // casco, con su costura
     } else if(hd==='gorra'){
@@ -11756,7 +11759,6 @@ function prParts(pal,P,yaw,w,expr){
   };
   cap(hc,hc,9.4,9.4,PM.skin,headF);
   if(pilot){
-    if(!fem) cap(hp(-2.8,3.4,-6.7),hp(2.8,3.4,-6.7),3,3,PM.skin,headF);   // mandíbula cuadrada, con la boca y la barba pintadas igual que la cara
     cap(hp(0,9.2,-3),hp(0,9.2,-3),fem?0.9:1.2,fem?0.9:1.2,PM.skin);       // nariz
     if(hd==='pelo'||hd==='gorra') for(const s of [-1,1]) cap(hp(s*9.2,1,-2),hp(s*9.2,1,-2),1.9,1.9,PM.skin);   // orejas
   }
@@ -11779,19 +11781,19 @@ function prParts(pal,P,yaw,w,expr){
 }
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 function prBuild(pal,d,mode,f,look,expr){
-  const key=(pal.key||'a')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
+  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
   const w=PR_BUILD[pal.build==null?1:pal.build], P=prPose(mode,mode?f/8:0,mode?0:f,w,prGen(pal)), {O,shadow}=prParts(pal,P,look*0.42,w,expr||'normal'), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
-  prZ.fill(-1e9); prM.fill(0);
+  prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
     const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
     for(let i=0;i<=n;i++){
-      const k=i/n, lx=p.a[0]+dx*k, ly=p.a[1]+dy*k, lz=p.a[2]+dz*k, r=p.ra+(p.rb-p.ra)*k, wx=lx*c+ly*s, wy=-lx*s+ly*c;
-      const vx=PR_OX+wx, vy=PR_OY+wy*PR_SE-lz*PR_CE, vz=wy*PR_CE+lz*PR_SE;
-      const x0=Math.max(0,Math.floor(vx-r)), x1=Math.min(PR_W-1,Math.ceil(vx+r)), y0=Math.max(0,Math.floor(vy-r)), y1=Math.min(PR_H-1,Math.ceil(vy+r));
+      const k=i/n, lx=p.a[0]+dx*k, ly=p.a[1]+dy*k, lz=p.a[2]+dz*k, r=p.ra+(p.rb-p.ra)*k, rr=r*S, wx=lx*c+ly*s, wy=-lx*s+ly*c;
+      const vx=(PR_OX+wx)*S, vy=(PR_OY+wy*PR_SE-lz*PR_CE)*S, vz=(wy*PR_CE+lz*PR_SE)*S;
+      const x0=Math.max(0,Math.floor(vx-rr)), x1=Math.min(BW-1,Math.ceil(vx+rr)), y0=Math.max(0,Math.floor(vy-rr)), y1=Math.min(BH-1,Math.ceil(vy+rr));
       for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
-        const ax=x+0.5-vx, ay=y+0.5-vy, d2=ax*ax+ay*ay; if(d2>=r*r) continue;
-        const nz=Math.sqrt(r*r-d2), z=vz+nz, q=y*PR_W+x; if(z<=prZ[q]) continue;
-        const nwx=ax/r, nwy=(ay*PR_SE+nz*PR_CE)/r, nwz=(nz*PR_SE-ay*PR_CE)/r;
+        const ax=x+0.5-vx, ay=y+0.5-vy, d2=ax*ax+ay*ay; if(d2>=rr*rr) continue;
+        const nz=Math.sqrt(rr*rr-d2), z=vz+nz, q=y*BW+x; if(z<=prZ[q]) continue;
+        const nwx=ax/rr, nwy=(ay*PR_SE+nz*PR_CE)/rr, nwz=(nz*PR_SE-ay*PR_CE)/rr;
         prZ[q]=z; prNX[q]=nwx*127; prNY[q]=nwy*127; prNZ[q]=nwz*127;
         let m=p.m;
         if(p.f){ const px=wx+r*nwx, py=wy+r*nwy; m=p.f(px*c-py*s,px*s+py*c,lz+r*nwz,k)||p.m; }
@@ -11799,11 +11801,12 @@ function prBuild(pal,d,mode,f,look,expr){
       }
     }
   }
-  const I=[], NX=[], NY=[], NZ=[], M=[], F=[];
-  for(let y=0;y<PR_H;y++) for(let x=0;x<PR_W;x++){
-    const q=y*PR_W+x, nb=[y>0?q-PR_W:-1,y<PR_H-1?q+PR_W:-1,x>0?q-1:-1,x<PR_W-1?q+1:-1];
+  const I=[], NX=[], NY=[], NZ=[], M=[], F=[], R=Math.max(1,S>>1);   // el contorno engorda con la resolución para no quedarse en un hilo
+  for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
+    const q=y*BW+x, nb=[];
+    for(let j=1;j<=R;j++) nb.push(y>=j?q-BW*j:-1,y<BH-j?q+BW*j:-1,x>=j?q-j:-1,x<BW-j?q+j:-1);
     if(prM[q]){   // un borde dentro de la figura (brazo sobre el tronco) se marca oscuro
-      let ink=0; for(const b of nb) if(b>=0&&prM[b]&&prZ[b]-prZ[q]>3.4) ink=1;
+      let ink=0; for(const b of nb) if(b>=0&&prM[b]&&prZ[b]-prZ[q]>3.4*S) ink=1;
       I.push(q); NX.push(prNX[q]); NY.push(prNY[q]); NZ.push(prNZ[q]); M.push(prM[q]); F.push(ink);
     } else {      // contorno: del color más oscuro de lo que tiene al lado
       let m=0; for(const b of nb) if(b>=0&&prM[b]) m=prM[b];
@@ -11811,7 +11814,7 @@ function prBuild(pal,d,mode,f,look,expr){
     }
   }
   const toW=v=>[v[0]*c+v[1]*s,-v[0]*s+v[1]*c,v[2]];
-  return prCache[key]={I:Uint16Array.from(I),NX:Int8Array.from(NX),NY:Int8Array.from(NY),NZ:Int8Array.from(NZ),M:Uint8Array.from(M),F:Uint8Array.from(F),
+  return prCache[key]={S,I:Uint16Array.from(I),NX:Int8Array.from(NX),NY:Int8Array.from(NY),NZ:Int8Array.from(NZ),M:Uint8Array.from(M),F:Uint8Array.from(F),
     bones:shadow.map(p=>[toW(p.a),toW(p.b),(p.ra+p.rb)/2])};
 }
 /* Cinco tonos por material: las sombras tiran a violeta y las luces a crema */
@@ -11856,8 +11859,9 @@ function prLight(u){
 }
 /* Colorea la pose con la luz de ahora */
 function prRender(B,pal,L,blink){
-  if(!prCv){ prCv=mkCanvas(PR_W,PR_H); prG=prCv.getContext('2d',{willReadFrequently:true}); prImg=prG.createImageData(PR_W,PR_H); }
-  const D=prImg.data, R=prRamps(pal), n=B.I.length, [sx,sy,sz]=L.s, [hx,hy,hz]=L.h, led=Math.floor(t/30)%2;
+  let C=prCvs[B.S];
+  if(!C){ const c=mkCanvas(PR_W*B.S,PR_H*B.S), g=c.getContext('2d',{willReadFrequently:true}); C=prCvs[B.S]={c,g,img:g.createImageData(c.width,c.height)}; }
+  const D=C.img.data, R=prRamps(pal), n=B.I.length, [sx,sy,sz]=L.s, [hx,hy,hz]=L.h, led=Math.floor(t/30)%2;
   D.fill(0);
   for(let i=0;i<n;i++){
     const p=B.I[i]*4, f=B.F[i]; let m=B.M[i];
@@ -11874,7 +11878,8 @@ function prRender(B,pal,L,blink){
     for(const q of L.pts){ const d=Math.max(0,nx*q[0]+ny*q[1]+nz*q[2]); if(d>0){ r+=b[0]*q[3]*d; g+=b[1]*q[4]*d; bl+=b[2]*q[5]*d; } }
     D[p]=Math.min(255,r); D[p+1]=Math.min(255,g); D[p+2]=Math.min(255,bl); D[p+3]=255;
   }
-  prG.putImageData(prImg,0,0);
+  C.g.putImageData(C.img,0,0);
+  return C.c;
 }
 /* Qué cara pone ahora: la que le haya tocado por algo que acaba de pasar (setMood) o la que pide el momento */
 function setMood(u,e,n){ if(u){ u.mood=e; u.moodT=n; } }
@@ -11926,7 +11931,7 @@ function prScarfDraw(u,R,L){
   const col=c=>'rgb('+Math.min(255,c[0]*lit[0]|0)+','+Math.min(255,c[1]*lit[1]|0)+','+Math.min(255,c[2]*lit[2]|0)+')';
   const walk=(w,fill,oy)=>{ ctx.fillStyle=fill;
     for(let i=1;i<P.length;i++){ const [x0,y0]=P[i-1], [x1,y1]=P[i], n=Math.ceil(Math.hypot(x1-x0,y1-y0)), ww=Math.max(1,w-(i>4?1:0));
-      for(let k=0;k<=n;k++) ctx.fillRect(Math.round(x0+(x1-x0)*k/n-ww/2),Math.round(y0+(y1-y0)*k/n-ww/2+oy),ww,ww); } };
+      for(let k=0;k<=n*prRes;k++){ const q=k/(n*prRes); ctx.fillRect(Math.round((x0+(x1-x0)*q-ww/2)*prRes)/prRes,Math.round((y0+(y1-y0)*q-ww/2+oy)*prRes)/prRes,ww,ww); } } };
   walk(4,col(R[PM.scarf][0].map(v=>v*0.5)),0);
   walk(2,col(R[PM.scarf][2]),0);
   walk(1,col(R[PM.scarf][4]),-1);
@@ -11939,8 +11944,7 @@ function drawHuman(u,pal){
   if(tail) prScarfStep(u); else u.sc=null;
   const behind=Math.cos(u.face)>-0.3;
   if(tail&&behind) prScarfDraw(u,R,L);
-  prRender(B,pal,L,blink);
-  ctx.drawImage(prCv,x-PR_OX,y-PR_OY);
+  ctx.drawImage(prRender(B,pal,L,blink),x-PR_OX,y-PR_OY,PR_W,PR_H);
   if(tail&&!behind) prScarfDraw(u,R,L);
 }
 /* Su sombra sale de sus huesos: cada hueso se tumba en el suelo desde sus dos puntas, así copia la pose de verdad */
@@ -11973,7 +11977,7 @@ const LOOK_ROWS=[
   {k:'build',t:'CUERPO',o:[[0,'LIGERO'],[1,'NORMAL'],[2,'FUERTE']]},
 ];
 const LOOK_SKY=[['DÍA',{sun:{alt:52,az:-30},moon:{alt:-20,az:0}}],['ATARDECER',{sun:{alt:7,az:78},moon:{alt:-5,az:0}}],['NOCHE',{sun:{alt:-30,az:170},moon:{alt:48,az:-25}}]];
-const LOOK_POSE=['PARADO','ANDAR','CORRER'], LOOK_ZOOM=5;
+const LOOK_POSE=['PARADO','ANDAR','CORRER'], LOOK_ZOOM=8, LOOK_RES=4;
 const LOOK_FACE=[['normal','NORMAL'],['feliz','FELIZ'],['risa','RISA'],['sorpresa','SORPRESA'],['enfado','ENFADO'],['triste','TRISTE'],['cansado','CANSADO'],['guino','GUIÑO'],['sueno','SUEÑO']];
 const lookU={x:0,y:0,vx:0,vy:0,dir:'down',walk:0,face:0.5,radius:8,moodFix:'normal'};
 let lookOn=false, lookW=null, lookDone=null, lookPose=0, lookSky=0, lookSpin=true, lookA=0.5, lookDrag=null, lookShCv=null;
@@ -12016,19 +12020,20 @@ function lookFrame(){
   if(lookSpin) lookA+=lookPose?0.008:0.014;
   if(sp){ u.vx=Math.sin(lookA)*sp; u.vy=Math.cos(lookA)*sp; u.x+=u.vx; u.y+=u.vy; u.walk+=sp*0.2; }
   else { u.vx=u.vy=0; u.face=lookA; }
+  u.idle=0;   // aquí no mira a los lados: la cara tiene que verse
   if(!lookShCv) lookShCv=mkCanvas(cv.width,cv.height);
   const sg=lookShCv.getContext('2d'), src=sky.sun.alt>0?sky.sun:sky.moon, A=src.az/DEG, c0=ctx;
-  const at=q=>{ ctx=q; ctx.imageSmoothingEnabled=false; ctx.save(); ctx.scale(k,k); ctx.translate(Math.round(cv.width/2/k)-Math.round(u.x),Math.round((cv.height-44)/k)-Math.round(u.y)); };
+  const r0=prRes, at=q=>{ ctx=q; ctx.imageSmoothingEnabled=false; ctx.save(); ctx.scale(k,k); ctx.translate(Math.round(cv.width/2/k)-Math.round(u.x),Math.round((cv.height-66)/k)-Math.round(u.y)); };
   g.clearRect(0,0,cv.width,cv.height);
-  g.fillStyle=['#2c3b4e','#3a2f44','#141c2c'][lookSky]; g.beginPath(); g.ellipse(cv.width/2,cv.height-44,146,52,0,0,Math.PI*2); g.fill();
-  g.strokeStyle='#ffffff14'; g.lineWidth=2; g.stroke();
-  prSkyFix=sky; shS={dx:Math.sin(A),dy:-Math.cos(A),len:Math.min(SHADOW_MAXLEN,1/Math.tan(Math.max(3,src.alt)/DEG))};
+  g.fillStyle=['#2c3b4e','#3a2f44','#141c2c'][lookSky]; g.beginPath(); g.ellipse(cv.width/2,cv.height-66,219,78,0,0,Math.PI*2); g.fill();
+  g.strokeStyle='#ffffff14'; g.lineWidth=3; g.stroke();
+  prRes=LOOK_RES; prSkyFix=sky; shS={dx:Math.sin(A),dy:-Math.cos(A),len:Math.min(SHADOW_MAXLEN,1/Math.tan(Math.max(3,src.alt)/DEG))};
   sg.clearRect(0,0,cv.width,cv.height);
   try{
     at(sg); shPerson(u); ctx.restore();
     g.globalAlpha=sky.sun.alt>0?0.4:0.22; g.drawImage(lookShCv,0,0); g.globalAlpha=1;
     at(g); drawHuman(u,PILOT_PAL); ctx.restore();
-  } finally { ctx=c0; prSkyFix=null; }
+  } finally { ctx=c0; prSkyFix=null; prRes=r0; }
   requestAnimationFrame(lookFrame);
 }
 function lookKey(k){
@@ -13204,7 +13209,7 @@ const gameWrapEl=document.getElementById('gameWrap'); let menuFlag=false;
      anchas ves más mundo a los lados); en ventanas altas o cuadradas crece hacia abajo (hasta 800);
    - el recuadro con el HUD y los menús toma esa misma forma y se amplía entero hasta llenar la ventana.
    Solo en formas extremas (más de 2:1 o un móvil en vertical) quedan bandas a los lados o arriba y abajo. */
-let fitVW=0, fitVH=0;
+let fitVW=0, fitVH=0, fitDpp=1;   // fitDpp: píxeles reales de la pantalla por cada píxel del juego
 function fitGame(){
   const vw=Math.max(1,innerWidth), vh=Math.max(1,innerHeight), asp=vw/vh;
   fitVW=innerWidth; fitVH=innerHeight;
@@ -13215,6 +13220,7 @@ function fitGame(){
   const cw=W*10/9, ch=H*10/9;            // misma proporción CSS/dibujo que el diseño original (1000x667 para 900x600)
   gameWrapEl.style.width=cw+'px'; gameWrapEl.style.height=ch+'px';
   gameWrapEl.style.transform='scale('+Math.min(vw/cw,vh/ch).toFixed(4)+')';
+  fitDpp=Math.min(vw/cw,vh/ch)*10/9*(devicePixelRatio||1);
   // el mapa de operaciones es 3:2: se centra dentro del recuadro
   const ob=document.getElementById('wmGrid');
   if(ob){ const bw=Math.min(cw,ch*1.5), bh=bw/1.5; Object.assign(ob.style,{left:((cw-bw)/2)+'px',top:((ch-bh)/2)+'px',width:bw+'px',height:bh+'px',right:'auto',bottom:'auto'}); }
