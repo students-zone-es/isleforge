@@ -5319,6 +5319,7 @@ function render(){
   ctx.restore();
   drawWeather(player&&player.alive?player.x-cx:W/2, player&&player.alive?player.y-cy:H/2);
   drawNight(cx,cy);   // p9m_daynight.js
+  drawBeacons(cx,cy);
   drawEnemyLamps(cx,cy);
   drawMuzzles(cx,cy);
   drawAlarmHud();   // p9_campaign.js
@@ -5968,40 +5969,69 @@ function updateHomeHud(){
 }
 
 /* ---------- dibujo de la base ---------- */
-function drawHuman(x,y,dir,walk,pal,s){
-  s=s||2;
-  const R=(px,py,w,h,c)=>{ if(!c) return; ctx.fillStyle=c; ctx.fillRect(Math.round(x+px*s),Math.round(y+py*s),Math.round(w*s),Math.round(h*s)); };
-  const st=Math.sin(walk), a=Math.round(st*1.4);
-  if(!shadowPass){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,5*s,1.8*s,0,0,Math.PI*2); ctx.fill(); }
-  if(dir==='left'||dir==='right'){
-    const f=dir==='right'?1:-1;
-    const X=(px,w)=>f>0?px:-(px+w);
-    R(X(-1+a*0.7,2),-5,2,4,pal.dark); R(X(-1+a*0.7,2),-1,2,1,'#3a2a1a');
-    R(X(-1-a*0.7,2),-5,2,4,pal.suit); R(X(-1-a*0.7,2),-1,2,1,'#3a2a1a');
-    R(X(-2,4),-11,4,6,pal.suit); R(X(-2,4),-11,4,1,pal.light); R(X(-2,4),-7,4,1,pal.dark);
-    if(pal.scarf) R(X(-2,4),-11,4,1,pal.scarf);
-    R(X(-1-a*0.6,2),-10,2,4,pal.dark); R(X(-1-a*0.6,2),-6,2,1,pal.skin);
-    R(X(-2,4),-16,4,5,pal.skin);
-    R(X(-2,4),-17,4,2,pal.cap||pal.hair); R(X(-2,1),-15,1,2,pal.hair);
-    if(pal.cap) R(X(2,1),-16,1,1,pal.cap);
-    R(X(1,1),-14,1,1,pal.eye);
-    return;
-  }
-  const back=dir==='up';
-  if(shadowPass) R(-3,-5,6,5,'#000');   // en la sombra las dos piernas son una sola mancha
-  R(-3,-5+(a>0?-a*0.5:0),2,4,pal.suit); R(1,-5+(a<0?a*0.5:0),2,4,pal.suit);
-  R(-3,-1,2,1,'#3a2a1a'); R(1,-1,2,1,'#3a2a1a');
-  R(-3,-11,6,6,pal.suit); R(-3,-11,6,1,pal.light); R(-3,-6,6,1,pal.dark);
-  if(!back){ R(0,-10,1,4,pal.light); if(pal.scarf) R(-2,-11,4,1,pal.scarf); }
-  R(-4,-10+a*0.4,1,4,pal.suit); R(3,-10-a*0.4,1,4,pal.suit);
-  R(-4,-6+a*0.4,1,1,pal.skin); R(3,-6-a*0.4,1,1,pal.skin);
-  R(-2,-16,4,5,pal.skin);
-  if(back){ R(-2,-16,4,4,pal.hair); if(pal.cap) R(-3,-17,6,2,pal.cap); }
+/* PERSONAS de la base en vista 3/4 y 4 direcciones (izquierda = derecha en espejo). Cada pose se monta por piezas en una
+   rejilla: piernas, torso, brazos y cabeza; el contorno oscuro se añade solo y la pose queda guardada ya dibujada.
+   Letras: C/M/c casco de piloto, v/Q/q correa y cristales de las gafas, H pelo, S/s piel, E ojo, N/n pañuelo, B/L/D traje, X parche
+   del hombro, P bolsillo, Z cremallera, b/y cinturón, g/G guantes, T/t/O botas, a/A radio a la espalda. Los androides de la base
+   usan las mismas piezas: sin gafas, sin parche y sin radio */
+const HUMAN_HEAD={
+  down:["..CCCCC..",".CMMCCCc.",".vQqvQqv.",".CHHSSHc.",".CSESESc.",".cSSSSsc.","..sSSSs.."],
+  up:["..CCCCC..",".CMMCCCc.",".vvvvvvv.",".CCCCCCc.",".CMCCCCc.",".CCCCCcc.","..ccccc.."],
+  right:["...CCCC..","..CMMCCc.","..vvvQqv.","..CCHSSS.","..CCSSES.","..CcSSSs.","...cSSs.."]};
+const HUMAN_TORSO={
+  down:["..NNNNN..","..BNnNB..","..XBZBD..","..PBZBP..","..bbybb..","..LBDBD.."],
+  up:["..NNNNN..","..LaaaD..","..LaAaD..","..LaaaD..","..bbbbb..","..LBDBD.."],
+  right:["...NNNN..","...XBBD..","...LBBD..","...LBPD..","...bbby..","...LBBD.."]};
+const HUMAN_LEGS={
+  stand:["..BB.BD..","..LB.LD..","..BB.BD..","..Tt.Tt..","..OO.OO.."],
+  stepL:["..BB.BD..","..LB.LD..","..BB.Tt..","..Tt.OO..","..OO....."],
+  stepR:["..BB.BD..","..LB.LD..","..Tt.BD..","..OO.Tt..",".....OO.."],
+  side:["...BBD...","...LBD...","...BBD...","...TTt...","...OOOO.."],
+  strideA:["...BBD...","..DBBBD..",".DD..LBD.",".tT...Tt.",".OO...OOO"],
+  strideB:["...BBD...","..BBBDD..",".LB...DD.",".Tt...tT.",".OO...OOO"],
+  lift:["...BBD...","...LBD...","..TBBD...","..OTTt...","...OOOO.."]};
+/* f: 0-1 respirar parado; 2-5 los 4 pasos de andar (2 y 4 pisando, 3 y 5 de paso, con el cuerpo un poco más alto) */
+function humanRows(dir,f,blink,pilot){
+  const G=[]; for(let i=0;i<21;i++) G.push(new Array(11).fill('.'));
+  const put=(rows,ox,oy)=>rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++) if(r[x]!=='.') G[oy+y+2][ox+x+1]=r[x]; });
+  const side=dir==='right', bob=f===3||f===5?-1:f===1?1:0, swing=f===2?-1:f===4?1:0;
+  put(HUMAN_LEGS[side?['side','side','strideA','lift','strideB','lift'][f]:f===2?'stepL':f===4?'stepR':'stand'],0,13);
+  if(bob<0) put(side?["...BBD..."]:["..BBDBD.."],0,12);
+  if(side) put(["DD","DD","DD","GG"],3-swing,8+bob);   // el brazo del otro lado
+  put(HUMAN_TORSO[dir],0,7+bob);
+  if(side) put(["LB","LB","LB","gg"],3+swing,8+bob);
   else {
-    R(-2,-16,4,1,pal.hair); R(-2,-15,1,1,pal.hair); R(1,-15,1,1,pal.hair);
-    if(pal.cap){ R(-3,-17,6,2,pal.cap); R(-2,-15,4,1,shade(pal.cap,-0.3)); }
-    R(-1,-13,1,1,pal.eye); R(1,-13,1,1,pal.eye);
+    put([".L","LB","LB","LB","gg"],0,8+bob+(swing<0?-1:0));
+    put(["D.","BD","BD","BD","gg"],7,8+bob+(swing>0?-1:0));
   }
+  put(HUMAN_HEAD[dir],0,bob);
+  if(pilot&&side) put(f>1&&f%2?["NN",".n"]:[".N","Nn"],1,7+bob);   // la punta del pañuelo ondea al andar
+  if(pilot&&dir==='up') put(["nN"],3+(f>1&&f%2?1:0),8+bob);
+  const out=G.map(r=>r.slice());
+  for(let y=0;y<21;y++) for(let x=0;x<11;x++){
+    if(G[y][x]!=='.') continue;
+    if((G[y-1]&&G[y-1][x]!=='.'&&G[y-1][x]!==undefined)||(G[y+1]&&G[y+1][x]!=='.'&&G[y+1][x]!==undefined)||(G[y][x-1]&&G[y][x-1]!=='.')||(G[y][x+1]&&G[y][x+1]!=='.')) out[y][x]='k';
+  }
+  return out.map(r=>r.join('').replace(/E/g,blink?'s':'E'));
+}
+function humanColors(pal){
+  const cap=pal.cap||pal.hair, pilot=!!pal.scarf, sc=pal.scarf||pal.light;
+  return {k:shade(pal.dark,-0.62),C:cap,M:shade(cap,0.25),c:shade(cap,-0.25),v:pilot?shade(cap,-0.5):shade(cap,-0.25),H:pal.hair,
+    Q:pilot?'#9fe8ff':cap,q:pilot?'#3a8fa8':cap,X:pilot?'#3ee6e6':pal.light,
+    S:pal.skin,s:shade(pal.skin,-0.2),E:pal.eye,N:sc,n:shade(sc,-0.25),B:pal.suit,L:pal.light,D:pal.dark,P:shade(pal.suit,-0.28),Z:pal.light,
+    b:'#2e2620',y:'#d9c08a',g:pilot?'#4a3a2a':pal.skin,G:pilot?'#33281e':shade(pal.skin,-0.25),T:'#4a3624',t:'#6a5038',O:'#241a12',
+    a:pilot?shade(cap,-0.12):pal.suit,A:pilot?'#9aa0a8':pal.suit};
+}
+function drawHuman(u,pal){
+  const dir=u.dir==='left'?'right':u.dir, x=Math.round(u.x), y=Math.round(u.y);
+  const f=Math.hypot(u.vx,u.vy)>0.2?2+(Math.floor(u.walk/2.6)&3):Math.floor((t+(x&63))/48)&1, blink=(t+x)%211<7;
+  if(shadowPass){ if(dir!=='right'){ ctx.fillStyle='#000'; ctx.fillRect(x-5,y-10,10,10); } }   // en la sombra las dos piernas son una sola mancha
+  else { ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,10,3.6,0,0,Math.PI*2); ctx.fill(); }
+  const key='hum|'+pal.suit+pal.hair+pal.cap+'|'+dir+f+(blink?'b':'');
+  const spr=sprCache[key]||pixSprite(key,humanRows(dir,f,blink,!!pal.scarf),humanColors(pal));
+  ctx.save(); ctx.translate(x,y); if(u.dir==='left') ctx.scale(-1,1);
+  ctx.drawImage(spr,-11,-40,22,42);
+  ctx.restore();
 }
 function drawCrop(kind,st,x,y,sw){
   const R=(px,py,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(Math.round(x+px),Math.round(y+py),w,h); };
@@ -6186,13 +6216,16 @@ function drawHomeFarm(){
     if(st<3) hpBar(x0+30,y0+57,40,f,'#3ee67a');
   });
 }
+function padBeacons(){ const L=homeL.heli, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE; return [[x+10,y+10],[x+w-14,y+10],[x+w-14,y+h-14],[x+10,y+h-14]]; }   // en orden: la luz da la vuelta al helipuerto
 function drawHelipadHome(){
   const L=homeL.heli, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE, cx=x+w/2, cy=y+h/2;
   ctx.fillStyle='#5a6068'; ctx.fillRect(x+4,y+4,w-8,h-14);
   ctx.fillStyle='#3e444c'; ctx.fillRect(x+4,y+h-10,w-8,8); ctx.fillStyle='#2e333a'; for(let i=x+4;i<x+w-4;i+=20) ctx.fillRect(i,y+h-10,2,8);   // la plataforma está elevada: su cara delantera
   ctx.strokeStyle='#f5c518'; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(cx,cy,74,0,Math.PI*2); ctx.stroke();
   ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillRect(cx-28,cy-36,12,72); ctx.fillRect(cx+16,cy-36,12,72); ctx.fillRect(cx-28,cy-6,56,12);
-  for(const [lx,ly] of [[x+10,y+10],[x+w-14,y+10],[x+10,y+h-14],[x+w-14,y+h-14]]){ ctx.fillStyle=Math.floor(t/25)%2?'#ff4757':'#5a1a1a'; ctx.fillRect(lx,ly,5,5); }
+  padBeacons().forEach(([lx,ly],i)=>{ const k=beaconK(i*12);
+    ctx.fillStyle=k>0.3?'#ff4757':'#5a1a1a'; ctx.fillRect(lx,ly,5,5);
+    if(k>0.7){ ctx.fillStyle='#ffd6da'; ctx.fillRect(lx+1,ly+1,3,3); } });
 }
 function drawParkedHeli(){   // aparcado (más grande, ocupa el helipuerto): las palas quietas
   const L=homeL.heli;
@@ -6255,8 +6288,8 @@ function castHome(){
   shLong({x:(L.c0+L.w/2)*TILE+6,y:(L.r0+L.h/2)*TILE-4,radius:44},drawParkedHeli);
   for(const [c,r] of homeLamps) shStand(c*TILE+15,r*TILE+22,16,34,()=>drawLamp(c,r));
   shStand(44*TILE+7,28*TILE+22,90,60,drawHomeFlag);
-  for(const r of residents) shStand(r.x,r.y,40,40,()=>drawHuman(r.x,r.y,r.dir,r.walk,r.pal,2));
-  if(human) shStand(human.x,human.y,40,40,()=>drawHuman(human.x,human.y,human.dir,human.walk,PILOT_PAL,2));
+  for(const r of residents) shStand(r.x,r.y,40,44,()=>drawHuman(r,r.pal));
+  if(human) shStand(human.x,human.y,40,44,()=>drawHuman(human,PILOT_PAL));
 }
 function renderHome(){
   if(interior){ renderInterior(); return; }
@@ -6275,7 +6308,7 @@ function renderHome(){
   drawLamps();
   const people=residents.map(r=>[r,r.pal]); if(human) people.push([human,PILOT_PAL]);
   people.sort((a,b)=>a[0].y-b[0].y);
-  for(const [p,pal] of people) drawHuman(p.x,p.y,p.dir,p.walk,pal,2);
+  for(const [p,pal] of people) drawHuman(p,pal);
   drawSunShadowsTop();
   drawTrees(cx,cy);
   drawParticles();
@@ -6285,6 +6318,7 @@ function renderHome(){
   ctx.restore();
   if(human) drawWeather(human.x-cx,human.y-cy);
   drawNight(cx,cy);
+  drawBeacons(cx,cy);
   const g=guideTarget(); if(g) drawOffscreenArrow(g.x,g.y,'#f5c518','');
   drawAnnounceOnly();
 }
@@ -6940,7 +6974,7 @@ function drawHeli(x,y,ang,alt,rotor,carry,spin,enemy){
   ctx.fillStyle='rgba(180,240,255,.55)'; ctx.fillRect(16,-5,3,3);
   ctx.fillStyle='#262e33'; ctx.fillRect(15,-9,1,18);
   ctx.fillStyle=HC.emb; ctx.fillRect(-4,-9,2,2);   // emblema
-  ctx.fillStyle=Math.floor(t/20)%2?'#ff4757':'#5a1a1a'; ctx.fillRect(-58,-1,2,2);   // luz de la cola
+  ctx.fillStyle=beaconK(0)>0.3?'#ff4757':'#5a1a1a'; ctx.fillRect(-58,-1,2,2);   // luz de la cola
   ctx.restore();
   // rotor principal: en vuelo, disco borroso; parado, 4 palas nítidas con la punta amarilla
   ctx.save(); ctx.translate(x,y);
@@ -10741,9 +10775,31 @@ function darkLevel(){ const a=darkAlphaRaw(); return a<0.05?0:a<0.7?1:a<0.9?2:3;
 /* De noche los enemigos ven menos (sin luz propia, tú eres solo una silueta) */
 function nightView(){ return 1-0.35*nightAmt(); }
 
+/* BALIZAS ROJAS del helipuerto y de la cola de los helicópteros: se encienden de golpe, se apagan suaves y mientras lucen alumbran
+   lo que tienen cerca. beaconK = cuánto luce (0..1) con un desfase de o fotogramas; beacons = las que lucen ahora, [x, y, cuánto] */
+function beaconK(o){ const p=((t+o)%50)/50; return p<0.5?1-p*p*4:0; }
+function beacons(){
+  const B=[];
+  if(inHome){
+    padBeacons().forEach(([x,y],i)=>B.push([x+2.5,y+2.5,beaconK(i*12)]));
+    const L=homeL.heli;
+    B.push([(L.c0+L.w/2)*TILE+6,(L.r0+L.h/2)*TILE+74,beaconK(0)]);   // la cola del aparcado apunta al sur
+  } else for(const h of helis.concat(eHelis.filter(e=>e.map===map))) B.push([h.x-Math.cos(h.ang)*57,h.y-Math.sin(h.ang)*57,beaconK(0)]);
+  return B.filter(b=>b[2]>0);
+}
+function drawBeacons(cx,cy){
+  const n=nightAmt(), r=lerp(46,84,n);
+  ctx.save();   // mezcla normal: sumando luz, el rojo sobre la hierba verde saldría amarillo
+  for(const [x,y,k] of beacons()){
+    const sx=x-cx, sy=y-cy, gr=ctx.createRadialGradient(sx,sy,1,sx,sy,r);
+    gr.addColorStop(0,'rgba(255,50,60,'+((0.42+0.2*n)*k).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,40,60,0)');
+    ctx.fillStyle=gr; ctx.fillRect(sx-r,sy-r,r*2,r*2);
+  }
+  ctx.restore();
+}
 /* Fuentes de luz [x, y, radio, fuerza] en coordenadas del mundo */
 function nightLights(){
-  const L=[];
+  const L=beacons().map(([x,y,k])=>[x,y,84,0.6*k]);
   if(inHome){
     if(human) L.push([human.x,human.y,120*dreadLightK(),1]);
     for(const [c,r] of homeLamps) L.push([c*TILE+15,r*TILE-4,95,0.95]);
@@ -10987,7 +11043,7 @@ function shProject(G,img,w,h,x,foot,L){
 /* Lo mismo con algo que se dibuja en vivo (dentro de una captura): w y h caben en el lienzo auxiliar de 96×96 */
 function shStand(x,foot,w,h,draw){
   const G=ctx;
-  if(!shTmp){ shTmp=mkCanvas(96,96); shTmpG=shTmp.getContext('2d'); }
+  if(!shTmp){ shTmp=mkCanvas(96,96); shTmpG=shTmp.getContext('2d'); shTmpG.imageSmoothingEnabled=false; }
   shTmpG.clearRect(0,0,w,h);
   ctx=shTmpG; ctx.save(); ctx.translate(w/2-x,h-foot); draw(); ctx.restore(); ctx=G;
   shProject(G,shTmp,w,h,x,foot,Math.min(shS.len,SHADOW_STAND));
@@ -11172,7 +11228,7 @@ function renderInterior(){
   ctx.save(); ctx.translate(-cx,-cy);
   ctx.drawImage(mapCanvas,cx,cy,W,H,cx,cy,W,H);
   if(interior.def.live) interior.def.live(interior.o);
-  drawHuman(human.x,human.y,human.dir,human.walk,PILOT_PAL,2);
+  drawHuman(human,PILOT_PAL);
   drawParticles(); drawPopups(); drawHomePrompt();
   ctx.restore();
   if(interior.def.dark){ drawDark(cx,cy,1.5,[[human.x,human.y,110*dreadLightK(),1]]); drawWatchers(cx,cy); }   // minas: casi negro, solo ves lo que alumbras
