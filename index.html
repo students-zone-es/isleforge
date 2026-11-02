@@ -5668,7 +5668,7 @@ const HOUSE_LV=[null,
   {name:'VILLA ISLEFORGE', plots:16, slots:3, cost:{work:260,wheat:15,potato:10,carrot:10,piedra:16,talco:8,yeso:10,oro:4}, perks:'16 parcelas · 3 raciones · +10% de WORK al volver de cada misión'},
 ];
 const HOUSE_FP=[null,[5,4],[6,5],[7,5],[8,6],[9,7]];
-const PILOT_PAL={suit:'#ff8c2a',light:'#ffb060',dark:'#b85a10',skin:'#ffd0a0',hair:'#3a2414',cap:'#3d5a2e',eye:'#1a1206',scarf:'#f5c518'};
+const PILOT_PAL={suit:'#ff8c2a',light:'#ffb060',dark:'#b85a10',skin:'#ffd0a0',hair:'#3a2414',cap:'#3d5a2e',eye:'#1a1206'};
 const RES_PALS=[
   {suit:'#ff8c2a',light:'#ffb060',dark:'#b85a10',skin:'#c8d0d8',hair:'#8a929c',cap:null,eye:'#3ee6e6'},
   {suit:'#f5b52a',light:'#ffd36a',dark:'#a8761a',skin:'#c8d0d8',hair:'#8a929c',cap:null,eye:'#3ee6e6'},
@@ -11615,12 +11615,11 @@ function upgradeTurrets(){
    La versión 0.1, dibujada a mano, sigue en sprites/personaje/v0.1 (y en la etiqueta personaje-v0.1 de git). */
 const PR_W=52, PR_H=72, PR_OX=26, PR_OY=66;              // lienzo de una pose y dónde caen los pies
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
-const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,scarf:9,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27};
+const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27};
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
-const PR_SCARF_N=7, PR_SCARF_L=3.2;
 const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
-const prZ=new Float32Array(prArea), prNX=new Float32Array(prArea), prNY=new Float32Array(prArea), prNZ=new Float32Array(prArea), prM=new Uint8Array(prArea);
+const prZ=new Float32Array(prArea), prNX=new Float32Array(prArea), prNY=new Float32Array(prArea), prNZ=new Float32Array(prArea), prM=new Uint8Array(prArea), prP=new Uint8Array(prArea);
 const prTX=new Float32Array(prArea), prTY=new Float32Array(prArea), prTZ=new Float32Array(prArea);
 let prRes=1;   // píxeles del muñeco por cada píxel del juego: 2 en la base si la pantalla los muestra, 4 en la vista previa
 const prRampCache=new Map();
@@ -11640,7 +11639,7 @@ function prPose(mode,ph,br,w,g){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,13.8+br*0.4);
+    const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,13+br*0.4);
     const sh=[s*8.6*w*g.sh,sy,sz], el=[s*9.6*w*g.sh*g.elbow,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e;
     return {sh,el,ha:[el[0]-s*(run?1.8:0),el[1]+Math.sin(c)*FA,el[2]-Math.cos(c)*FA]};
   };
@@ -11653,9 +11652,9 @@ const PR_BUILD=[0.86,1,1.16];
    grosor de brazos, muslos y gemelos, tamaño de manos y botas, cuello, separación de piernas y codos, balanceo al andar y altura.
    n = neutro, el cuerpo de los androides */
 const PR_GEN={
-  n:{sh:1,hip:1,loft:[[1,2.9,4.1],[6,2.5,4.9],[12.6,3,5.5]],seat:null,arm:1,th:[4,3.3],cf:[3.3,2.8],hand:3.1,boot:1,neck:5,stance:1,elbow:1,swing:1,sway:0,h:1},
-  m:{sh:1.12,hip:0.96,loft:[[1,2.9,4.1],[6,2.9,4.8],[12.6,4,5.6]],seat:[2.3,-1.7,0.6,3.7],arm:1.16,th:[4.1,3.6],cf:[3.6,3.1],hand:3.5,boot:1.1,neck:5.4,stance:1.08,elbow:1.06,swing:1.16,sway:0,h:1},
-  f:{sh:0.84,hip:1,loft:[[1,3.5,3.8],[6,2,3.9],[12.6,2.6,4.4]],seat:[2.7,-1.7,0.2,4],arm:0.8,th:[3.8,3.1],cf:[3.1,2.2],hand:2.5,boot:0.88,neck:4.2,stance:0.94,elbow:0.9,swing:0.8,sway:0.7,h:0.96}};
+  n:{sh:1,hip:1,loft:[[1,2.9,4.1],[6,2.5,4.9],[12.6,3,5.5],[15.2,1.4,3.6]],seat:null,nk:3.2,arm:1,th:[4,3.3],cf:[3.3,2.8],hand:2.9,boot:1,stance:1,elbow:1,swing:1,sway:0,h:1},
+  m:{sh:1.05,hip:0.96,loft:[[1,2.9,4.1],[6,2.9,4.8],[12.6,3.4,5.4],[15.2,1.8,3.7]],seat:[2.3,-1.7,0.6,3.7],nk:3.5,arm:1.06,th:[4.1,3.6],cf:[3.6,3.1],hand:3.1,boot:1.1,stance:1.08,elbow:1.02,swing:1.16,sway:0,h:1},
+  f:{sh:0.84,hip:1,loft:[[1,3.5,3.8],[6,2,3.9],[12.6,2.6,4.4],[15.2,1,3.1]],seat:[2.7,-1.7,0.2,4],nk:2.7,arm:0.8,th:[3.8,3.1],cf:[3.1,2.2],hand:2.4,boot:0.88,stance:0.94,elbow:0.9,swing:0.8,sway:0.7,h:0.96}};
 function prGen(pal){ return PR_GEN[pal.key?pal.gender:'n']; }
 /* LA MOCHILA: modelo guardado para el almacenamiento ampliado. Hoy no la lleva nadie: se pone con pal.pack=true, y entonces también
    salen sus tirantes en el pecho y su sombra. Cómo se ve: sprites/personaje/mochila */
@@ -11694,16 +11693,18 @@ function prFace(fx,v,fem,expr){
   if((fem||expr==='risa')&&Math.abs(ax-5.3)<1.2&&Math.abs(v+4)<0.85) return PM.blush;
   return 0;
 }
-function prParts(pal,P,yaw,w,expr){
+function prParts(pal,P,yaw,w,expr,h){
   const pilot=!!pal.key, O=[], {pz,up,L,R,AL,AR,br,sway}=P, hd=pal.head, g=prGen(pal), fem=pilot&&pal.gender==='f';
-  const cap=(a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh});
+  let grp=1;   // cuerpo, brazo, brazo, cabeza: entre piezas distintas no se mezcla la luz y hay una línea limpia
+  const cap=(a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh,g:grp});
   const pt=(x,y,z)=>{ const [yy,zz]=up(y,z); return [x,yy,zz]; };
   // piernas y botas
   const shin=(x,y,z,k)=>k>0.42&&k<0.62?PM.band:k<0.1?PM.pocket:0;   // el arranque, igual que el final del muslo: si no, se pisan en la rodilla
   for(const [G,s] of [[L,-1],[R,1]]){
     const hipX=s*4*w*g.hip+sway;
-    const thigh=(x,y,z,k)=>{   // bolsillo de carga por fuera del muslo, con su solapa, y rodillera abajo
-      const out=s*(x-(hipX+(G.knee[0]-hipX)*k));
+    const thigh=(x,y,z)=>{   // bolsillo de carga por fuera del muslo, con su solapa, y rodillera abajo
+      const kx=G.knee[0]-hipX, ky=G.knee[1], kz=G.knee[2]-pz, k=((x-hipX)*kx+y*ky+(z-pz)*kz)/(kx*kx+ky*ky+kz*kz);   // según el punto: la k de cada esfera tiembla si la pierna va hacia la cámara
+      const out=s*(x-(hipX+kx*k));
       if(out>1.5&&k>0.34&&k<0.72) return k<0.41?PM.seam:PM.pocket;
       return k>0.86?PM.pocket:0;
     };
@@ -11717,16 +11718,16 @@ function prParts(pal,P,yaw,w,expr){
     if(zr>4.4&&zr<6.6) return Math.abs(x)<1.7&&y>0?PM.buckle:PM.belt;
     if(zr<=4.4) return 0;
     if(pilot&&pal.pack&&zr<15.5&&Math.abs(Math.abs(x)-4.6*w)<0.95) return PM.helmD;              // tirantes de la radio
-    if(y>0&&Math.abs(x)<0.6) return PM.band;                                                     // cremallera
-    if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>8.6&&zr<11.2) return zr>10.3?PM.band:PM.pocket; // bolsillos con solapa
+    if(y>0&&Math.abs(x)<0.4) return PM.band;                                                     // cremallera
+    if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>8.6&&zr<11.2) return zr>10.3?PM.seam:PM.pocket; // bolsillos con solapa
     return 0;
   };
   // losas horizontales apiladas de la cadera al pecho: de una sola pieza por delante, y la anchura no añade fondo. No bajan de la
   // cadera: lo que queda por debajo son los muslos; bajarlas más deja un pañal colgando entre las piernas
-  for(let i=0,z=1;z<=12.6;i++,z+=0.7){
-    const [A,B,k]=z<6?[g.loft[0],g.loft[1],(z-1)/5]:[g.loft[1],g.loft[2],(z-6)/6.6];
-    const x=lerp(A[1],B[1],k)*w, r=lerp(A[2],B[2],k)*w, c=sway*(1-z/12.6);
-    cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%5===0);
+  for(let i=0,z=1;z<=15.2;i++,z+=0.4){
+    const j=z<6?0:z<12.6?1:2, A=g.loft[j], B=g.loft[j+1], k=(z-A[0])/(B[0]-A[0]);
+    const x=lerp(A[1],B[1],k)*w, r=lerp(A[2],B[2],k)*w, c=sway*Math.max(0,1-z/12.6);
+    cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%9===0);
   }
   // el frente de la cadera baja hasta los muslos: sin esto, debajo del cinturón se ve la panza de la losa, en sombra
   cap(pt(sway-2*w,1.3,-0.4),pt(sway+2*w,1.3,-0.4),3.3*w,3.3*w,PM.suit);
@@ -11735,28 +11736,35 @@ function prParts(pal,P,yaw,w,expr){
   if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*w,1.2,11); cap(q,q,3.7*w,3.7*w,PM.suit,torso); }
   // brazos: hombro, codo, guante y banda reflectante; el parche va en el hombro izquierdo
   for(const [H,s] of [[AL,-1],[AR,1]]){
-    const q=w*g.arm;
-    cap(H.sh,H.sh,3.9*q,3.9*q,PM.suit,pilot&&s<0?(x,y,z)=>x<H.sh[0]-0.5&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
+    const q=w*g.arm; grp=s<0?2:3;
+    cap(H.sh,H.sh,3.6*q,3.6*q,PM.suit,pilot&&s<0?(x,y,z)=>x<H.sh[0]-0.5&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
     cap(H.sh,H.el,3.3*q,2.9*q,PM.suit,(x,y,z,k)=>k>0.55&&k<0.74?PM.band:0,1);
-    cap(H.el,H.ha,2.9*q,2.6*q,PM.suit,null,1);
-    cap(H.ha,H.ha,g.hand,g.hand,PM.glove);
+    cap(H.el,H.ha,2.9*q,2.6*q,PM.suit,(x,y,z,k)=>k>0.8?PM.pocket:0,1);   // con su puño
+    cap(H.ha,[H.ha[0],H.ha[1],H.ha[2]-1.8],g.hand,g.hand*0.82,PM.glove);
+    cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
   }
-  // pañuelo o cuello
-  const n=pt(0,0,17+br*0.3);
-  for(let i=0;i<14;i++){ const a=i/14*Math.PI*2; const q=[n[0]+Math.cos(a)*g.neck,n[1]+Math.sin(a)*g.neck*0.96,n[2]]; cap(q,q,2.9,2.9,pilot?(pal.neck?PM.scarf:PM.suit):PM.band); }
-  if(pilot&&pal.neck) cap([n[0],n[1]+5.6,n[2]-1],[n[0],n[1]+6.2,n[2]-3.2],2.3,1.7,PM.scarf);
+  grp=1;
+  // cuello y solapas del traje, abiertas por delante
+  const n=pt(0,0,16.4+br*0.3), nr=g.nk+0.8;
+  cap(pt(0,0,14.5),pt(0,0.3,21),g.nk,g.nk,pilot?PM.skin:PM.metal);
+  for(let i=0;i<16;i++){ const a=i/16*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a); if(sa>0.86) continue; const q=[n[0]+ca*nr,n[1]+sa*nr,n[2]]; cap(q,q,1.3,1.3,pilot?PM.suit:PM.band); }
   // cabeza: esfera con casco, gafas y cara pintados según el punto; orejeras y gafas con relieve; yaw = hacia dónde mira
-  // la cabeza mira un poco hacia arriba, hacia la cámara: si no, desde tan alto solo se vería el casco
-  const hc=pt(0,0.6,24.5+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=0.85, sp=0.53;
-  const hp=(x,y,z)=>{ const yy=y*cp-z*sp, zz=y*sp+z*cp; return [hc[0]+x*cy+yy*sy,hc[1]-x*sy+yy*cy,hc[2]+zz]; };
-  const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [dx*cy-dy*sy,yy*cp+dz*sp,dz*cp-yy*sp]; };   // al revés: del mundo a la cabeza
+  // la cabeza se inclina hacia arriba solo cuando mira a la cámara, para que desde tan alto se le vea la cara: de lado o de espaldas
+  // esa inclinación la haría mirar al cielo. Las medidas de la cara van en unidades de una cabeza de radio 9,4: hs la pasa a su tamaño
+  const HR=8.6, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h)), hc=pt(0,0.5,26.6+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const hp=(x,y,z)=>{ const yy=(y*cp-z*sp)*hs, zz=(y*sp+z*cp)*hs, xx=x*hs; return [hc[0]+xx*cy+yy*sy,hc[1]-xx*sy+yy*cy,hc[2]+zz]; };
+  const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [(dx*cy-dy*sy)/hs,(yy*cp+dz*sp)/hs,(dz*cp-yy*sp)/hs]; };   // al revés: del mundo a la cabeza
   const headF=(x,y,z)=>{
     const [fx,fy,zr]=hq(x,y,z), ax=Math.abs(fx);
     if(!pilot){   // androide: cráneo de metal con su visor
       if(fy>2&&Math.abs(zr+0.8)<1.8&&ax<7) return PM.eye;
       return zr>1.8?PM.helm:PM.metal;
     }
-    if(pal.goggles&&Math.abs(zr-3.8)<1.3) return PM.helmD;                      // correa de las gafas
+    if(pal.goggles&&fy>0){                                                      // gafas pintadas: con relieve asoman por detrás de la cabeza
+      const dx=ax-3.2, dz=zr-3.8, d=dx*dx+dz*dz;
+      if(d<4.4) return PM.lens; if(d<7.6) return PM.helmD;
+    }
+    if(pal.goggles&&Math.abs(zr-3.8)<1.1) return PM.helmD;                      // correa de las gafas
     const hl=fem?1.9+0.2*fx:2.4;                                               // la frente despejada en él, el flequillo de lado en ella
     if(hd==='casco'){
       if(zr>1.5||fy<1.2) return ax<0.5&&zr>5?PM.helmD:PM.helm;                  // casco, con su costura
@@ -11765,31 +11773,30 @@ function prParts(pal,P,yaw,w,expr){
       if(zr>hl||fy<1.6) return PM.hair;
     } else if(zr>hl||fy<1.4) return PM.hair;
     if(fy<=0) return PM.skin;
-    if(fem&&hd==='casco'&&ax>5&&zr>-6.2) return PM.hair;                        // mechones que enmarcan la cara
+    if(fem&&hd==='casco'&&ax>5.5&&zr>-5.6) return PM.hair;                        // mechones que enmarcan la cara
     if(!fem&&hd!=='casco'&&ax>6.3&&zr>-2.6) return PM.hair;                     // patillas
     const fc=prFace(fx,zr,fem,expr); if(fc) return fc;
     if(!fem&&pal.beard&&zr<-3.4&&fy>1) return PM.hair;
     return PM.skin;
   };
-  cap(hc,hc,9.4,9.4,PM.skin,headF);
+  grp=4;
+  cap(hc,hc,HR,HR,PM.skin,headF);
   if(pilot){
-    cap(hp(0,9.2,-3),hp(0,9.2,-3),fem?0.9:1.2,fem?0.9:1.2,PM.skin);       // nariz
+    cap(hp(0,9.2,-3),hp(0,9.2,-3),(fem?0.9:1.2)*hs,(fem?0.9:1.2)*hs,PM.skin);       // nariz
     if(hd==='pelo'||hd==='gorra') for(const s of [-1,1]) cap(hp(s*9.2,1,-2),hp(s*9.2,1,-2),1.9,1.9,PM.skin);   // orejas
   }
-  const hw=(x,y,z)=>[hc[0]+x*cy+y*sy,hc[1]-x*sy+y*cy,hc[2]+z];   // lo que cuelga no se inclina con la cabeza
+  const hw=(x,y,z)=>[hc[0]+(x*cy+y*sy)*hs,hc[1]+(y*cy-x*sy)*hs,hc[2]+z*hs];   // lo que cuelga no se inclina con la cabeza
   if(pilot){
     if(hd==='gorra') for(const [y,x,r] of [[7.6,6,1.5],[10,5,1.4],[12,3,1.2]]) cap(hp(-x,y,2.4),hp(x,y,2.4),r,r,PM.helm);
     if(hd==='coleta'||(fem&&hd==='gorra')){ cap(hw(0,-8.6,3),hw(0,-11,-4),3,2.3,PM.hair); cap(hw(0,-11,-4),hw(0,-10,-13),2.3,0.9,PM.hair); }
     if(hd==='melena'){ cap(hw(0,-6,0),hw(0,-7,-12),6,3.6,PM.hair); for(const s of [-1,1]) cap(hw(s*7.2,-2,-1),hw(s*6.6,-3,-11),3.4,2.3,PM.hair); }
     for(const s of [-1,1]){
-      if(hd==='casco') cap(hp(s*8.3,0.2,-0.8),hp(s*8.3,0.2,-4),2.8,2.6,PM.helm);
-      if(pal.goggles)
-      cap(hp(s*3.2,7,3.8),hp(s*3.2,7,3.8),2.6,2.6,PM.lens,(x,y,z)=>{ const [a,,c]=hq(x,y,z), dx=a-s*3.2, dz=c-3.8; return dx*dx+dz*dz>3.2?PM.helmD:0; });
+      if(hd==='casco') cap(hp(s*7.9,0.4,-1),hp(s*7.7,0.8,-4.4),2.4*hs,2.2*hs,PM.helm);
     }
     if(pal.pack) prBackpack(cap,pt);
   } else cap(hp(0,0,9),hp(0,0,11.5),0.7,0.5,PM.metal);
   const shadow=O.filter(p=>p.sh);
-  shadow.push({a:[hc[0],hc[1],hc[2]-6],b:[hc[0],hc[1],hc[2]+6],ra:8.6,rb:8.6});
+  shadow.push({a:[hc[0],hc[1],hc[2]-5],b:[hc[0],hc[1],hc[2]+5],ra:7.9,rb:7.9});
   if(pilot&&pal.pack) shadow.push({a:pt(0,-9,8),b:pt(0,-9,15),ra:4.8,rb:4.8});
   return {O,shadow};
 }
@@ -11800,7 +11807,7 @@ function prSmooth(BW,BH,R,dx,dy,edge){
     let a=prNX[q], b=prNY[q], c=prNZ[q];
     for(let s=-1;s<=1;s+=2) for(let j=1;j<=R;j++){
       const px=x+dx*s*j, py=y+dy*s*j; if(px<0||py<0||px>=BW||py>=BH) break;
-      const p=py*BW+px; if(!prM[p]||Math.abs(prZ[p]-prZ[q])>edge) break;
+      const p=py*BW+px; if(!prM[p]||prP[p]!==prP[q]||Math.abs(prZ[p]-prZ[q])>edge) break;
       a+=prNX[p]; b+=prNY[p]; c+=prNZ[p];
     }
     const l=Math.hypot(a,b,c)||1; prTX[q]=a/l; prTY[q]=b/l; prTZ[q]=c/l;
@@ -11810,7 +11817,7 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 function prBuild(pal,d,mode,f,look,expr){
   const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
-  const w=PR_BUILD[pal.build==null?1:pal.build], P=prPose(mode,mode?f/8:0,mode?0:f,w,prGen(pal)), {O,shadow}=prParts(pal,P,look*0.42,w,expr||'normal'), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
+  const w=PR_BUILD[pal.build==null?1:pal.build], P=prPose(mode,mode?f/8:0,mode?0:f,w,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=prParts(pal,P,look*0.42,w,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
   prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
     const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
@@ -11825,17 +11832,17 @@ function prBuild(pal,d,mode,f,look,expr){
         prZ[q]=z; prNX[q]=nwx; prNY[q]=nwy; prNZ[q]=nwz;
         let m=p.m;
         if(p.f){ const px=wx+r*nwx, py=wy+r*nwy; m=p.f(px*c-py*s,px*s+py*c,lz+r*nwz,k)||p.m; }
-        prM[q]=m;
+        prM[q]=m; prP[q]=p.g;
       }
     }
   }
-  prSmooth(BW,BH,S,1,0,1.4*S); prSmooth(BW,BH,S,0,1,1.4*S);
+  prSmooth(BW,BH,2*S,1,0,1.4*S); prSmooth(BW,BH,2*S,0,1,1.4*S);
   const I=[], NX=[], NY=[], NZ=[], M=[], F=[], R=Math.max(1,S>>1);   // el contorno engorda con la resolución para no quedarse en un hilo
   for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
     const q=y*BW+x, nb=[];
     for(let j=1;j<=R;j++) nb.push(y>=j?q-BW*j:-1,y<BH-j?q+BW*j:-1,x>=j?q-j:-1,x<BW-j?q+j:-1);
     if(prM[q]){   // un borde dentro de la figura (brazo sobre el tronco) se marca oscuro
-      let ink=0; for(const b of nb) if(b>=0&&prM[b]&&prZ[b]-prZ[q]>3.4*S) ink=1;
+      let ink=0; for(const b of nb) if(b>=0&&prM[b]&&(prZ[b]-prZ[q]>4.6*S||(prP[b]!==prP[q]&&prZ[b]-prZ[q]>0.6*S))) ink=1;
       I.push(q); NX.push(prNX[q]*127); NY.push(prNY[q]*127); NZ.push(prNZ[q]*127); M.push(prM[q]); F.push(ink);
     } else {      // contorno: del color más oscuro de lo que tiene al lado
       let m=0; for(const b of nb) if(b>=0&&prM[b]) m=prM[b];
@@ -11849,13 +11856,13 @@ function prBuild(pal,d,mode,f,look,expr){
 /* Cinco tonos por material: las sombras tiran a violeta y las luces a crema */
 function prRamp(hex,soft){
   const c=hexRgb(hex), mix=(b,k)=>c.map((v,i)=>v+(b[i]-v)*k), lift=(k,a)=>c.map(v=>Math.min(255,v*k+a));
-  if(soft) return [mix([120,60,70],0.42),mix([130,70,80],0.2),c,lift(1.03,4),lift(1.06,8)];   // la piel: sombras rojizas y sin quemarse al sol
+  if(soft) return [mix([170,84,70],0.42),mix([190,104,84],0.22),c,lift(1.03,4),lift(1.06,8)];   // la piel: sombras rojizas y sin quemarse al sol
   return [mix([26,20,52],0.68),mix([44,34,74],0.4),c,lift(1.16,12),lift(1.32,26)];   // las luces suben el color: mezclarlas con crema volvía gris lo oscuro
 }
 function prRamps(pal){
   let R=prRampCache.get(pal); if(R) return R;
   const cap=pal.cap||pal.hair, pilot=!!pal.key; R=[];
-  const set={suit:pal.suit,band:pilot?'#f4ecd2':pal.light,pocket:shade(pal.suit,-0.3),helm:pilot?shade(cap,0.1):cap,helmD:shade(cap,-0.55),skin:pal.skin,eye:pal.eye,lens:'#7fd8ee',scarf:pal.scarf||pal.light,
+  const set={suit:pal.suit,band:pilot?'#f4ecd2':pal.light,pocket:shade(pal.suit,-0.3),helm:pilot?shade(cap,0.1):cap,helmD:shade(cap,-0.55),skin:pal.skin,eye:pal.eye,lens:'#7fd8ee',
     belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pilot?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.56),led:'#ff4757',hair:pal.hair,eyeW:'#f2eee6',inside:'#5a1620',teeth:'#f2eee6',brow:shade(pal.hair,-0.2),seam:shade(pal.suit,-0.5)};
   const mix=(a,b,k)=>'#'+hexRgb(a).map((v,i)=>Math.round(v+(hexRgb(b)[i]-v)*k).toString(16).padStart(2,'0')).join('');
   set.lips=mix(pal.skin,'#d0344c',0.62); set.blush=mix(pal.skin,'#f0607a',0.3);
@@ -11898,7 +11905,7 @@ function prRender(B,pal,L,blink){
     if(PR_GLOW.has(m)||(m===PM.eye&&!pal.key&&!blink)){ const c=R[m][m===PM.led&&led?1:4]; D[p]=c[0]; D[p+1]=c[1]; D[p+2]=c[2]; D[p+3]=255; continue; }
     if(blink){ if(m===PM.eye) m=PM.mouth; else if(m===PM.eyeW) m=PM.skin; }
     const nx=B.NX[i]/127, ny=B.NY[i]/127, nz=B.NZ[i]/127, ds=Math.max(0,nx*sx+ny*sy+nz*sz)*L.k, T=L.a*(0.72+0.28*nz)+ds;
-    let lv=T<0.46?0:T<0.64?1:T<0.94?2:T<1.2?3:4;
+    let lv=T<0.42?0:T<0.6?1:T<0.94?2:T<1.2?3:4;
     if(PR_FLAT.has(m)) lv=Math.min(lv,2);
     if(f===1) lv=Math.max(0,lv-2);
     if(PR_GLOSS.has(m)&&L.k>0.2&&nx*hx+ny*hy+nz*hz>0.95) lv=4;
@@ -11939,42 +11946,12 @@ function prStep(u){
   if(u===human&&homeNear!==u.prNear){ u.prNear=homeNear; if(homeNear&&homeNear.id!=='plot'&&!(u.moodT>0)) setMood(u,'feliz',50); }   // sonríe al llegar a un sitio
   return [moving?(run?2:1):0,fr,Math.round(u.lk),prMood(u,moving,run)];
 }
-/* El pañuelo: una cadena de puntos que cuelga del cuello, sigue al cuerpo con retraso y ondea con el aire */
-function prScarfStep(u){
-  const fx=Math.sin(u.face), fy=Math.cos(u.face), ax=u.x-fx*5, ay=u.y-fy*5, az=38;
-  if(!u.sc){ u.sc=[]; for(let i=0;i<PR_SCARF_N;i++) u.sc.push({x:ax-fx*i*3,y:ay-fy*i*3,z:az-i,px:ax-fx*i*3,py:ay-fy*i*3,pz:az-i}); }
-  const wind=0.05+wAmt('storm')*0.3+wAmt('rain')*0.1;
-  u.sc.forEach((n,i)=>{
-    if(!i){ n.x=ax; n.y=ay; n.z=az; return; }
-    const vx=(n.x-n.px)*0.86, vy=(n.y-n.py)*0.86, vz=(n.z-n.pz)*0.86;
-    n.px=n.x; n.py=n.y; n.pz=n.z;
-    n.x+=vx+wind+Math.sin(t*0.13+i*0.9)*0.1; n.y+=vy+Math.cos(t*0.11+i*0.7)*0.06; n.z=Math.max(4,n.z+vz-0.16);
-  });
-  for(let k=0;k<2;k++) for(let i=1;i<PR_SCARF_N;i++){
-    const a=u.sc[i-1], b=u.sc[i], dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z, d=Math.hypot(dx,dy,dz)||1, q=PR_SCARF_L/d;
-    b.x=a.x+dx*q; b.y=a.y+dy*q; b.z=a.z+dz*q;
-  }
-}
-function prScarfDraw(u,R,L){
-  const P=u.sc.map(n=>[n.x,u.y+(n.y-u.y)*PR_SE-n.z*PR_CE]), lit=L.k>0.15?L.sun:L.amb;
-  const col=c=>'rgb('+Math.min(255,c[0]*lit[0]|0)+','+Math.min(255,c[1]*lit[1]|0)+','+Math.min(255,c[2]*lit[2]|0)+')';
-  const walk=(w,fill,oy)=>{ ctx.fillStyle=fill;
-    for(let i=1;i<P.length;i++){ const [x0,y0]=P[i-1], [x1,y1]=P[i], n=Math.ceil(Math.hypot(x1-x0,y1-y0)), ww=Math.max(1,w-(i>4?1:0));
-      for(let k=0;k<=n*prRes;k++){ const q=k/(n*prRes); ctx.fillRect(Math.round((x0+(x1-x0)*q-ww/2)*prRes)/prRes,Math.round((y0+(y1-y0)*q-ww/2+oy)*prRes)/prRes,ww,ww); } } };
-  walk(4,col(R[PM.scarf][0].map(v=>v*0.5)),0);
-  walk(2,col(R[PM.scarf][2]),0);
-  walk(1,col(R[PM.scarf][4]),-1);
-}
 function drawHuman(u,pal){
-  const [mode,f,look,expr]=prStep(u), d=((Math.round(u.face/(Math.PI/8))%16)+16)%16, x=Math.round(u.x), y=Math.round(u.y), tail=!!pal.key&&pal.neck, B=prBuild(pal,d,mode,f,look,pal.key?expr:'');
+  const [mode,f,look,expr]=prStep(u), d=((Math.round(u.face/(Math.PI/8))%16)+16)%16, x=Math.round(u.x), y=Math.round(u.y), B=prBuild(pal,d,mode,f,look,pal.key?expr:'');
   u.prB=B;
-  const L=prLight(u), R=prRamps(pal), blink=(t+(x&127))%211<6;
+  const L=prLight(u), blink=(t+(x&127))%211<6;
   ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,11,4,0,0,Math.PI*2); ctx.fill();
-  if(tail) prScarfStep(u); else u.sc=null;
-  const behind=Math.cos(u.face)>-0.3;
-  if(tail&&behind) prScarfDraw(u,R,L);
   ctx.drawImage(prRender(B,pal,L,blink),x-PR_OX,y-PR_OY,PR_W,PR_H);
-  if(tail&&!behind) prScarfDraw(u,R,L);
 }
 /* Su sombra sale de sus huesos: cada hueso se tumba en el suelo desde sus dos puntas, así copia la pose de verdad */
 function shPerson(u){
@@ -11982,7 +11959,6 @@ function shPerson(u){
   const s=shS, L=Math.min(s.len,SHADOW_STAND)*0.8, G=ctx, X=(q)=>u.x+q[0]+s.dx*q[2]*L, Y=(q)=>u.y+q[1]*PR_SE+s.dy*q[2]*L;
   G.lineCap='round'; G.strokeStyle='#000';
   for(const [a,b,r] of B.bones){ G.lineWidth=r*2; G.beginPath(); G.moveTo(X(a),Y(a)); G.lineTo(X(b),Y(b)); G.stroke(); }
-  if(u.sc){ G.lineWidth=3; G.beginPath(); u.sc.forEach((n,i)=>{ const q=[n.x-u.x,n.y-u.y,n.z]; i?G.lineTo(X(q),Y(q)):G.moveTo(X(q),Y(q)); }); G.stroke(); }
   G.lineCap='butt';
 }
 /* ===================== TU PILOTO =====================
@@ -11990,7 +11966,7 @@ function shPerson(u){
    luego se abre con PERSONAJE en el menú. La vista previa es el mismo muñeco 3D del juego (p9r_person.js), así que se ve
    exactamente como será, y se puede girar, poner a andar o correr y probar con la luz del día, el atardecer o la noche.
    Lo elegido se guarda en save.look; PILOT_PAL lleva siempre el aspecto activo y .key separa las formas distintas del muñeco. */
-const LOOK_DEF={gender:'m',suit:'#ff8c2a',helm:'#3d5a2e',scarf:'#f5c518',skin:'#ffd0a0',hair:'#3a2414',head:'casco',goggles:true,neck:true,beard:false,build:1};
+const LOOK_DEF={gender:'m',suit:'#ff8c2a',helm:'#3d5a2e',skin:'#ffd0a0',hair:'#3a2414',head:'casco',goggles:true,beard:false,build:1};
 const LOOK_YESNO=[[true,'SÍ'],[false,'NO']];
 const LOOK_ROWS=[
   {k:'gender',t:'GÉNERO',o:[['m','MASCULINO'],['f','FEMENINO']]},
@@ -11999,8 +11975,6 @@ const LOOK_ROWS=[
   {k:'helm',t:'CASCO',c:['#3d5a2e','#6a4226','#2a2e36','#2f4a7a','#8a2a26','#b09a6a','#c8ccd4'],off:L=>L.head!=='casco'&&L.head!=='gorra'},
   {k:'hair',t:'PELO',c:['#2a1a10','#5a3418','#a8642a','#e0b64a','#c8ccd4','#c0392b','#3a6ac8']},
   {k:'skin',t:'PIEL',c:['#ffd8b4','#ffd0a0','#f2bd92','#d99a6c','#b5754a','#8a5232','#5e3822']},
-  {k:'neck',t:'PAÑUELO',o:LOOK_YESNO},
-  {k:'scarf',t:'COLOR',c:['#f5c518','#e8402f','#3a8ae8','#4ac46a','#f06ab0','#eeeeee','#2a2e36'],off:L=>!L.neck},
   {k:'goggles',t:'GAFAS',o:LOOK_YESNO},
   {k:'beard',t:'BARBA',o:LOOK_YESNO,off:L=>L.gender!=='m'},
   {k:'build',t:'CUERPO',o:[[0,'LIGERO'],[1,'NORMAL'],[2,'FUERTE']]},
@@ -12012,10 +11986,10 @@ const lookU={x:0,y:0,vx:0,vy:0,dir:'down',walk:0,face:0.5,radius:8,moodFix:'norm
 let lookOn=false, lookW=null, lookDone=null, lookPose=0, lookSky=0, lookSpin=true, lookA=0.5, lookDrag=null, lookShCv=null;
 
 function applyLook(L){
-  const k=Object.assign({},LOOK_DEF,L), key='p'+k.gender+k.head+(+k.goggles)+(+k.neck)+(+k.beard)+k.build;
+  const k=Object.assign({},LOOK_DEF,L), key='p'+k.gender+k.head+(+k.goggles)+(+k.beard)+k.build;
   if(PILOT_PAL.key!==key) for(const q in prCache) delete prCache[q];   // otra forma de muñeco: las poses guardadas ya no valen
-  Object.assign(PILOT_PAL,{suit:k.suit,light:shade(k.suit,0.32),dark:shade(k.suit,-0.34),skin:k.skin,hair:k.hair,cap:k.helm,scarf:k.scarf,
-    gender:k.gender,head:k.head,goggles:k.goggles,neck:k.neck,beard:k.beard,build:k.build,key});
+  Object.assign(PILOT_PAL,{suit:k.suit,light:shade(k.suit,0.32),dark:shade(k.suit,-0.34),skin:k.skin,hair:k.hair,cap:k.helm,
+    gender:k.gender,head:k.head,goggles:k.goggles,beard:k.beard,build:k.build,key});
   prRampCache.delete(PILOT_PAL);
 }
 applyLook(save.look);
@@ -12097,7 +12071,6 @@ function lookKey(k){
   document.getElementById('btnLookReset').onclick=()=>{ lookW=Object.assign({},LOOK_DEF); applyLook(lookW); renderLook(); S.pickup(); };
   document.getElementById('btnLookRand').onclick=()=>{
     for(const r of LOOK_ROWS){ const L=r.c||r.o; lookW[r.k]=r.c?pick(L):pick(L)[0]; }
-    lookW.neck=true;   // al azar sin perder lo que le da su silueta de piloto
     applyLook(lookW); renderLook(); S.pickup();
   };
 })();
