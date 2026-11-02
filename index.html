@@ -703,6 +703,7 @@ let ctx=mainCtx;
 let shadowPass=false;   // true mientras se copia la silueta de cada cosa para su sombra (p9m_daynight.js): barras, anillos y brillos no se copian
 let W=cv.width, H=cv.height;   // cambian con el tamaño de la ventana: ver fitGame() en p7_ui.js
 const TILE=30;
+const VEH_K=1.5, HUM_K=1.3;   // escala de vehículos y humanos en misión: se ven y reciben daño a este tamaño, pero contra las paredes miden lo de antes (wallR) para seguir cabiendo por los huecos
 let WC=84, WR=64, WW=WC*TILE, WH=WR*TILE;
 /* Tipos de casilla */
 const G=0, RUB=1, WALL=2, WATER=3, SAND=4, BUSH=5, TREE=6, SCORCH=7, CAGE=8;
@@ -919,7 +920,7 @@ function carveLine(c0,r0,c1,r1){
   }
 }
 
-const ISLE_W=g=>84+Math.min(16,g*4), ISLE_H=g=>64+Math.min(12,g*3);   // tamaño de la isla según cuánto ha crecido
+const ISLE_W=g=>118+Math.min(22,g*5), ISLE_H=g=>90+Math.min(16,g*4);   // tamaño de la isla según cuánto ha crecido
 let islandShape=null;   // silueta de la isla actual (para que en supervivencia pueda crecer sin rehacerla)
 function inIsland(S,c,r,g){
   const rx=ISLE_W(g)*0.42, ry=ISLE_H(g)*0.40, dx=(c+0.5-S.cx)/rx, dy=(r+0.5-S.cy)/ry, th=Math.atan2(dy,dx);
@@ -968,21 +969,21 @@ function buildIsland(){
   const free=(c,r)=>inB(c,r) && (map[idx(c,r)]===G||map[idx(c,r)]===BUSH) && Math.hypot(c-landing.c,r-landing.r)>7;
 
   // Pasto alto
-  for(let i=0;i<18;i++){
+  for(let i=0;i<36;i++){
     const p=randomLand(); if(!p) break; const [c,r]=p, R=rand(1.5,3.8);
     for(let y=-4;y<=4;y++) for(let x=-4;x<=4;x++){
       if(x*x+y*y<=R*R*(0.7+hash2(c+x,r+y+seed)*0.6) && inB(c+x,r+y) && map[idx(c+x,r+y)]===G && Math.hypot(c+x-landing.c,r+y-landing.r)>6) map[idx(c+x,r+y)]=BUSH;
     }
   }
   // Bosquecillos
-  for(let i=0;i<10;i++){
+  for(let i=0;i<20;i++){
     const p=randomLand(); if(!p) break; const [c,r]=p, n=irand(4,12);
     for(let j=0;j<n;j++){ const x=c+irand(-3,3), y=r+irand(-3,3); if(free(x,y)) setTile(x,y,TREE); }
   }
   if(survLvl){ buildCrater(); placeLavaFlows(4+Math.min(3,grow)); }   // la isla cráter es volcánica (p9o_lava.js)
   // Búnkeres de acero con dos entradas
   const bunkers=[];
-  const nB=survLvl?0:6+(wave>3?2:0);   // supervivencia: sin búnkeres (ya no hay rehenes que guardar)
+  const nB=survLvl?0:11+(wave>3?3:0);   // supervivencia: sin búnkeres (ya no hay rehenes que guardar)
   for(let i=0;i<nB;i++){
     for(let tries=0;tries<40;tries++){
       const w=irand(5,8), h=irand(4,6), c0=irand(4,WC-w-5), r0=irand(4,WR-h-12);
@@ -1006,18 +1007,18 @@ function buildIsland(){
   }
   refreshGrass();
   // Muros de sacos (destructibles)
-  for(let i=0;i<36;i++){
+  for(let i=0;i<70;i++){
     const p=randomLand(); if(!p) break; const [c,r]=p, horiz=Math.random()<0.5, len=irand(2,5);
     for(let j=0;j<len;j++){ const x=c+(horiz?j:0), y=r+(horiz?0:j); if(free(x,y)) setTile(x,y,RUB); }
   }
   // Bloques de acero sueltos (cobertura indestructible)
-  for(let i=0;i<12;i++){
+  for(let i=0;i<24;i++){
     const p=randomLand(); if(!p) break; const [c,r]=p, s=Math.random()<0.4?2:1;
     for(let y=0;y<s;y++) for(let x=0;x<s;x++) if(free(c+x,r+y)) setTile(c+x,r+y,WALL);
   }
   // Jaulas con rehenes fuera de los búnkeres
   refreshGrass();
-  const wantCages=survLvl?0:Math.min(6,3+Math.floor(wave/3));   // supervivencia: sin rehenes
+  const wantCages=survLvl?0:Math.min(9,5+Math.floor(wave/3));   // supervivencia: sin rehenes
   let cagesNow=cageInfo.size;
   for(let tries=0;tries<80 && cagesNow<wantCages;tries++){
     const p=randomLand(); if(!p) break; const [c,r]=p;
@@ -1027,7 +1028,7 @@ function buildIsland(){
   // Nodos de hackeo: de aquí salen los robots
   refreshGrass();
   nodes=[];
-  const wantNodes=(isBossWave(wave)||survLvl)?0:Math.min(6,3+Math.floor(wave/4));   // supervivencia: sin nodos (los enemigos llegan en paracaídas)
+  const wantNodes=(isBossWave(wave)||survLvl)?0:Math.min(8,4+Math.floor(wave/4));   // supervivencia: sin nodos (los enemigos llegan en paracaídas)
   for(let tries=0;tries<500 && nodes.length<wantNodes;tries++){
     const p=randomLand(); if(!p) break; const [c,r]=p;
     const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
@@ -1562,7 +1563,7 @@ function eraseCircle(x,y,R){
 /* ===================== FÍSICA ===================== */
 function collideTiles(u){
   let hit=null;
-  const r=u.radius;
+  const r=u.wallR||u.radius;
   const c0=Math.floor((u.x-r)/TILE), c1=Math.floor((u.x+r)/TILE);
   const r0=Math.floor((u.y-r)/TILE), r1=Math.floor((u.y+r)/TILE);
   for(let rr=r0;rr<=r1;rr++) for(let cc=c0;cc<=c1;cc++){
@@ -1717,7 +1718,7 @@ function findPath(sx,sy,tx,ty,maxIter,extra){   // extra: coste añadido por cas
 let pfLegs=false;
 /* ¿Hay peligro (metal fundido, fuego, arenas, lava) en el camino de u hasta (x1,y1)? Mira el centro y los dos costados */
 function bodyHazard(u,x1,y1){
-  const a=Math.atan2(y1-u.y,x1-u.x), ox=-Math.sin(a)*u.radius*0.85, oy=Math.cos(a)*u.radius*0.85;
+  const a=Math.atan2(y1-u.y,x1-u.x), ox=-Math.sin(a)*(u.wallR||u.radius)*0.85, oy=Math.cos(a)*(u.wallR||u.radius)*0.85;
   return lineHasTile(u.x,u.y,x1,y1,MOLTEN)||lineHasTile(u.x+ox,u.y+oy,x1+ox,y1+oy,MOLTEN)||lineHasTile(u.x-ox,u.y-oy,x1-ox,y1-oy,MOLTEN);
 }   // mientras busca camino una unidad con piernas: la lava estrecha se puede saltar
 function steerTo(u,tx,ty,dt,k){
@@ -1727,7 +1728,7 @@ function steerTo(u,tx,ty,dt,k){
 function steerTo0(u,tx,ty,dt,k){
   const d=Math.hypot(tx-u.x,ty-u.y);
   if(d<8) return true;
-  if(u.air || (d<460 && pathClear(u.x,u.y,tx,ty,u.radius) && !bodyHazard(u,tx,ty))){ u.path=null; accelerate(u,tx-u.x,ty-u.y,dt,k); return false; }
+  if(u.air || (d<460 && pathClear(u.x,u.y,tx,ty,u.wallR||u.radius) && !bodyHazard(u,tx,ty))){ u.path=null; accelerate(u,tx-u.x,ty-u.y,dt,k); return false; }
   u.pathT=(u.pathT||0)-dt;
   const moved=Math.hypot((u.pathTX||-9999)-tx,(u.pathTY||-9999)-ty)>60;
   if((!u.path||u.pathT<=0||moved) && pfBudget>0){
@@ -1738,7 +1739,7 @@ function steerTo0(u,tx,ty,dt,k){
     let look=0;
     while(u.pathI<u.path.length-1 && look<3){
       const nx=u.path[u.pathI+1];
-      if(pathClear(u.x,u.y,nx.x,nx.y,u.radius)&&!bodyHazard(u,nx.x,nx.y)) u.pathI++; else break;   // no ataja por encima de peligros (ni rozándolos)
+      if(pathClear(u.x,u.y,nx.x,nx.y,u.wallR||u.radius)&&!bodyHazard(u,nx.x,nx.y)) u.pathI++; else break;   // no ataja por encima de peligros (ni rozándolos)
       look++;
     }
     const wp=u.path[u.pathI];
@@ -1773,7 +1774,7 @@ function stuckCheck(u,dt){
 function makePlayer(){
   const ch=CHARS[sel().char]||CHARS.mech, up={}; UP_KEYS.forEach(k=>up[k]=upOf(k,ch.id));   // las mejoras de ESTE vehículo
   const maxHp=ch.hp+up.hp*15+(tierInfo(ch.id).hp||0);
-  return { kind:'player', ch, x:0, y:0, vx:0, vy:0, radius:ch.radius, mass:ch.mass,
+  return { kind:'player', ch, x:0, y:0, vx:0, vy:0, radius:ch.radius*VEH_K, wallR:ch.radius, mass:ch.mass,
     body:-Math.PI/2, aim:-Math.PI/2,
     hp:maxHp, maxHp, shield:up.shield*20, shieldMax:Math.max(20,up.shield*20),
     speedMax:ch.speed*(1+up.speed*0.07)*(tierInfo(ch.id).spd||1), accel:ch.accel, friction:ch.friction,
@@ -2066,7 +2067,7 @@ function updateBullets(dt){
           const d2=(b.x-player.x)**2+(b.y-player.y)**2;
           if(!b.grazed && d2<(player.radius+11)**2) b.grazed=true;   // ROCE: se apunta al pasar cerca...
           else if(b.grazed===true && d2>(player.radius+11)**2){ b.grazed='ok'; score+=2; S.graze(); }   // ...y puntúa solo si se aleja sin darte
-          if(d2<(b.radius+player.radius)**2){
+          if(d2<(b.radius+player.wallR)**2){   // el blanco de las balas no crece con el vehículo: si no, ser grande solo sería más difícil
             damagePlayer(b.dmg,b.sp); dead=true;
             if(b.stunP){ stunPlayer(b.stunP); popup(player.x,player.y-34,'¡ELECTROCUTADO!','#7fe8ff',13); }
             if(b.splash) explode(b.x,b.y,b.splash,0,'e',{});
@@ -2591,6 +2592,7 @@ function makeMate(kind,x,y,lvl){
   if(kind==='car'){ const T=tierInfo('car'); Object.assign(m,{radius:11,mass:1.8,hp:70*hpMul*(T.hpMul||1),speedMax:3.3,accel:0.3,friction:0.88,cannonCd:60,tier:vehTier('car'),T,fireBase:T.fireCd||7,ramCd:0,rocketCd:90}); }
   else if(kind==='ninja') Object.assign(m,{tier:vehTier('ninja'),T:tierInfo('ninja'),invis:0,cloneCd:240,clones:[],radius:9,mass:1,hp:55*hpMul*(tierInfo('ninja').hpMul||1),speedMax:3.6,accel:0.45,friction:0.84,dashCd:0,nadeCd:90,slashCd:0,flankSide:1,flankT:200,dash:0});
   else Object.assign(m,{tier:vehTier('tesla'),T:tierInfo('tesla'),shieldCd:300,stormCd:300,radius:9,mass:0.5,hp:45*hpMul*(tierInfo('tesla').hpMul||1),speedMax:3.5,accel:0.32,friction:0.9,air:true,zapCd:20,spin:0});
+  if(kind==='car'){ m.wallR=m.radius; m.radius*=VEH_K; }
   m.maxHp=m.hp;
   if((lvl||1)>=2) evolveMate(m,true);
   return m;
@@ -2598,7 +2600,7 @@ function makeMate(kind,x,y,lvl){
 function evolveMate(m,silent){
   if(m.lvl>=2) return;
   m.lvl=2; mateLvl=2;
-  if(m.mk==='car'){ m.radius=13; m.mass=3; m.maxHp*=1.8; m.speedMax=2.8; }
+  if(m.mk==='car'){ m.wallR=13; m.radius=13*VEH_K; m.mass=3; m.maxHp*=1.8; m.speedMax=2.8; }
   else m.maxHp*=1.4;
   m.hp=m.maxHp;
   if(!silent){
@@ -3105,6 +3107,7 @@ function separateAll(){
 }
 
 /* ===================== ENEMIGOS: CREACIÓN Y OLEADAS ===================== */
+const SIZE_K={tankRam:VEH_K,tankSiege:VEH_K,tankLight:VEH_K,tankMortar:VEH_K,tankRadar:VEH_K,raider:VEH_K,car:VEH_K,buggy:VEH_K,bandit:HUM_K,bsniper:HUM_K,sniper:HUM_K,molotov:HUM_K,mechanic:HUM_K};
 function makeEnemy(id,x,y,sid){
   const def=EDEFS[id];
   const hp=Math.round(def.hp*(survLvl?survK('enemigos'):1+(wave-1)*0.08));
@@ -3118,6 +3121,8 @@ function makeEnemy(id,x,y,sid){
     carrier:wave>=2&&Math.random()<(def.hadal||0)*(world?0.5:1),pulso:null,pulsoUsed:false,
     alarmCd:0,glitch:0,ramT:0,ramA:0,ramHits:null,crushCd:0,walk:0,tread:0,orbitA:null,bombCd:rand(200,320),dish:0,recoil:0};
   en.aim=en.angle;
+  const k=SIZE_K[id];
+  if(k){ en.wallR=en.radius; en.radius*=k; if(def.look!=='tank') en.drawK=k; }   // los tanques ya se dibujan según su radio
   if(def.look==='tank'){ en.speedMax*=0.6; en.accel*=0.55; }   // tanque de verdad: lento y pesado (al embestir no: va a 5,4)
   return en;
 }
@@ -4432,7 +4437,10 @@ function drawHawk(en){
   ctx.fillStyle='#222'; ctx.fillRect(6,-1,6,2);
   ctx.restore();
 }
-function drawPow(pw){
+/* Dibuja fn a escala k alrededor de (x,y) */
+function drawSized(x,y,k,fn){ ctx.save(); ctx.translate(x,y); ctx.scale(k,k); ctx.translate(-x,-y); fn(); ctx.restore(); }
+function drawPow(pw){ drawSized(pw.x,pw.y,HUM_K,()=>drawPowBody(pw)); }
+function drawPowBody(pw){
   ctx.save(); ctx.translate(pw.x,pw.y);
   const wv=pw.follow?Math.sin(pw.walk)*1.5:Math.sin(pw.wave)*3;
   if(!shadowPass){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(-4,4,9,3); }
@@ -4450,6 +4458,9 @@ function drawPow(pw){
 function hitFlashOn(u){ if(u.flash>0&&!shadowPass) ctx.filter='brightness(2.6)'; }
 function hitFlashOff(){ ctx.filter='none'; }
 function drawEnemy(en){
+  if(en.drawK) drawSized(en.x,en.y,en.drawK,()=>drawEnemyBody(en)); else drawEnemyBody(en);
+}
+function drawEnemyBody(en){
   const d=en.def;
   if(d.draw){ hitFlashOn(en); d.draw(en); hitFlashOff(); return; }   // aspecto propio (Mundos 3-5)
   if(en.def.air){ hitFlashOn(en); drawHawk(en); hitFlashOff(); return; }
@@ -4565,7 +4576,7 @@ function drawPlayer(){
   if(p.hurtFlash>0) ctx.filter='brightness(2.2)';
   if(p.ch.id==='mech') drawMech(p);
   else if(p.ch.id==='tank') drawTankTier(p);
-  else if(p.ch.id==='moto') drawPlayerMoto(p);
+  else if(p.ch.id==='moto') drawSized(p.x,p.y,VEH_K,()=>drawPlayerMoto(p));
   else drawGuepardo(p);
   ctx.restore();
   ctx.filter='none';
@@ -5129,7 +5140,8 @@ function drawTurret(tu){
     ctx.restore();
     hpBar(tu.x,tu.y-18,26,tu.hp/tu.maxHp,'#3ee67a');
 }
-function drawSoldier(so){
+function drawSoldier(so){ drawSized(so.x,so.y,HUM_K,()=>drawSoldierBody(so)); }
+function drawSoldierBody(so){
     drawFeet(so.x,so.y,so.angle,so.walk||0,1,2.5,'#1d4d31');
     ctx.save(); ctx.translate(so.x,so.y); ctx.rotate(so.angle);
     ctx.fillStyle=so.flash>0?'#fff':'#2f7d4f'; ctx.fillRect(-4,-4,8,8);
@@ -6108,8 +6120,8 @@ function drawUpgradeStation(L){
       ctx.strokeStyle='#2e2820'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(cx-bw*0.3,cy+2); ctx.lineTo(cx+bw*0.3,cy-2); ctx.stroke();
       ctx.fillStyle='#ffd76e'; ctx.font='bold 13px Rajdhani, monospace'; ctx.fillText('?',cx,cy+5);
     } else {
-      const sc=id==='tank'?1.25:1.4, u={x:cx,y:cy,radius:ch.radius*sc,body:-Math.PI/2,aim:-Math.PI/2+(mine?Math.sin(t*0.02)*0.5:0),walk:0,tread:0,angle:-Math.PI/2};
-      if(id==='mech') drawMech(u); else if(id==='tank') drawTankTier(u); else if(id==='moto') drawPlayerMoto(u); else drawGuepardo(u);
+      const sc=id==='tank'?2:2.2, u={x:cx,y:cy,radius:ch.radius*sc,body:-Math.PI/2,aim:-Math.PI/2+(mine?Math.sin(t*0.02)*0.5:0),walk:0,tread:0,angle:-Math.PI/2};
+      if(id==='mech') drawMech(u); else if(id==='tank') drawTankTier(u); else if(id==='moto') drawSized(cx,cy,sc,()=>drawPlayerMoto(u)); else drawGuepardo(u);
     }
     // cartel con el nombre y el nivel de mejoras
     ctx.fillStyle=mine?'rgba(8,40,44,.92)':'rgba(13,20,32,.85)'; ctx.fillRect(bx+3,y+8,bw-6,30);
@@ -6928,7 +6940,8 @@ function updateHelis(dt){
 /* HELICÓPTERO de transporte (como el del concepto de la base): fuselaje gris oscuro y redondeado, cabina de cristal
    delante, patines, alas cortas con cohetes, motor con escapes, cola con estabilizador y rotor de cola, y 4 palas.
    spin = lo rápido que giran las palas (0 = paradas: así está en la base; 1 = en vuelo, con el disco borroso) */
-function drawHeli(x,y,ang,alt,rotor,carry,spin,enemy){
+function drawHeli(x,y,ang,alt,rotor,carry,spin,enemy){ drawSized(x,y,VEH_K,()=>drawHeliBody(x,y,ang,alt,rotor,carry,spin,enemy)); }
+function drawHeliBody(x,y,ang,alt,rotor,carry,spin,enemy){
   spin=spin==null?1:spin;
   if(shadowPass){ x+=shS.dx*alt*shS.len; y+=shS.dy*alt*shS.len; }   // su sombra cae más lejos cuanto más alto vuela
   const HC=enemy?{boom:'#4a2424',fin:'#3a1a1a',body0:'#2a1414',body:'#6a2c2c',top:'#8a3a3a',eng:'#3a1e1e',eng2:'#4a2626',glass0:'#3a1010',glass:'#8a2a2a',emb:'#ff4757'}
@@ -11114,7 +11127,7 @@ function drawSunShadows(cx,cy,cast){
     const v=map[r*WC+c], h=SHADOW_H[v]; if(!h) continue;
     const L=h*s.len, ex=s.dx*L, ey=s.dy*L, x=c*TILE-cx, y=r*TILE-cy;
     if(v===BLD&&inHome) continue;   // los edificios de la base tienen tejado: van enteros después
-    if(v===ROCK){ g.strokeStyle='#000'; g.lineCap='round'; g.lineWidth=TILE; g.beginPath(); g.moveTo(x+15,y+15); g.lineTo(x+15+ex,y+15+ey); g.stroke(); tall.push([x+15,y+15]); continue; }
+    if(v===ROCK){ u.strokeStyle='#000'; u.lineCap='round'; u.lineWidth=TILE; u.beginPath(); u.moveTo(x+15,y+15); u.lineTo(x+15+ex,y+15+ey); u.stroke(); continue; }   // en la capa de abajo: la roca del mineral se pinta después, encima
     if(v===TREE){
       if(SHEET_GRASS_ERAS[era.id]){ const sp=treeSprite(r*WC+c,c,r); shProject(g,sp,sp.width,sp.height,x+TILE/2,y+TILE-4,s.len); }
       else { g.beginPath(); g.ellipse(x+TILE/2+ex*0.55,y+TILE-5+ey*0.55,Math.max(8,L*0.5),8,Math.atan2(s.dy,s.dx),0,Math.PI*2); g.fill(); }   // su pino va pintado en la casilla
@@ -11127,7 +11140,7 @@ function drawSunShadows(cx,cy,cast){
   shFade(g,shCv); shFade(u,shCv2);
   for(const q of [g,u]){
     q.globalCompositeOperation='destination-out';
-    for(const b of tall){ if(b.length>2) q.fillRect(...b); else { q.beginPath(); q.arc(b[0],b[1],14,0,Math.PI*2); q.fill(); } }   // el techo de lo alto está al sol
+    for(const b of tall) q.fillRect(...b);   // el techo de lo alto está al sol
     q.globalCompositeOperation='source-in'; q.fillStyle=s.col; q.fillRect(0,0,W,H);
   }
   u.globalCompositeOperation='destination-out'; u.drawImage(shCv,0,0);
@@ -13114,7 +13127,7 @@ function startStage(){
   introHeli=!!survLvl;   // supervivencia: llegas en helicóptero, no en barco
   carryDefenses(keep);
   seedDepositsStage();
-  toKill=(bossStage||tut)?0:Math.min(40,7+wave*2);
+  toKill=(bossStage||tut)?0:sector?Math.min(60,12+wave*3):Math.min(40,7+wave*2);
   maxAlive=Math.min(18,8+wave);
   spawned=0; killed=0; failsafe=0;
   spawnTimer=Math.max(150,380-wave*16);
