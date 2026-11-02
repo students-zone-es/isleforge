@@ -5969,70 +5969,6 @@ function updateHomeHud(){
 }
 
 /* ---------- dibujo de la base ---------- */
-/* PERSONAS de la base en vista 3/4 y 4 direcciones (izquierda = derecha en espejo). Cada pose se monta por piezas en una
-   rejilla: piernas, torso, brazos y cabeza; el contorno oscuro se añade solo y la pose queda guardada ya dibujada.
-   Letras: C/M/c casco de piloto, v/Q/q correa y cristales de las gafas, H pelo, S/s piel, E ojo, N/n pañuelo, B/L/D traje, X parche
-   del hombro, P bolsillo, Z cremallera, b/y cinturón, g/G guantes, T/t/O botas, a/A radio a la espalda. Los androides de la base
-   usan las mismas piezas: sin gafas, sin parche y sin radio */
-const HUMAN_HEAD={
-  down:["..CCCCC..",".CMMCCCc.",".vQqvQqv.",".CHHSSHc.",".CSESESc.",".cSSSSsc.","..sSSSs.."],
-  up:["..CCCCC..",".CMMCCCc.",".vvvvvvv.",".CCCCCCc.",".CMCCCCc.",".CCCCCcc.","..ccccc.."],
-  right:["...CCCC..","..CMMCCc.","..vvvQqv.","..CCHSSS.","..CCSSES.","..CcSSSs.","...cSSs.."]};
-const HUMAN_TORSO={
-  down:["..NNNNN..","..BNnNB..","..XBZBD..","..PBZBP..","..bbybb..","..LBDBD.."],
-  up:["..NNNNN..","..LaaaD..","..LaAaD..","..LaaaD..","..bbbbb..","..LBDBD.."],
-  right:["...NNNN..","...XBBD..","...LBBD..","...LBPD..","...bbby..","...LBBD.."]};
-const HUMAN_LEGS={
-  stand:["..BB.BD..","..LB.LD..","..BB.BD..","..Tt.Tt..","..OO.OO.."],
-  stepL:["..BB.BD..","..LB.LD..","..BB.Tt..","..Tt.OO..","..OO....."],
-  stepR:["..BB.BD..","..LB.LD..","..Tt.BD..","..OO.Tt..",".....OO.."],
-  side:["...BBD...","...LBD...","...BBD...","...TTt...","...OOOO.."],
-  strideA:["...BBD...","..DBBBD..",".DD..LBD.",".tT...Tt.",".OO...OOO"],
-  strideB:["...BBD...","..BBBDD..",".LB...DD.",".Tt...tT.",".OO...OOO"],
-  lift:["...BBD...","...LBD...","..TBBD...","..OTTt...","...OOOO.."]};
-/* f: 0-1 respirar parado; 2-5 los 4 pasos de andar (2 y 4 pisando, 3 y 5 de paso, con el cuerpo un poco más alto) */
-function humanRows(dir,f,blink,pilot){
-  const G=[]; for(let i=0;i<21;i++) G.push(new Array(11).fill('.'));
-  const put=(rows,ox,oy)=>rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++) if(r[x]!=='.') G[oy+y+2][ox+x+1]=r[x]; });
-  const side=dir==='right', bob=f===3||f===5?-1:f===1?1:0, swing=f===2?-1:f===4?1:0;
-  put(HUMAN_LEGS[side?['side','side','strideA','lift','strideB','lift'][f]:f===2?'stepL':f===4?'stepR':'stand'],0,13);
-  if(bob<0) put(side?["...BBD..."]:["..BBDBD.."],0,12);
-  if(side) put(["DD","DD","DD","GG"],3-swing,8+bob);   // el brazo del otro lado
-  put(HUMAN_TORSO[dir],0,7+bob);
-  if(side) put(["LB","LB","LB","gg"],3+swing,8+bob);
-  else {
-    put([".L","LB","LB","LB","gg"],0,8+bob+(swing<0?-1:0));
-    put(["D.","BD","BD","BD","gg"],7,8+bob+(swing>0?-1:0));
-  }
-  put(HUMAN_HEAD[dir],0,bob);
-  if(pilot&&side) put(f>1&&f%2?["NN",".n"]:[".N","Nn"],1,7+bob);   // la punta del pañuelo ondea al andar
-  if(pilot&&dir==='up') put(["nN"],3+(f>1&&f%2?1:0),8+bob);
-  const out=G.map(r=>r.slice());
-  for(let y=0;y<21;y++) for(let x=0;x<11;x++){
-    if(G[y][x]!=='.') continue;
-    if((G[y-1]&&G[y-1][x]!=='.'&&G[y-1][x]!==undefined)||(G[y+1]&&G[y+1][x]!=='.'&&G[y+1][x]!==undefined)||(G[y][x-1]&&G[y][x-1]!=='.')||(G[y][x+1]&&G[y][x+1]!=='.')) out[y][x]='k';
-  }
-  return out.map(r=>r.join('').replace(/E/g,blink?'s':'E'));
-}
-function humanColors(pal){
-  const cap=pal.cap||pal.hair, pilot=!!pal.scarf, sc=pal.scarf||pal.light;
-  return {k:shade(pal.dark,-0.62),C:cap,M:shade(cap,0.25),c:shade(cap,-0.25),v:pilot?shade(cap,-0.5):shade(cap,-0.25),H:pal.hair,
-    Q:pilot?'#9fe8ff':cap,q:pilot?'#3a8fa8':cap,X:pilot?'#3ee6e6':pal.light,
-    S:pal.skin,s:shade(pal.skin,-0.2),E:pal.eye,N:sc,n:shade(sc,-0.25),B:pal.suit,L:pal.light,D:pal.dark,P:shade(pal.suit,-0.28),Z:pal.light,
-    b:'#2e2620',y:'#d9c08a',g:pilot?'#4a3a2a':pal.skin,G:pilot?'#33281e':shade(pal.skin,-0.25),T:'#4a3624',t:'#6a5038',O:'#241a12',
-    a:pilot?shade(cap,-0.12):pal.suit,A:pilot?'#9aa0a8':pal.suit};
-}
-function drawHuman(u,pal){
-  const dir=u.dir==='left'?'right':u.dir, x=Math.round(u.x), y=Math.round(u.y);
-  const f=Math.hypot(u.vx,u.vy)>0.2?2+(Math.floor(u.walk/2.6)&3):Math.floor((t+(x&63))/48)&1, blink=(t+x)%211<7;
-  if(shadowPass){ if(dir!=='right'){ ctx.fillStyle='#000'; ctx.fillRect(x-5,y-10,10,10); } }   // en la sombra las dos piernas son una sola mancha
-  else { ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,10,3.6,0,0,Math.PI*2); ctx.fill(); }
-  const key='hum|'+pal.suit+pal.hair+pal.cap+'|'+dir+f+(blink?'b':'');
-  const spr=sprCache[key]||pixSprite(key,humanRows(dir,f,blink,!!pal.scarf),humanColors(pal));
-  ctx.save(); ctx.translate(x,y); if(u.dir==='left') ctx.scale(-1,1);
-  ctx.drawImage(spr,-11,-40,22,42);
-  ctx.restore();
-}
 function drawCrop(kind,st,x,y,sw){
   const R=(px,py,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(Math.round(x+px),Math.round(y+py),w,h); };
   R(-6,2,12,3,'rgba(40,24,10,.45)');
@@ -6288,8 +6224,8 @@ function castHome(){
   shLong({x:(L.c0+L.w/2)*TILE+6,y:(L.r0+L.h/2)*TILE-4,radius:44},drawParkedHeli);
   for(const [c,r] of homeLamps) shStand(c*TILE+15,r*TILE+22,16,34,()=>drawLamp(c,r));
   shStand(44*TILE+7,28*TILE+22,90,60,drawHomeFlag);
-  for(const r of residents) shStand(r.x,r.y,40,44,()=>drawHuman(r,r.pal));
-  if(human) shStand(human.x,human.y,40,44,()=>drawHuman(human,PILOT_PAL));
+  for(const r of residents) shPerson(r);
+  if(human) shPerson(human);
 }
 function renderHome(){
   if(interior){ renderInterior(); return; }
@@ -11642,6 +11578,267 @@ function upgradeTurrets(){
   let n=0;
   for(const e of w.enc){ e.units=e.units.map(u=>u.slice());   // copia: la lista del mundo es compartida entre partidas
     for(const u of e.units) if(u[0]==='emplacement'&&(n++)%2===1) u[0]='rocketpad'; }
+}
+/* ===================== PERSONAS EN 3D (personaje v0.2) =====================
+   El piloto y los androides de la base son un muñeco 3D hecho de esferas, con huesos que respiran, andan y corren. Cada pose se
+   pinta en píxeles desde la cámara de la base y se guarda: de cada píxel, hacia dónde mira su superficie y de qué material es.
+   Lo que se calcula cada fotograma es solo la LUZ (sol o luna de verdad, color del cielo, farolas y balizas). Por eso gira en
+   16 direcciones, le da el sol por el lado que toca y el rojo del helipuerto le tiñe al pasar. Su sombra sale de sus huesos.
+   La versión 0.1, dibujada a mano, sigue en sprites/personaje/v0.1 (y en la etiqueta personaje-v0.1 de git). */
+const PR_W=52, PR_H=72, PR_OX=26, PR_OY=66;              // lienzo de una pose y dónde caen los pies
+const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
+const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,scarf:9,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20};
+const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle]), PR_GLOW=new Set([PM.patch,PM.led]);
+const PR_SCARF_N=7, PR_SCARF_L=3.2;
+const prCache={}, prArea=PR_W*PR_H;
+const prZ=new Float32Array(prArea), prNX=new Int8Array(prArea), prNY=new Int8Array(prArea), prNZ=new Int8Array(prArea), prM=new Uint8Array(prArea);
+let prCv=null, prG=null, prImg=null;
+const prRampCache=new Map();
+
+/* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
+   Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
+function prPose(mode,ph,br){
+  const th=ph*Math.PI*2, walk=mode>0, run=mode===2, TH=10, SH=10, UA=8, FA=7.5;
+  const A=run?0.95:walk?0.58:0, K=run?1.75:walk?1.0:0, B=run?0.95:walk?0.55:0, lean=run?0.24:walk?0.06:0;
+  const leg=(s,p)=>{
+    const a=A*Math.sin(p), k=(walk?0.12:0.03)+K*Math.max(0,Math.cos(p-0.35)), b=a-k, f=b<0?-b*0.8:-b*0.35;
+    const knee=[s*4,Math.sin(a)*TH,-Math.cos(a)*TH], ank=[s*4.2,knee[1]+Math.sin(b)*SH,knee[2]-Math.cos(b)*SH];
+    return {knee,ank,toe:[s*4.6,ank[1]+Math.cos(f)*5.5,ank[2]-Math.sin(f)*5.5]};
+  };
+  const L=leg(-1,th), R=leg(1,th+Math.PI), pz=3.4-Math.min(L.ank[2],R.ank[2],L.toe[2]+0.4,R.toe[2]+0.4);
+  for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
+  const up=(y,z)=>[y+z*Math.sin(lean),pz+z*Math.cos(lean)];   // lo de cintura para arriba se inclina al correr
+  const arm=(s,p)=>{
+    const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,13.8+br*0.4);
+    const sh=[s*8.6,sy,sz], el=[s*9.6,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e;
+    return {sh,el,ha:[el[0]-s*(run?1.8:0),el[1]+Math.sin(c)*FA,el[2]-Math.cos(c)*FA]};
+  };
+  return {pz,L,R,up,hipX:4,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br};
+}
+/* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
+   sh = cuenta para la sombra. kind: 'p' piloto, 'a' androide de la base */
+function prParts(kind,P,yaw){
+  const pilot=kind==='p', O=[], {pz,up,L,R,AL,AR,br}=P;
+  const cap=(a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh});
+  const pt=(x,y,z)=>{ const [yy,zz]=up(y,z); return [x,yy,zz]; };
+  // piernas y botas
+  const shin=(x,y,z,k)=>k>0.42&&k<0.62?PM.band:0;
+  for(const [G,s] of [[L,-1],[R,1]]){
+    cap([s*4,0,pz],G.knee,4.1,3.3,PM.suit,null,1);
+    cap(G.knee,G.ank,3.3,2.8,PM.suit,shin,1);
+    cap(G.ank,G.toe,3.3,3.0,PM.boot,(x,y,z)=>z<1.5?PM.sole:0,1);
+  }
+  // tronco: dos columnas juntas para que sea más ancho que profundo
+  const torso=(x,y,z)=>{
+    const zr=z-pz;
+    if(zr>4.4&&zr<6.6) return Math.abs(x)<1.7&&y>0?PM.buckle:PM.belt;
+    if(zr<=4.4) return 0;
+    if(pilot&&zr<15.5&&Math.abs(Math.abs(x)-4.6)<0.95) return y>0&&zr>11.5?PM.helmD:PM.helmD;    // tirantes de la radio
+    if(y>0&&Math.abs(x)<0.6) return PM.band;                                                     // cremallera
+    if(y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>8.6&&zr<11.2) return zr>10.3?PM.band:PM.pocket; // bolsillos con solapa
+    return 0;
+  };
+  for(const s of [-1,1]) cap(pt(s*2.6,0,0),pt(s*2.9,0,12.6),5.2,5.8,PM.suit,torso,1);
+  // brazos: hombro, codo, guante y banda reflectante; el parche va en el hombro izquierdo
+  for(const [H,s] of [[AL,-1],[AR,1]]){
+    cap(H.sh,H.sh,3.9,3.9,PM.suit,pilot&&s<0?(x,y,z)=>x<-9&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
+    cap(H.sh,H.el,3.3,2.9,PM.suit,(x,y,z,k)=>k>0.55&&k<0.74?PM.band:0,1);
+    cap(H.el,H.ha,2.9,2.6,PM.suit,null,1);
+    cap(H.ha,H.ha,3.1,3.1,PM.glove);
+  }
+  // pañuelo o cuello
+  const n=pt(0,0,17+br*0.3);
+  for(let i=0;i<14;i++){ const a=i/14*Math.PI*2; cap([n[0]+Math.cos(a)*5,n[1]+Math.sin(a)*4.8,n[2]],[n[0]+Math.cos(a)*5,n[1]+Math.sin(a)*4.8,n[2]],2.9,2.9,pilot?PM.scarf:PM.band); }
+  if(pilot) cap([n[0],n[1]+5.6,n[2]-1],[n[0],n[1]+6.2,n[2]-3.2],2.3,1.7,PM.scarf);
+  // cabeza: esfera con casco, gafas y cara pintados según el punto; orejeras y gafas con relieve; yaw = hacia dónde mira
+  // la cabeza mira un poco hacia arriba, hacia la cámara: si no, desde tan alto solo se vería el casco
+  const hc=pt(0,0.6,24.5+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=0.85, sp=0.53;
+  const hp=(x,y,z)=>{ const yy=y*cp-z*sp, zz=y*sp+z*cp; return [hc[0]+x*cy+yy*sy,hc[1]-x*sy+yy*cy,hc[2]+zz]; };
+  const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [dx*cy-dy*sy,yy*cp+dz*sp,dz*cp-yy*sp]; };   // al revés: del mundo a la cabeza
+  const headF=(x,y,z)=>{
+    const [fx,fy,zr]=hq(x,y,z), ax=Math.abs(fx);
+    if(!pilot){   // androide: cráneo de metal con su visor
+      if(fy>2&&Math.abs(zr+0.8)<1.8&&ax<7) return PM.eye;
+      return zr>1.8?PM.helm:PM.metal;
+    }
+    if(Math.abs(zr-3.8)<1.3) return PM.helmD;                                   // correa de las gafas
+    if(zr>1.2||fy<1.2) return ax<0.5&&zr>5?PM.helmD:PM.helm;                     // casco, con su costura
+    if(zr>0.2) return PM.hair;                                                  // flequillo
+    if(fy>0&&Math.abs(ax-3.3)<1.05&&zr>-2.6&&zr<-0.1) return PM.eye;
+    if(fy>0&&ax<1.7&&Math.abs(zr+5.2)<0.55) return PM.mouth;
+    return PM.skin;
+  };
+  cap(hc,hc,9.4,9.4,PM.skin,headF);
+  if(pilot){
+    for(const s of [-1,1]){
+      cap(hp(s*8.3,0.2,-0.8),hp(s*8.3,0.2,-4),2.8,2.6,PM.helm);
+      cap(hp(s*3.2,7,3.8),hp(s*3.2,7,3.8),2.6,2.6,PM.lens,(x,y,z)=>{ const [a,,c]=hq(x,y,z), dx=a-s*3.2, dz=c-3.8; return dx*dx+dz*dz>3.2?PM.helmD:0; });
+    }
+    for(let i=0;i<5;i++) for(let j=0;j<5;j++) { const c=pt(-4+i*2,-9,7.5+j*2); cap(c,c,2.1,2.1,PM.pack,(x,y)=>j===4&&i===1?PM.metal:0); }   // la radio
+    const t0=pt(4.4,-10,16.6), t1=pt(9.4,-12,25);
+    cap(t0,t1,0.55,0.4,PM.metal); cap(t1,t1,0.95,0.95,PM.led);
+  } else cap(hp(0,0,9),hp(0,0,11.5),0.7,0.5,PM.metal);
+  const shadow=O.filter(p=>p.sh);
+  shadow.push({a:[hc[0],hc[1],hc[2]-6],b:[hc[0],hc[1],hc[2]+6],ra:8.6,rb:8.6});
+  if(pilot) { const c0=pt(0,-9,8), c1=pt(0,-9,15); shadow.push({a:c0,b:c1,ra:4.8,rb:4.8}); }
+  return {O,shadow};
+}
+/* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
+function prBuild(kind,d,mode,f,look){
+  const key=kind+d+'|'+mode+'|'+f+'|'+look; if(prCache[key]) return prCache[key];
+  const P=prPose(mode,mode?f/8:0,mode?0:f), {O,shadow}=prParts(kind,P,look*0.42), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
+  prZ.fill(-1e9); prM.fill(0);
+  for(const p of O){
+    const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
+    for(let i=0;i<=n;i++){
+      const k=i/n, lx=p.a[0]+dx*k, ly=p.a[1]+dy*k, lz=p.a[2]+dz*k, r=p.ra+(p.rb-p.ra)*k, wx=lx*c+ly*s, wy=-lx*s+ly*c;
+      const vx=PR_OX+wx, vy=PR_OY+wy*PR_SE-lz*PR_CE, vz=wy*PR_CE+lz*PR_SE;
+      const x0=Math.max(0,Math.floor(vx-r)), x1=Math.min(PR_W-1,Math.ceil(vx+r)), y0=Math.max(0,Math.floor(vy-r)), y1=Math.min(PR_H-1,Math.ceil(vy+r));
+      for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+        const ax=x+0.5-vx, ay=y+0.5-vy, d2=ax*ax+ay*ay; if(d2>=r*r) continue;
+        const nz=Math.sqrt(r*r-d2), z=vz+nz, q=y*PR_W+x; if(z<=prZ[q]) continue;
+        const nwx=ax/r, nwy=(ay*PR_SE+nz*PR_CE)/r, nwz=(nz*PR_SE-ay*PR_CE)/r;
+        prZ[q]=z; prNX[q]=nwx*127; prNY[q]=nwy*127; prNZ[q]=nwz*127;
+        let m=p.m;
+        if(p.f){ const px=wx+r*nwx, py=wy+r*nwy; m=p.f(px*c-py*s,px*s+py*c,lz+r*nwz,k)||p.m; }
+        prM[q]=m;
+      }
+    }
+  }
+  const I=[], NX=[], NY=[], NZ=[], M=[], F=[];
+  for(let y=0;y<PR_H;y++) for(let x=0;x<PR_W;x++){
+    const q=y*PR_W+x, nb=[y>0?q-PR_W:-1,y<PR_H-1?q+PR_W:-1,x>0?q-1:-1,x<PR_W-1?q+1:-1];
+    if(prM[q]){   // un borde dentro de la figura (brazo sobre el tronco) se marca oscuro
+      let ink=0; for(const b of nb) if(b>=0&&prM[b]&&prZ[b]-prZ[q]>3.4) ink=1;
+      I.push(q); NX.push(prNX[q]); NY.push(prNY[q]); NZ.push(prNZ[q]); M.push(prM[q]); F.push(ink);
+    } else {      // contorno: del color más oscuro de lo que tiene al lado
+      let m=0; for(const b of nb) if(b>=0&&prM[b]) m=prM[b];
+      if(m){ I.push(q); NX.push(0); NY.push(0); NZ.push(0); M.push(m); F.push(2); }
+    }
+  }
+  const w=v=>[v[0]*c+v[1]*s,-v[0]*s+v[1]*c,v[2]];
+  return prCache[key]={I:Uint16Array.from(I),NX:Int8Array.from(NX),NY:Int8Array.from(NY),NZ:Int8Array.from(NZ),M:Uint8Array.from(M),F:Uint8Array.from(F),
+    bones:shadow.map(p=>[w(p.a),w(p.b),(p.ra+p.rb)/2])};
+}
+/* Cinco tonos por material: las sombras tiran a violeta y las luces a crema */
+function prRamp(hex){
+  const c=hexRgb(hex), mix=(b,k)=>c.map((v,i)=>v+(b[i]-v)*k);
+  return [mix([26,20,52],0.68),mix([44,34,74],0.4),c,mix([255,244,214],0.22),mix([255,250,232],0.5)];
+}
+function prRamps(pal){
+  let R=prRampCache.get(pal); if(R) return R;
+  const cap=pal.cap||pal.hair, pilot=!!pal.scarf; R=[];
+  const set={suit:pal.suit,band:pilot?'#f4ecd2':pal.light,pocket:shade(pal.suit,-0.3),helm:pilot?shade(cap,0.1):cap,helmD:shade(cap,-0.55),skin:pal.skin,eye:pal.eye,lens:'#7fd8ee',scarf:pal.scarf||pal.light,
+    belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pal.scarf?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.34),led:'#ff4757',hair:pal.hair};
+  for(const k in PM) R[PM[k]]=prRamp(set[k]);
+  prRampCache.set(pal,R); return R;
+}
+/* La luz que le llega ahora: dirección y color del sol (o la luna), color del cielo y luces cercanas */
+function prLight(u){
+  const S=skyNow(), L={s:[0,0,1],k:0,sun:[1,1,1],amb:[1,1,1],a:0.55,pts:[],h:[0,0,1]};
+  if(interior){ L.s=[-0.34,0.3,0.89]; L.k=0.72; L.sun=[1.08,1.02,0.92]; L.amb=[0.76,0.76,0.9]; }
+  else {
+    const alt=S.sun.alt, day=clamp((alt+4)/14,0,1), warm=1-clamp(alt/18,0,1);
+    const src=alt>-4?S.sun:S.moon, A=src.az/DEG, E=Math.max(0.05,src.alt)/DEG;
+    L.s=[-Math.sin(A)*Math.cos(E),Math.cos(A)*Math.cos(E),Math.sin(E)];
+    L.k=alt>-4?0.86*day:clamp(S.moon.alt/10,0,1)*0.3;
+    L.sun=alt>-4?[lerp(1.06,1.34,warm),lerp(1,0.84,warm),lerp(0.94,0.58,warm)]:[0.62,0.74,1.1];
+    L.amb=[lerp(0.5,0.8,day)+0.12*day*warm,lerp(0.55,0.86,day)-0.14*day*warm,lerp(0.86,1,day)+0.02*day*warm];
+    L.a=0.54+0.06*day;
+    const add=(lx,ly,lz,r,g,b,R0)=>{ const dx=lx-u.x, dy=ly-u.y, dz=lz-28, d=Math.hypot(dx,dy,dz); if(d>R0) return;
+      const k=1-d/R0; L.pts.push([dx/d,dy/d,dz/d,r*k,g*k,b*k]); };
+    if(inHome){
+      for(const [x,y,k] of beacons()) add(x,y,10,1.1*k,0.22*k,0.26*k,150);
+      const n=nightAmt(); if(n>0.08) for(const [c,r] of homeLamps) add(c*TILE+15,r*TILE-4,52,1.2*n,0.96*n,0.62*n,130);
+    }
+  }
+  const hx=L.s[0], hy=L.s[1]+PR_CE, hz=L.s[2]+PR_SE, hl=Math.hypot(hx,hy,hz)||1; L.h=[hx/hl,hy/hl,hz/hl];
+  return L;
+}
+/* Colorea la pose con la luz de ahora */
+function prRender(B,pal,L,blink){
+  if(!prCv){ prCv=mkCanvas(PR_W,PR_H); prG=prCv.getContext('2d',{willReadFrequently:true}); prImg=prG.createImageData(PR_W,PR_H); }
+  const D=prImg.data, R=prRamps(pal), n=B.I.length, [sx,sy,sz]=L.s, [hx,hy,hz]=L.h, led=Math.floor(t/30)%2;
+  D.fill(0);
+  for(let i=0;i<n;i++){
+    const p=B.I[i]*4, f=B.F[i]; let m=B.M[i];
+    if(f===2){ const c=R[m][0]; D[p]=c[0]*0.5; D[p+1]=c[1]*0.5; D[p+2]=c[2]*0.5; D[p+3]=255; continue; }
+    if(PR_GLOW.has(m)||(m===PM.eye&&!pal.scarf&&!blink)){ const c=R[m][m===PM.led&&led?1:4]; D[p]=c[0]; D[p+1]=c[1]; D[p+2]=c[2]; D[p+3]=255; continue; }
+    if(m===PM.eye&&blink) m=PM.mouth;
+    const nx=B.NX[i]/127, ny=B.NY[i]/127, nz=B.NZ[i]/127, ds=Math.max(0,nx*sx+ny*sy+nz*sz)*L.k, T=L.a*(0.72+0.28*nz)+ds;
+    let lv=T<0.46?0:T<0.64?1:T<0.94?2:T<1.2?3:4;
+    if(f===1) lv=Math.max(0,lv-2);
+    if(PR_GLOSS.has(m)&&L.k>0.2&&nx*hx+ny*hy+nz*hz>0.95) lv=4;
+    const c=R[m][lv], b=R[m][2], tn=ds>0.14?L.sun:L.amb;
+    let r=c[0]*tn[0], g=c[1]*tn[1], bl=c[2]*tn[2];
+    for(const q of L.pts){ const d=Math.max(0,nx*q[0]+ny*q[1]+nz*q[2]); if(d>0){ r+=b[0]*q[3]*d; g+=b[1]*q[4]*d; bl+=b[2]*q[5]*d; } }
+    D[p]=Math.min(255,r); D[p+1]=Math.min(255,g); D[p+2]=Math.min(255,bl); D[p+3]=255;
+  }
+  prG.putImageData(prImg,0,0);
+}
+/* Rumbo, paso, mirada y pañuelo: lo que cambia con el tiempo. Devuelve [modo, fotograma, mirada] */
+function prStep(u){
+  const sp=Math.hypot(u.vx,u.vy), run=sp>2.9, moving=sp>0.2;
+  if(u.prDir!==u.dir){ u.prDir=u.dir; if(!moving||u.face==null) u.face={up:Math.PI,left:-Math.PI/2,right:Math.PI/2}[u.dir]||0; }
+  if(moving) u.face+=angDiff(u.face,Math.atan2(u.vx,u.vy))*0.26;
+  u.idle=moving?0:(u.idle||0)+1;
+  let aim=0;
+  if(!moving&&u===human&&homeNear&&!interior) aim=clamp(Math.round(angDiff(u.face,Math.atan2(homeNear.x-u.x,homeNear.y-u.y))/0.42),-2,2);
+  else if(u.idle>170) aim=[0,-2,0,1,0,2,-1,0][Math.floor((t+(u.x&255))/95)&7];
+  u.lk=(u.lk||0)+clamp(aim-(u.lk||0),-0.14,0.14);
+  const fr=moving?Math.floor(((u.walk/(run?12.5:9))%1)*8)&7:Math.floor((t+(u.x&63))/44)&1;
+  if(run&&fr%4===0&&fr!==u.prFr&&!interior){   // polvo al pisar corriendo
+    for(let i=0;i<3;i++) particles.push({x:u.x+rand(-5,5),y:u.y+rand(-1,3),vx:rand(-0.5,0.5)-u.vx*0.12,vy:rand(-0.6,-0.1)-u.vy*0.12,life:20,maxLife:20,color:'#cdbb9c',size:2});
+  }
+  u.prFr=fr;
+  return [moving?(run?2:1):0,fr,Math.round(u.lk)];
+}
+/* El pañuelo: una cadena de puntos que cuelga del cuello, sigue al cuerpo con retraso y ondea con el aire */
+function prScarfStep(u){
+  const fx=Math.sin(u.face), fy=Math.cos(u.face), ax=u.x-fx*5, ay=u.y-fy*5, az=38;
+  if(!u.sc){ u.sc=[]; for(let i=0;i<PR_SCARF_N;i++) u.sc.push({x:ax-fx*i*3,y:ay-fy*i*3,z:az-i,px:ax-fx*i*3,py:ay-fy*i*3,pz:az-i}); }
+  const wind=0.05+wAmt('storm')*0.3+wAmt('rain')*0.1;
+  u.sc.forEach((n,i)=>{
+    if(!i){ n.x=ax; n.y=ay; n.z=az; return; }
+    const vx=(n.x-n.px)*0.86, vy=(n.y-n.py)*0.86, vz=(n.z-n.pz)*0.86;
+    n.px=n.x; n.py=n.y; n.pz=n.z;
+    n.x+=vx+wind+Math.sin(t*0.13+i*0.9)*0.1; n.y+=vy+Math.cos(t*0.11+i*0.7)*0.06; n.z=Math.max(4,n.z+vz-0.16);
+  });
+  for(let k=0;k<2;k++) for(let i=1;i<PR_SCARF_N;i++){
+    const a=u.sc[i-1], b=u.sc[i], dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z, d=Math.hypot(dx,dy,dz)||1, q=PR_SCARF_L/d;
+    b.x=a.x+dx*q; b.y=a.y+dy*q; b.z=a.z+dz*q;
+  }
+}
+function prScarfDraw(u,R,L){
+  const P=u.sc.map(n=>[n.x,u.y+(n.y-u.y)*PR_SE-n.z*PR_CE]), lit=L.k>0.15?L.sun:L.amb;
+  const col=c=>'rgb('+Math.min(255,c[0]*lit[0]|0)+','+Math.min(255,c[1]*lit[1]|0)+','+Math.min(255,c[2]*lit[2]|0)+')';
+  const walk=(w,fill,oy)=>{ ctx.fillStyle=fill;
+    for(let i=1;i<P.length;i++){ const [x0,y0]=P[i-1], [x1,y1]=P[i], n=Math.ceil(Math.hypot(x1-x0,y1-y0)), ww=Math.max(1,w-(i>4?1:0));
+      for(let k=0;k<=n;k++) ctx.fillRect(Math.round(x0+(x1-x0)*k/n-ww/2),Math.round(y0+(y1-y0)*k/n-ww/2+oy),ww,ww); } };
+  walk(4,col(R[PM.scarf][0].map(v=>v*0.5)),0);
+  walk(2,col(R[PM.scarf][2]),0);
+  walk(1,col(R[PM.scarf][4]),-1);
+}
+function drawHuman(u,pal){
+  const [mode,f,look]=prStep(u), d=((Math.round(u.face/(Math.PI/8))%16)+16)%16, x=Math.round(u.x), y=Math.round(u.y), pilot=!!pal.scarf, B=prBuild(pilot?'p':'a',d,mode,f,look);
+  u.prB=B;
+  const L=prLight(u), R=prRamps(pal), blink=(t+(x&127))%211<6;
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,11,4,0,0,Math.PI*2); ctx.fill();
+  if(pilot) prScarfStep(u);
+  const behind=Math.cos(u.face)>-0.3;
+  if(pilot&&behind) prScarfDraw(u,R,L);
+  prRender(B,pal,L,blink);
+  ctx.drawImage(prCv,x-PR_OX,y-PR_OY);
+  if(pilot&&!behind) prScarfDraw(u,R,L);
+}
+/* Su sombra sale de sus huesos: cada hueso se tumba en el suelo desde sus dos puntas, así copia la pose de verdad */
+function shPerson(u){
+  const B=u.prB; if(!B) return;
+  const s=shS, L=Math.min(s.len,SHADOW_STAND)*0.8, G=ctx, X=(q)=>u.x+q[0]+s.dx*q[2]*L, Y=(q)=>u.y+q[1]*PR_SE+s.dy*q[2]*L;
+  G.lineCap='round'; G.strokeStyle='#000';
+  for(const [a,b,r] of B.bones){ G.lineWidth=r*2; G.beginPath(); G.moveTo(X(a),Y(a)); G.lineTo(X(b),Y(b)); G.stroke(); }
+  if(u.sc){ G.lineWidth=3; G.beginPath(); u.sc.forEach((n,i)=>{ const q=[n.x-u.x,n.y-u.y,n.z]; i?G.lineTo(X(q),Y(q)):G.moveTo(X(q),Y(q)); }); G.stroke(); }
+  G.lineCap='butt';
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
