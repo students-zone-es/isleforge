@@ -445,11 +445,11 @@
     <div id="scrStory" class="overlay top hidden">
       <h1 class="title" style="font-size:15px;">LA HISTORIA</h1>
       <div class="story">
-        <p><b>Hace 66 millones de años</b>, junto al meteorito que extinguió a los dinosaurios, cayó al océano un mineral tan antiguo como él. Siguiendo ciertos pasos puede transmutarse en <b>cualquier mineral que exista</b>. Lo llamaron <b class="abys">ABYSSALITA</b>.</p>
+        <p><b>Hace 66 millones de años</b>, junto al meteorito que extinguió a los dinosaurios, cayó al océano un mineral tan antiguo como él. Siguiendo ciertos pasos puede transmutarse en <b>cualquier mineral que exista</b>. Lo llamaron <b class="abys">AFOTITA</b>.</p>
         <p>Para extraerla se levantó una ciudad entera bajo el mar: <b class="abys">BÉNTICA FANTASMA</b>. Pero quedaba tan poca que estalló una <b>guerra mundial</b>: murió el <b>65% de la humanidad</b> y casi todos los supervivientes se convirtieron en bandidos.</p>
-        <p>Los millonarios huyeron a <b>Marte</b> a través de un portal abierto en la Luna, un salto cuántico. Otros se quedaron administrando la enorme mina, buscando más Abyssalita.</p>
-        <p>Con la Abyssalita se aplicó a las inteligencias artificiales una transmutación llamada <b class="work">PROOF OF WORK</b>: quedaron tan perfectas que parecen vivas. Por eso, al destruirlas, sueltan cristales de <b class="work">◆ WORK</b>.</p>
-        <p>Ahora un <b>líder militar enloquecido</b> ha hackeado a esos robots y quiere hacerse con la Abyssalita de Béntica Fantasma. Algunos de sus robots disparan el <b class="boom">HOLLOW BOOM</b>, la prueba de lo que ese mineral puede hacer.</p>
+        <p>Los millonarios huyeron a <b>Marte</b> a través de un portal abierto en la Luna, un salto cuántico. Otros se quedaron administrando la enorme mina, buscando más Afotita.</p>
+        <p>Con la Afotita se aplicó a las inteligencias artificiales una transmutación llamada <b class="work">PROOF OF WORK</b>: quedaron tan perfectas que parecen vivas. Por eso, al destruirlas, sueltan cristales de <b class="work">◆ WORK</b>.</p>
+        <p>Ahora un <b>líder militar enloquecido</b> ha hackeado a esos robots y quiere hacerse con la Afotita de Béntica Fantasma. Algunos de sus robots disparan el <b class="boom">PULSO HADAL</b>, la prueba de lo que ese mineral puede hacer.</p>
         <p>Desde tu base preparas el contraataque. <b>Primero, la superficie.</b> El océano vendrá después.</p>
       </div>
       <div class="row"><button class="btn" id="btnStoryOk">CONTINUAR</button></div>
@@ -473,7 +473,7 @@
     <div id="scrPause" class="overlay hidden">
       <h1 class="title" style="font-size:16px;">PAUSA</h1>
       <p class="controls"><b>WASD</b> mover · <b>Ratón</b> apuntar · <b>Clic izq / Espacio</b> disparar · <b>Clic der / Shift</b> ataque en arco · <b>F</b> camuflaje · <b>R</b> evolucionar aliado · <b>E</b> mini-dron · <b>T</b> torreta · <b>Q</b> escuadra · <b>G</b> la escuadra escolta a los rehenes · <b>X</b> pedir el Orbe Vital (cada 40 s)</p>
-      <p class="controls">Consejos: los <b>VIGÍAS</b> (amarillos, con radar) avisan a todos si te ven. El <b>pasto alto</b> te esconde. Si un enemigo se queda solo o con menos de 10 de vida puede cargar un <b style="color:#c77dff">HOLLOW BOOM</b> (la prueba de lo que hace la Abyssalita): <b>si te toca, tu máquina queda destruida al instante</b>; mátalo antes o apártate de la franja morada. Con una escuadra (Q) y rehenes, pulsa <b>G</b>: la escuadra los lleva a la zona segura en sigilo y, si los descubren, uno o dos soldados distraen al enemigo. Lleva a los rehenes al Orbe Vital o a un helipuerto para subir el nivel de tu arma. En los mundos, destruye los <b style="color:#ff3df0">GENERADORES</b> para abrir cada compuerta. Puedes <b>volver atrás</b>, pero el enemigo pedirá <b style="color:#ff8a3a">refuerzos cada vez más fuertes</b> mientras retrocedes.</p>
+      <p class="controls">Consejos: los <b>VIGÍAS</b> (amarillos, con radar) avisan a todos si te ven. El <b>pasto alto</b> te esconde. Si un enemigo se queda solo o con menos de 10 de vida puede cargar un <b style="color:#c77dff">PULSO HADAL</b> (la prueba de lo que hace la Afotita): <b>si te toca, tu máquina queda destruida al instante</b>; mátalo antes o apártate de la franja morada. Con una escuadra (Q) y rehenes, pulsa <b>G</b>: la escuadra los lleva a la zona segura en sigilo y, si los descubren, uno o dos soldados distraen al enemigo. Lleva a los rehenes al Orbe Vital o a un helipuerto para subir el nivel de tu arma. En los mundos, destruye los <b style="color:#ff3df0">GENERADORES</b> para abrir cada compuerta. Puedes <b>volver atrás</b>, pero el enemigo pedirá <b style="color:#ff8a3a">refuerzos cada vez más fuertes</b> mientras retrocedes.</p>
       <div class="row" style="margin-top:8px;">
         <button class="btn small" id="btnResume">▶ CONTINUAR</button>
         <button class="btn small" id="btnQuit">✕ ABANDONAR (volver a la base)</button>
@@ -510,7 +510,7 @@ const MECH_STEPS=[   // CENTINELA: lo construye a mano el constructor que rescat
   {d:'Modelo de fábrica: el Centinela definitivo, dispara más rápido', cdMul:0.85},
 ];
 const JEEP_STEPS=[   // CHACAL: empieza como un viejo jeep de rescate y acaba como el jeep de asalto
-  {d:'Jeep de rescate: una ametralladora giratoria y dos faros', shot:'single', cloak:false, nade:false, carLights:1},
+  {d:'Todoterreno de rescate: una ametralladora giratoria y dos faros', shot:'single', cloak:false, nade:false, carLights:1},
   {d:'Parachoques de acero: +15 de vida', hp:15},
   {d:'Ametralladora doble giratoria', shot:null},
   {d:'Lanzamisiles en la caja: vuelve el ataque en arco (G)', nade:true},
@@ -771,7 +771,7 @@ function isBossWave(w){ return w%5===0; }
 const CHARS={
   mech:{id:'mech', name:'CENTINELA', locked:'builder', desc:'Mecha bípedo que el constructor del Mundo 1 montó con chatarra. Empieza con un cañón y una linterna; al subir de nivel gana coraza, armas y camuflaje.',
     hp:100, speed:2.6, accel:0.32, friction:0.84, radius:13, mass:2.2, fireCd:10, dmg:6, cloakDur:480, cloakCd:900, nadeCd:140, nadeDmg:30},
-  jeep:{id:'jeep', name:'CHACAL', desc:'Jeep de asalto, homenaje a Jackal: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
+  jeep:{id:'jeep', name:'CHACAL', desc:'Todoterreno de asalto: rapidísimo pero frágil: poca vida y el blindaje más fino (recibe +25% de daño). Ametralladora doble giratoria y misiles en arco con recarga corta.',
     hp:60, speed:4.0, accel:0.46, friction:0.9, radius:12, mass:1.6, fireCd:11, dmg:4, twin:true, hurt:1.25, cloakDur:360, cloakCd:1000, nadeCd:70, nadeDmg:24},
   tank:{id:'tank', name:'TANQUE', desc:'Blindado y lento. Su torreta gira 360° independiente del casco. Cañón letal con onda expansiva pero de recarga lenta; aplasta robots pequeños.',
     hp:150, speed:1.7, accel:0.18, friction:0.88, radius:14, mass:4, fireCd:70, dmg:60, splash:34, cloakDur:300, cloakCd:1200, nadeCd:170, nadeDmg:34},
@@ -780,8 +780,8 @@ const CHARS={
 };
 const MATES={
   car:{id:'car', name:'JABALÍ', evo:'MINITANQUE JABALÍ', desc:'Auto con ametralladora giratoria. Con R evoluciona a MINITANQUE con cañón.'},
-  ninja:{id:'ninja', name:'KAGE', evo:'KAGE SHINOBI', desc:'Androide con IA ninja: esquiva, flanquea y pega granadas parásito que estallan a los 5 s dentro del enemigo.'},
-  tesla:{id:'tesla', name:'VOLTIO', evo:'VOLTIO MAX', desc:'Dron Tesla: electrocuta en cadena y aturde a los enemigos (a los jefes solo les hace daño).'},
+  ninja:{id:'ninja', name:'KAGE', evo:'KAGE ESPECTRO', desc:'Androide con IA ninja: esquiva, flanquea y pega granadas parásito que estallan a los 5 s dentro del enemigo.'},
+  tesla:{id:'tesla', name:'VOLTIO', evo:'VOLTIO MAX', desc:'Dron de arco: electrocuta en cadena y aturde a los enemigos (a los jefes solo les hace daño).'},
 };
 /* role: melee, ranged, spotter, mortar, air, ram, siege */
 const EDEFS={
@@ -1317,7 +1317,7 @@ function tileSpr(key){
       break; }
     case 'sc0': case 'sc1': {
       pr(g,0,0,10,10,e.scorch);
-      (key==='sc0'?[[2,3],[6,7],[8,2]]:[[1,6],[5,2],[7,8]]).forEach(([x,y])=>pr(g,x,y,1,1,e.ash||'#7a3aa8'));   // e.ash: quemado normal (sin el morado del Hollow Boom)
+      (key==='sc0'?[[2,3],[6,7],[8,2]]:[[1,6],[5,2],[7,8]]).forEach(([x,y])=>pr(g,x,y,1,1,e.ash||'#7a3aa8'));   // e.ash: quemado normal (sin el morado del Pulso Hadal)
       [[4,4],[3,8],[8,5]].forEach(([x,y])=>pr(g,x,y,1,1,'rgba(0,0,0,.4)'));
       break; }
     case 'cage': case 'cageb': {
@@ -1533,7 +1533,7 @@ function destroyTile(c,r,toScorch){
   if(!inB(c,r)) return;
   const k=idx(c,r), v=map[k];
   if(v===WATER) return;
-  if(v===ROCK){ const dp=depState().at.get(k); if(dp) breakDeposit(dp,false); }   // el Hollow Boom se traga el yacimiento
+  if(v===ROCK){ const dp=depState().at.get(k); if(dp) breakDeposit(dp,false); }   // el Pulso Hadal se traga el yacimiento
   const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
   if(v===CAGE){ const n=cageInfo.get(k)??1; cageInfo.delete(k); if(cageInfo.builder===k) freeBuilder(x,y); else freePows(x,y,n); }
   if(v===WIRE) spawnDebris(x,y,5,'#9a9a9a');
@@ -1544,7 +1544,7 @@ function destroyTile(c,r,toScorch){
   paintTile(c,r);
   miniDirty=true;
 }
-/* El Hollow Boom solo se traga lo BLANDO (árboles, matorrales, sacos terreros, alambradas y jaulas). Paredes, compuertas,
+/* El Pulso Hadal solo se traga lo BLANDO (árboles, matorrales, sacos terreros, alambradas y jaulas). Paredes, compuertas,
    edificios, rocas y el suelo aguantan: en ellos deja su cicatriz (p4_units.js, addHollowScar). */
 const HB_SOFT=v=>v===TREE||v===BUSH||v===RUB||v===WIRE||v===CAGE;
 function eraseCircle(x,y,R){
@@ -1972,7 +1972,7 @@ function damagePlayer(amount,shieldPierce){
   p.hurtFlash=8; shake=Math.max(shake,Math.min(10,3+amount*0.25)); S.hurt();
   if(p.hp<=0){ p.hp=0; p.alive=false; onPlayerDeath(); }
 }
-/* Muerte instantánea (contacto con el Hollow Boom): ignora el escudo, pero no la protección al reaparecer */
+/* Muerte instantánea (contacto con el Pulso Hadal): ignora el escudo, pero no la protección al reaparecer */
 function killPlayer(reason){
   const p=player;
   if(!p.alive||p.invuln>0||cine>0||god) return;
@@ -2225,7 +2225,7 @@ function damageEnemy(en,dmg,o){
 function killEnemy(en,o){
   if(!en.alive) return;
   en.alive=false;
-  if(en.vacio){ en.vacio=null; voidCharging=Math.max(0,voidCharging-1); popup(en.x,en.y-30,'¡HOLLOW BOOM ANULADO!','#e2b8ff',13); }
+  if(en.vacio){ en.vacio=null; voidCharging=Math.max(0,voidCharging-1); popup(en.x,en.y-30,'¡PULSO HADAL ANULADO!','#e2b8ff',13); }
   const sq=squads[en.squad]; if(sq) sq.alive--;
   if(!en.noCount) killed++;
   if(!(o&&o.infight)) registerKill(en.def.score,en.x,en.y);   // si lo mata el otro bando, no puntúa
@@ -2887,14 +2887,14 @@ function callOrbHere(){
   return true;
 }
 
-/* ===================== HOLLOW BOOM (la prueba de la Abyssalita) ===================== */
+/* ===================== PULSO HADAL (la prueba de la Afotita) ===================== */
 function firePurple(x,y,a,owner,o){
   o=o||{};
   const r=o.r||24, sp=o.speed||4.4;
   voids.push({x:x+Math.cos(a)*(r+12),y:y+Math.sin(a)*(r+12),vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r,owner,life:600,hit:new Set(),dmg:o.dmg||40,src:o.src||null,spin:0,trail:0});
   S.purple(); shake=Math.max(shake,14); flashScreen('#b06cff',0.35);
 }
-/* Lo DURO: el Hollow Boom no puede tragárselo y estalla al chocar. Todo lo sólido menos lo blando (árboles, sacos
+/* Lo DURO: el Pulso Hadal no puede tragárselo y estalla al chocar. Todo lo sólido menos lo blando (árboles, sacos
    terreros, jaulas): paredes, compuertas entre secciones, edificios, roca, contenedores y el borde del mundo. */
 function superWall(c,r){
   if(!inB(c,r)) return true;
@@ -2914,7 +2914,7 @@ function voidExplode(v){
   S.purple(); S.boom(); shake=Math.max(shake,22); flashScreen('#b06cff',0.6);
   eraseCircle(v.x,v.y,R*0.7);
   addHollowScar(v.x,v.y,R*0.8,false);   // la cicatriz hueca
-  rings.push({x:v.x,y:v.y,hb:R,life:34,maxLife:34});   // explosión con la hoja del Hollow Boom (drawHbBoom)
+  rings.push({x:v.x,y:v.y,hb:R,life:34,maxLife:34});   // explosión con la hoja del Pulso Hadal (drawHbBoom)
   for(let i=0;i<46;i++){ const a=rand(0,Math.PI*2), s=rand(1,6); particles.push({x:v.x,y:v.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(24,46),maxLife:46,color:pick(['#b06cff','#5ae6ff','#e2b8ff','#1a0a2a']),size:rand(3,6)}); }
   const k=u=>1-Math.min(1,Math.max(0,dist(u,v)-u.radius)/R)*0.5;
   if(player.alive&&!v.hit.has(player)&&dist(v,player)<R+player.radius){ damagePlayer(v.dmg*k(player)); push(player,v.x,v.y,9); }
@@ -2923,9 +2923,9 @@ function voidExplode(v){
   if(boss&&boss.alive&&boss!==v.src&&!v.hit.has(boss)&&dist(v,boss)<R+boss.radius) damageBoss(60*k(boss),{stunAdd:60});
   for(let i=0;i<10;i++){ const a=i/10*Math.PI*2, d=rand(0.3,0.9)*R; addPurpleFire(v.x+Math.cos(a)*d,v.y+Math.sin(a)*d,rand(300,420)); }
   addPurpleFire(v.x,v.y,420);
-  popup(v.x,v.y-30,'¡EL HOLLOW BOOM ESTALLA!','#e2b8ff',16);
+  popup(v.x,v.y-30,'¡EL PULSO HADAL ESTALLA!','#e2b8ff',16);
 }
-/* Estela de FUEGO MORADO: el Hollow Boom va dejando llamas de Abyssalita que queman a quien las pise */
+/* Estela de FUEGO MORADO: el Pulso Hadal va dejando llamas de Afotita que queman a quien las pise */
 let purpleFires=[], purpleFireMap=null;
 function addPurpleFire(x,y,life){
   if(purpleFireMap!==map){ purpleFireMap=map; purpleFires=[]; }
@@ -2967,9 +2967,9 @@ function drawPurpleFires(){
   }
   ctx.globalAlpha=1;
 }
-/* LA CICATRIZ HUECA: lo que deja el Hollow Boom. No es hollín de dinamita: la Abyssalita «vacía» la materia.
+/* LA CICATRIZ HUECA: lo que deja el Pulso Hadal. No es hollín de dinamita: la Afotita «vacía» la materia.
    · En el centro, un HUECO negro que se traga la luz, con un latido morado que se apaga en unos 30 s.
-   · Alrededor, el suelo VITRIFICADO: manchas de cristal negro-violeta con esquirlas de Abyssalita que centellean.
+   · Alrededor, el suelo VITRIFICADO: manchas de cristal negro-violeta con esquirlas de Afotita que centellean.
    · Hacia fuera, estrías de hollín y grietas finas en estrella.
    · Por donde pasó la esfera rodando queda un RASTRO de surcos negros alargados.
    Se pinta encima de lo que haya (suelo, paredes, compuertas), así que también se ven las paredes chamuscadas. */
@@ -3017,7 +3017,7 @@ function drawHollowScars(cx,cy){
     const age=t-s.t0, k=Math.max(0,1-age/1800);   // el latido morado se apaga en 30 s
     if(k>0){ const p=0.6+0.4*Math.sin(t*0.12), gr=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.R*0.35);
       gr.addColorStop(0,'rgba(155,61,255,'+(0.45*k*p).toFixed(3)+')'); gr.addColorStop(1,'rgba(155,61,255,0)'); ctx.fillStyle=gr; ctx.fillRect(s.x-s.R*0.35,s.y-s.R*0.35,s.R*0.7,s.R*0.7); }
-    for(const [gx,gy,ph] of s.gems){   // esquirlas de Abyssalita que centellean (para siempre)
+    for(const [gx,gy,ph] of s.gems){   // esquirlas de Afotita que centellean (para siempre)
       const tw=Math.sin(t*0.05+ph); ctx.fillStyle=tw>0.85?'#e2b8ff':'#7b3dbf';
       ctx.fillRect(Math.round(s.x+gx),Math.round(s.y+gy),2,2); if(tw>0.93){ ctx.fillStyle='rgba(226,184,255,.6)'; ctx.fillRect(Math.round(s.x+gx)-1,Math.round(s.y+gy)+0.5,4,1); }
     }
@@ -3033,7 +3033,7 @@ function updateVoids(dt){
     if(v.trail>=16){ v.trail=0; const a=rand(0,Math.PI*2), d=rand(0,v.r*0.7); addPurpleFire(v.x-v.vx*4+Math.cos(a)*d,v.y-v.vy*4+Math.sin(a)*d,rand(330,450));
       v.scarT=(v.scarT||0)+1; if(v.scarT%2===0) addHollowScar(v.x,v.y,v.r*0.75,true,Math.atan2(v.vy,v.vx)); }   // surco del rastro cada ~32 px
     eraseCircle(v.x,v.y,v.r*0.95);
-    if(player.alive && !v.hit.has(player) && dist(v,player)<v.r+player.radius){ v.hit.add(player); if(v.src&&v.src.tame) damagePlayer(v.dmg); else killPlayer('¡DESINTEGRADO POR EL HOLLOW BOOM!'); push(player,v.x,v.y,7); flashScreen('#b06cff',0.5); }
+    if(player.alive && !v.hit.has(player) && dist(v,player)<v.r+player.radius){ v.hit.add(player); if(v.src&&v.src.tame) damagePlayer(v.dmg); else killPlayer('¡DESINTEGRADO POR EL PULSO HADAL!'); push(player,v.x,v.y,7); flashScreen('#b06cff',0.5); }
     for(const u of friendlies()) if(!v.hit.has(u) && dist(v,u)<v.r+u.radius){ v.hit.add(u); hurtFriendly(u,v.dmg*1.3); }
     for(const en of enemies) if(en.alive && en!==v.src && !v.hit.has(en) && dist(v,en)<v.r+en.radius){ v.hit.add(en); damageEnemy(en,70,{purple:true}); }
     if(boss && boss.alive && boss!==v.src && !v.hit.has(boss) && dist(v,boss)<v.r+boss.radius){ v.hit.add(boss); damageBoss(60,{stunAdd:60}); }
@@ -3614,7 +3614,7 @@ function flankSpot(en,tg,mn,mx,dt){
   }
   return en.flank=best;
 }
-/* VIGÍA: no lleva Hollow Boom; carga un disparo de francotirador con su láser de aviso. Cuanto más nivel (mundo, veces
+/* VIGÍA: no lleva Pulso Hadal; carga un disparo de francotirador con su láser de aviso. Cuanto más nivel (mundo, veces
    que te ha vencido y nivel de los refuerzos), más rápida la bala, más daño y más perforación (atraviesa a tus soldados
    y parte de tu escudo). */
 function spotterLvl(en){ return (world?world.id:1)+(en.vengeLvl||0)*2+(en.reinf&&world?Math.floor((world.reinfLvl||0)/2):0); }
@@ -3754,9 +3754,9 @@ function combatSiege(en,tg,dd,los,aimed,dt){
   }
 }
 
-/* ===================== HOLLOW BOOM (enemigos) ===================== */
+/* ===================== PULSO HADAL (enemigos) ===================== */
 function checkPurpleTrigger(en){
-  if(en.def.role==='spotter') return;   // el vigía nunca lanza Hollow Boom
+  if(en.def.role==='spotter') return;   // el vigía nunca lanza Pulso Hadal
   if(!en.carrier||en.vacioUsed||en.spawnGrace>0||voidCharging>0||!player.alive) return;
   if(en.ai!=='combat'&&en.ai!=='hunt') return;
   const sq=squads[en.squad];
@@ -3766,7 +3766,7 @@ function checkPurpleTrigger(en){
   if(Math.hypot(tg.x-en.x,tg.y-en.y)>650) return;
   en.vacio={t:0,dur:100,ax:tg.x,ay:tg.y}; en.vacioUsed=true; voidCharging++;
   en.ramT=0; en.windup=0; en.lunge=0; en.burst=0;
-  popup(en.x,en.y-34,'⚠ HOLLOW BOOM','#c77dff',15);
+  popup(en.x,en.y-34,'⚠ PULSO HADAL','#c77dff',15);
   if(!alone) popup(en.x,en.y-18,'(vida crítica)','#e2b8ff',11); else popup(en.x,en.y-18,'(su escuadra cayó)','#e2b8ff',11);
   S.purpleCharge();
 }
@@ -3796,8 +3796,8 @@ function spawnBoss(){
   if(survLvl&&bossRelay===1) tankMode=!tankMode;   // supervivencia: el segundo jefe del relevo es el otro coloso
   const hp=Math.round((tankMode?800:850)+wave*70);
   const eraIdx=ERAS.indexOf(era);
-  boss={kind:tankMode?'tankboss':'monger', mk, pattern:eraIdx,
-    name:tankMode?(['SUPERTANQUE FUNGOSO','LEVIATÁN BLINDADO','GUARDIÁN DEL NÚCLEO'][eraIdx]+' Mk-'+roman(mk)):('MONGER Mk-'+roman(mk)+' · COLOSO DE HIERRO'),
+  boss={kind:tankMode?'tankboss':'yunque', mk, pattern:eraIdx,
+    name:tankMode?(['SUPERTANQUE FUNGOSO','LEVIATÁN BLINDADO','GUARDIÁN DEL NÚCLEO'][eraIdx]+' Mk-'+roman(mk)):('YUNQUE Mk-'+roman(mk)+' · COLOSO DE CHATARRA'),
     x:arena.x,y:arena.y,radius:tankMode?30:34,mass:60,hp,maxHp:hp,alive:true,
     vx:0,vy:0,accel:0.22,speedMax:(tankMode?0.9:1.1)+mk*0.08,friction:0.85,angle:Math.PI/2,aim:Math.PI/2,
     state:'intro',st:0,z:420,atkCd:110,stunMeter:0,stunMax:260+wave*10,stunDur:0,phase2:false,
@@ -3811,7 +3811,7 @@ function spawnBoss(){
 function setBossState(s){ boss.state=s; boss.st=0; boss.fired=false; }
 function stunBoss(dur,label){
   const b=boss;
-  if(b.state==='vacio'){ voidCharging=Math.max(0,voidCharging-1); b.purpleCd=500; popup(b.x,b.y-70,'¡HOLLOW BOOM INTERRUMPIDO!','#e2b8ff',15); }
+  if(b.state==='vacio'){ voidCharging=Math.max(0,voidCharging-1); b.purpleCd=500; popup(b.x,b.y-70,'¡PULSO HADAL INTERRUMPIDO!','#e2b8ff',15); }
   setBossState('stun'); b.stunDur=dur; b.stunMeter=0; b.stunMax*=1.2;
   b.vx*=0.3; b.vy*=0.3;
   popup(b.x,b.y-54,label||'¡ATURDIDO!','#f5c518',20); S.stun();
@@ -3864,7 +3864,7 @@ function callEscorts(){
   popup(b.x,b.y-60,'¡REFUERZOS!','#ff8a8a',16);
 }
 function bossMuzzle(b){
-  const a=b.angle, s=b.kind==='monger'?2.6:2.2;
+  const a=b.angle, s=b.kind==='yunque'?2.6:2.2;
   return {x:b.x+Math.cos(a)*22*s+Math.cos(a+Math.PI/2)*12*s, y:b.y+Math.sin(a)*22*s+Math.sin(a+Math.PI/2)*12*s};
 }
 function bossSlam(){
@@ -3921,13 +3921,13 @@ function updateBoss(dt){
   }
   if(!b.phase2 && b.hp<b.maxHp*0.5){ b.phase2=true; b.speedMax*=1.25; popup(b.x,b.y-70,'¡SOBRECARGA DEL REACTOR!','#ff4757',16); S.boss(); }
   if((b.escortCalls===0&&b.hp<b.maxHp*0.7)||(b.escortCalls===1&&b.hp<b.maxHp*0.35)) callEscorts();
-  // Si sus escoltas caen, gana el Hollow Boom
+  // Si sus escoltas caen, gana el Pulso Hadal
   if(b.escortSid){ const sq=squads[b.escortSid]; if(sq && sq.size>0 && sq.alive<=0){ b.purpleReady=true; b.escortSid=0; } }
   const busy=b.state==='stun'||b.state==='vacio'||b.state==='charge'||b.state==='chargeWind'||b.state==='xTransform';
   if(!busy && b.purpleCd<=0 && voidCharging===0 && (b.purpleReady||b.hp<b.maxHp*0.1) && p.alive){
     setBossState('vacio'); b.vacioDur=120; voidCharging++; b.purpleReady=false;
-    popup(b.x,b.y-70,'⚠ HOLLOW BOOM','#c77dff',20); S.purpleCharge();
-    announce('⚠ HOLLOW BOOM','#c77dff','¡Apártate de la franja morada o aturde al coloso!');
+    popup(b.x,b.y-70,'⚠ PULSO HADAL','#c77dff',20); S.purpleCharge();
+    announce('⚠ PULSO HADAL','#c77dff','¡Apártate de la franja morada o aturde al coloso!');
   }
   const speedK=b.phase2?1.35:1;
   if(bossExtra(b,dt,tgt,dd,toA,p)){ /* ataques nuevos de todos los jefes (p9k_bosses.js) */ }
@@ -3938,10 +3938,10 @@ function updateBoss(dt){
       b.aim=turnTo(b.aim,toA,0.05*dt); b.angle=turnTo(b.angle,toA,0.045*dt);
       if(dd>240) accelerate(b,dx,dy,dt); else if(dd<150) accelerate(b,-dx,-dy,dt,0.5);
       b.atkCd-=dt*speedK;
-      if(dd<105 && b.atkCd<70){ setBossState(b.kind==='monger'?'slamWind':'chargeWind'); if(b.kind!=='monger') b.windT=20; break; }
+      if(dd<105 && b.atkCd<70){ setBossState(b.kind==='yunque'?'slamWind':'chargeWind'); if(b.kind!=='yunque') b.windT=20; break; }
       if(b.atkCd<=0){
         const r=Math.random(), los=lineClear(b.x,b.y,tgt.x,tgt.y);
-        if(r<0.38&&los) setBossState(b.kind==='monger'?'gunSpin':'pattern');
+        if(r<0.38&&los) setBossState(b.kind==='yunque'?'gunSpin':'pattern');
         else if(r<0.68) setBossState('missiles');
         else { setBossState('chargeWind'); b.windT=b.phase2?34:45; }
       }
@@ -4580,8 +4580,8 @@ function drawPlayer(){
   }
 }
 
-/* ---------- MONGER: el coloso de hierro ---------- */
-function drawMonger(b){
+/* ---------- YUNQUE: el coloso de chatarra ---------- */
+function drawYunque(b){
   const u=2.6, z=b.z||0;
   if(z>0&&!shadowPass){ ctx.fillStyle='rgba(0,0,0,'+(0.35*(1-z/420))+')'; ctx.beginPath(); ctx.ellipse(b.x,b.y,40,30,0,0,Math.PI*2); ctx.fill(); }
   ctx.save(); ctx.translate(b.x,b.y-z);
@@ -4760,7 +4760,7 @@ function drawBoss(){
   if(b.state==='vacio') drawVacioCharge(b.x,b.y,b.aim,b.st/b.vacioDur,38,b.radius);
   }
   if(b.draw) b.draw(b);
-  else if(b.kind==='monger') drawMonger(b);
+  else if(b.kind==='yunque') drawYunque(b);
   else if(b.kind==='crane') drawCrane(b);
   else {
     const z=b.z||0;
@@ -4788,7 +4788,7 @@ function drawVacioCharge(x,y,a,k,r,off){
   else if(k<0.82) hbDraw('vortex',Math.min(9,Math.floor((k-0.45)/0.37*10)),cx,cy,D,a);
   else hbDraw('emit',Math.min(5,Math.floor((k-0.82)/0.18*6)),cx,cy,D,a);
 }
-/* HOLLOW BOOM con la hoja del usuario (sprites/hollow_boom.jpg → tools/extraer_hollow_boom.py → assets/hollow_boom.png).
+/* PULSO HADAL con la hoja del usuario (sprites/hollow_boom.jpg → tools/extraer_hollow_boom.py → assets/hollow_boom.png).
    Cada fila de la hoja va a su fase: form/vortex/emit = carga, fly = en vuelo, boom = explosión. Todos miran a la derecha;
    [x,y,w,h,anclaX,anclaY] en el atlas y ref = medida (px de arte) que se iguala al tamaño real en el juego. */
 const HB_ATLAS={"frames":{"form":[[0,0,24,24,11.5,11.5],[26,0,24,24,11.5,11.5],[52,0,22,23,10.5,11.0],[76,0,21,21,10.0,10.0],[99,0,23,23,11.0,11.0],[124,0,25,25,12.0,12.0]],"vortex":[[151,0,15,15,7.0,7.0],[168,0,22,21,10.5,10.0],[192,0,23,22,11.0,10.5],[217,0,20,21,9.5,10.0],[239,0,24,22,11.5,10.5],[265,0,25,24,12.0,11.5],[292,0,26,26,12.5,12.5],[320,0,26,27,12.5,13.0],[348,0,27,27,13.0,13.0],[377,0,26,28,12.5,13.5]],"emit":[[405,0,22,23,10.0,11.0],[429,0,26,26,12.0,12.5],[457,0,28,25,12.0,12.0],[487,0,27,25,11.0,12.0],[0,30,29,22,14.0,10.5],[31,30,29,21,15.0,10.5]],"fly":[[62,30,28,15,19.5,7.0],[92,30,28,16,19.0,7.5],[122,30,29,15,20.5,7.0],[153,30,29,17,19.5,8.0],[184,30,29,20,18.0,9.5],[215,30,29,21,17.5,10.0],[246,30,28,20,17.0,9.5],[276,30,27,23,14.5,11.0],[305,30,26,23,13.5,11.0]],"boom":[[333,30,23,22,11.0,10.5],[358,30,16,16,7.5,7.5],[376,30,25,21,12.0,10.0],[403,30,49,50,24.0,24.5],[454,30,54,53,26.5,26.0],[0,85,25,21,12.0,10.0],[27,85,25,25,12.0,12.0],[54,85,26,20,12.5,9.5]]},"ref":{"form":25,"vortex":15,"emit":23,"fly":20.0,"boom":54}};
@@ -5292,7 +5292,7 @@ function render(){
   drawFactoryFx(cx,cy);
   drawLavaFx(cx,cy);
   drawWorldGround(cx,cy);
-  drawHollowScars(cx,cy);   // cicatrices del Hollow Boom (p4_units.js)
+  drawHollowScars(cx,cy);   // cicatrices del Pulso Hadal (p4_units.js)
   nodes.forEach(drawNode);
   drawShip();
   drawWorldHelipads();
@@ -5435,7 +5435,7 @@ function drawScreenFx(){
     ctx.fillText('Clic o Espacio para saltar',W-16,H-18);
     { const WX=WEATHERS[weather.id]; ctx.textAlign='left'; ctx.fillStyle='#8ae7ff'; ctx.fillText(WX.icon+' Clima: '+WX.name+(WX.tip?' — '+WX.tip:''),16,28); }
     ctx.textAlign='left'; ctx.fillStyle='#3ee67a';
-    ctx.fillText(cinePhase<2?'El núcleo de Abyssalita abre un portal...':'Portal abierto: tu máquina sale...',16,H-18);
+    ctx.fillText(cinePhase<2?'El núcleo de Afotita abre un portal...':'Portal abierto: tu máquina sale...',16,H-18);
   }
   if(p && !p.alive && respawnTimer>0 && cine<=0){
     ctx.textAlign='center'; ctx.font='bold 20px Rajdhani, monospace'; ctx.fillStyle='#3ee67a';
@@ -5550,7 +5550,7 @@ const TUT=[
   { t:'APOYO', txt:()=>'Con WORK también despliegas apoyo: E mini-dron (8 ◆), T torreta fija (12 ◆) o Q escuadra de 3 soldados que atraen el fuego enemigo (10 ◆). Prueba uno.',
     start(){ if(runWork<12) runWork=12; tut.d.n0=drones.length+turrets.length+soldiers.length; },
     check(){ return drones.length+turrets.length+soldiers.length>tut.d.n0; } },
-  { t:'HOLLOW BOOM', txt:()=>'¡Atento! Los robots con un punto morado llevan un núcleo de Abyssalita: si se quedan con menos de 10 de vida o sin su escuadra, cargan un HOLLOW BOOM que borra todo y, si te toca, destruye tu máquina al instante (este de prácticas solo te hace daño). Apártate de la franja morada… o destrúyelo antes de que dispare. Tras disparar queda agotado: remátalo.',
+  { t:'PULSO HADAL', txt:()=>'¡Atento! Los robots con un punto morado llevan un núcleo de Afotita: si se quedan con menos de 10 de vida o sin su escuadra, cargan un PULSO HADAL que borra todo y, si te toca, destruye tu máquina al instante (este de prácticas solo te hace daño). Apártate de la franja morada… o destrúyelo antes de que dispare. Tras disparar queda agotado: remátalo.',
     start(){
       const p=player, pos=randomWalkable(p.x,p.y-260,90)||{x:p.x,y:p.y-260};
       const en=addEnemy('gunner',pos.x,pos.y,newSquad(),true);
@@ -5558,7 +5558,7 @@ const TUT=[
       en.ai='combat'; en.aware=1; en.lastKnown={x:p.x,y:p.y}; en.lastSeen=t;
       en.vacio={t:0,dur:150,ax:p.x,ay:p.y}; voidCharging++;
       tut.d.carrier=en; S.purpleCharge();
-      popup(en.x,en.y-34,'⚠ HOLLOW BOOM','#c77dff',15);
+      popup(en.x,en.y-34,'⚠ PULSO HADAL','#c77dff',15);
     },
     check(){ return !tut.d.carrier.alive; },
     targets(){ return tut.d.carrier.alive?[tut.d.carrier]:[]; } },
@@ -6309,7 +6309,7 @@ function renderHome(){
    abrirla. Cada compuerta abierta es un punto de control. Al final espera el jefe. */
 const WORLD_LIST=[
   {id:1, icon:'🏖️', name:'COSTA DE ACERO', region:'Hertland', built:true, pos:[25,57],
-    desc:'El desembarco: la playa de Hertland, la jungla del río y un fuerte costero tomado por los robots. Jefe: MONGER Mk-I.',
+    desc:'El desembarco: la playa de Hertland, la jungla del río y un fuerte costero tomado por los robots. Jefe: YUNQUE Mk-I.',
     sections:['PLAYA DE DESEMBARCO','JUNGLA','FUERTE COSTERO','PATIO DEL FUERTE · JEFE']},
   {id:2, icon:'🏭', name:'FÁBRICA HACKEADA', region:'Reenburg · R. Lutenberg', built:true, pos:[43,68],
     desc:'Las cadenas de montaje donde el ejército del líder fabrica robots con WORK: cintas que te arrastran, prensas que aplastan y metal fundido. Jefe: GRÚA TITÁN.',
@@ -6318,7 +6318,7 @@ const WORLD_LIST=[
   {id:4, icon:'🏴', name:'TIERRA DE BANDIDOS', region:'Grijsland', built:false, pos:[21,27], desc:'Los supervivientes de la guerra se han hecho bandidos y pelean contra todos.'},
   {id:5, icon:'⚔️', name:'CUARTEL DE OOSTLAND', region:'Oostland', built:false, pos:[62,43], desc:'La fortaleza del líder militar enloquecido y su puerto hacia el océano.'},
 ];
-const WORLD_DEFS={ 1:{build:()=>buildWorld1(), wave:3, era:'isla', boss:'El MONGER ha caído'}, 2:{build:()=>buildWorld2(), wave:4, era:'fabrica', boss:'La GRÚA TITÁN ha caído'} };
+const WORLD_DEFS={ 1:{build:()=>buildWorld1(), wave:3, era:'isla', boss:'El YUNQUE ha caído'}, 2:{build:()=>buildWorld2(), wave:4, era:'fabrica', boss:'La GRÚA TITÁN ha caído'} };
 function worldInfo(id){ return WORLD_LIST.find(w=>w.id===id); }
 function worldSave(id){ return save.worlds['w'+id]; }
 function worldUnlocked(id){
@@ -6628,7 +6628,7 @@ function worldCamLimits(){
    w.front = lo más lejos que has llegado (la y más pequeña). Si retrocedes más de RETREAT_START px,
    cada cierto tiempo llega una oleada de refuerzos (cuanto más atrás estés, antes llega). Cada llamada
    sube el nivel: más tropas, los tipos más duros del propio mundo, más vida y más daño, y desde el
-   nivel 3 algunos traen Hollow Boom. Si vuelves al frente, el nivel baja poco a poco. */
+   nivel 3 algunos traen Pulso Hadal. Si vuelves al frente, el nivel baja poco a poco. */
 const RETREAT_START=360, REINF_MAX_ALIVE=14;
 const REINF_ROLES=['melee','ranged','spotter','mortar','air','ram','siege','molotov','raider'];
 function worldReinfPool(w){
@@ -6806,7 +6806,7 @@ function callReinforcements(elite){
     if(d.dmg!=null){ en.def=Object.create(d); en.def.dmg=Math.round(d.dmg*dmgMul); }
     en.maxHp=Math.round(en.maxHp*hpMul); en.hp=en.maxHp;
     en.ai='hunt'; en.aware=1; en.lastKnown={x:p.x,y:p.y}; en.spawnGrace=45;
-    if(L>=3&&d.role!=='spotter'&&Math.random()<Math.min(0.3,0.06*L)) en.carrier=true;   // el vigía nunca lleva Hollow Boom
+    if(L>=3&&d.role!=='spotter'&&Math.random()<Math.min(0.3,0.06*L)) en.carrier=true;   // el vigía nunca lleva Pulso Hadal
   };
   for(let i=0;i<n;i++){
     const id=(i===0&&L%2===0&&spot.length)?pick(spot):pick(choices), d=EDEFS[id];   // cada dos oleadas viene un vigía
@@ -7114,11 +7114,11 @@ function opsPanelHtml(k){
   const head=(t,sub)=>'<div class="wmHead">'+t+'</div>'+(sub?'<div class="opsRegion">'+sub+'</div>':'');
   if(k==='base') return head('🏠 BASE ISLEFORGE','Tu isla hogar')+'<div class="wmDesc">Taller militar con su garaje, tu casa y el huerto. Aquí vuelves después de cada misión.</div><div class="row"><button class="btn small" data-m="home">QUEDARME EN LA BASE</button></div>';
   if(k==='tutorial') return head('📘 ISLA DE ENTRENAMIENTO'+(s.tutorial===false?' <span class="wmOk">✔</span>':' <span class="wmTag">RECOMENDADO</span>'),'Islote junto a la base')+
-    '<div class="wmDesc">Isla abierta para aprender: moverte, disparar, el ataque en arco, los rehenes, el sigilo, tu aliado y el Hollow Boom.</div><div class="row"><button class="btn small" data-m="tutorial">ENTRENAR</button></div>';
+    '<div class="wmDesc">Isla abierta para aprender: moverte, disparar, el ataque en arco, los rehenes, el sigilo, tu aliado y el Pulso Hadal.</div><div class="row"><button class="btn small" data-m="tutorial">ENTRENAR</button></div>';
   if(k==='arch') return head('♾️ ARCHIPIÉLAGO · SUPERVIVENCIA','Las islas del este')+'<div class="wmDesc">Sin rehenes: aguanta isla tras isla (jefe cada 5). Cada isla es un nivel más para todos, en vida y daño: enemigos +'+SURV_PCT.enemigos+'%, tú +'+SURV_PCT.tu+'% y tus aliados +'+SURV_PCT.aliados+'% por nivel. Récord: nivel '+save.bestWave+'.</div><div class="wmDesc">Clima posible: '+weatherIcons('arch')+'</div>'+(depositMinerals('isla').length?'<div class="wmDesc">⛏ '+depositMinerals('isla').map(minName).join(', ')+'</div>':'')+
     '<div class="row"><button class="modeBtn'+(s.mode!=='tanks'?' sel':'')+'" data-mode="robots">🤖 ROBOTS</button><button class="modeBtn'+(s.mode==='tanks'?' sel':'')+'" data-mode="tanks">🛡️ TANQUES</button></div>'+
     '<div class="row"><button class="btn small" data-m="arch">JUGAR</button></div>';
-  if(k==='ocean') return head('🌊 ???','Bajo el océano')+'<div class="wmDesc">Algo brilla en el fondo del mar, bajo la niebla... Dicen que ahí abajo está <b style="color:#7fd8ff">BÉNTICA FANTASMA</b>, la ciudad que extrae la Abyssalita.</div><div class="wmDesc" style="color:var(--gold)">Primero hay que liberar la superficie.</div>';
+  if(k==='ocean') return head('🌊 ???','Bajo el océano')+'<div class="wmDesc">Algo brilla en el fondo del mar, bajo la niebla... Dicen que ahí abajo está <b style="color:#7fd8ff">BÉNTICA FANTASMA</b>, la ciudad que extrae la Afotita.</div><div class="wmDesc" style="color:var(--gold)">Primero hay que liberar la superficie.</div>';
   const w=WORLD_LIST.find(x=>'w'+x.id===k); if(!w) return '';
   const sv=worldSave(w.id);
   if(!worldUnlocked(w.id)) return head('🔒 MUNDO '+w.id+' · ???','Región: cubierta por la niebla')+
@@ -7729,7 +7729,7 @@ function opsBuild(){
       if((rr>=0&&rr!==r0)||(rd>=0&&rd!==r0)) col='#3b2c1c';
     }
     put(x,y,col);
-    if(d>=3&&biome[i]!=='ice'&&biome[i]!=='home'&&opsHash(x,y,21)<0.0045){ put(x,y,'#b06cff'); glints.push([x,y]); }   // vetas de Abyssalita
+    if(d>=3&&biome[i]!=='ice'&&biome[i]!=='home'&&opsHash(x,y,21)<0.0045){ put(x,y,'#b06cff'); glints.push([x,y]); }   // vetas de Afotita
   }
   g.putImageData(img,0,0);
   // montañas (5x3 celdas, luz desde la izquierda; nieve arriba en las más altas)
@@ -7865,7 +7865,7 @@ function opsDraw(now){
   g.drawImage(opsTerrain,0,0,DW,DH);
   // destellos del mar
   for(const [x,y,ph] of opsInfo.sparks){ const v=Math.sin(tm*1.6+ph); if(v>0.55){ g.fillStyle=v>0.85?'#cfeef2':'#7fc0cc'; g.fillRect(x*P,y*P,P*2,P); } }
-  // vetas de Abyssalita que brillan
+  // vetas de Afotita que brillan
   for(const [x,y] of opsInfo.glints){ if(Math.sin(tm*2+x*0.7+y)>0.7){ g.fillStyle='#f0d8ff'; g.fillRect(x*P,y*P,P,P); } }
   // barco ISF-01 fondeado junto a la base
   opsSprite(g,OPS_SHIP,(53+Math.sin(tm*0.5)*1.5)*P,(101+Math.sin(tm*1.3)*0.4)*P,P);
@@ -8377,7 +8377,7 @@ function seedDepositsWorld(id){
     DEPOSIT_TABLES['w'+id].forEach((list,i)=>placeDeposits(list,{r0:world.secRows[i][0],r1:world.secRows[i][1],c0:3,c1:35,ground:world.depGround||[G,FLOOR],avoid:world.starts.map(s=>({x:s.x,y:s.y,d:160}))}));
   }
 }
-/* ISLA CRÁTER (supervivencia): un fragmento del meteorito de la Abyssalita cayó aquí y su imitación convirtió la roca
+/* ISLA CRÁTER (supervivencia): un fragmento del meteorito de la Afotita cayó aquí y su imitación convirtió la roca
    en todos los minerales. Están por ANILLOS: cuanto más al centro, mejores (y más lejos de tu base, que está en el borde).
    Es el único sitio donde salen los minerales que no son piedra. Al empezar cada oleada se reponen los agotados. */
 const CRATER_RINGS=[
@@ -12123,7 +12123,7 @@ function lookKey(k){
    Ideas tomadas de varios menús clásicos:
    - «PULSA CUALQUIER TECLA» como en Jackal y Metal Slug (y sirve para activar el sonido del navegador).
    - Una escena viva de fondo, como Hades, Dead Cells o Stardew Valley: el mar al atardecer, tu base
-     con la forja, el barco ISF-01, el portal de la Luna hacia Marte y los «ecos» de la Abyssalita.
+     con la forja, el barco ISF-01, el portal de la Luna hacia Marte y los «ecos» de la Afotita.
    - Lista vertical con cursor (tu propia máquina) y CONTINUAR siempre en primer lugar.
    - Ficha de la partida con el mapa explorado, como las ranuras de guardado de Into the Breach.
    - NUEVA PARTIDA pide confirmación para no borrar nada por accidente. */
@@ -12156,7 +12156,7 @@ function menuBuildItems(){
   const L=[{id:'play',label:p?'CONTINUAR':'EMPEZAR',sub:p?menuNextGoal():'Llega a tu base y descubre la historia'}];
   if(p) L.push({id:'new',label:'NUEVA PARTIDA',sub:'Borra la partida y empieza de cero'});
   L.push({id:'look',label:'PERSONAJE',sub:'Elige el aspecto de tu piloto'});
-  L.push({id:'story',label:'HISTORIA',sub:'La Abyssalita, la guerra y Béntica Fantasma'});
+  L.push({id:'story',label:'HISTORIA',sub:'La Afotita, la guerra y Béntica Fantasma'});
   L.push({id:'controls',label:'CONTROLES',sub:'Teclado y ratón'});
   L.push({id:'options',label:'OPCIONES',sub:'Sonido, pantalla y mira'});
   return L;
@@ -12756,7 +12756,7 @@ function drawMenuScene(){
   M.embers=M.embers.filter(p=>(p.life-=0.025)>0);
   for(const p of M.embers){ p.y-=0.45; p.x+=p.vx+0.08; g.fillStyle=p.life>0.5?'#ffd76e':'#ff6b3a'; g.fillRect(Math.round(p.x),Math.round(p.y),1,1); }
   g.restore();
-  // bajo el mar: el brillo de la Abyssalita y sus ecos (anillos de sonar)
+  // bajo el mar: el brillo de la Afotita y sus ecos (anillos de sonar)
   g.save(); g.beginPath(); g.rect(0,HOR+1,SW,SH-HOR); g.clip();
   const pu=0.18+Math.sin(ts*1.3)*0.06, CXs=SW/2, FXs=Math.max(1,SW/300);
   const rg=g.createRadialGradient(CXs,SH+14,4,CXs,SH+14,110*FXs); rg.addColorStop(0,'rgba(176,108,255,'+(pu+0.15).toFixed(2)+')'); rg.addColorStop(1,'rgba(176,108,255,0)');
@@ -12990,7 +12990,7 @@ function nextWaveInPlace(){
   announce(grown?'🏝 LA ISLA CRECE · OLEADA '+wave:'OLEADA '+wave+' · NIVEL '+survLvl,'#f5c518',(bossStage?'¡Se acercan dos jefes! · ':'Sobrevive: '+toKill+' robots · ')+survTxt());
   S.wave();
 }
-/* LLEGADA ÉPICA: el núcleo de Abyssalita (el Orbe Vital) abre un PORTAL en el suelo y tu máquina sale de él.
+/* LLEGADA ÉPICA: el núcleo de Afotita (el Orbe Vital) abre un PORTAL en el suelo y tu máquina sale de él.
    El portal no se puede dañar, pero los enemigos que hay cerca notan la llegada y van a por ti mientras sales. */
 function startIntro(){
   cine=1; cineT=0; cinePhase=0; orb=null; ship.launched=true;
