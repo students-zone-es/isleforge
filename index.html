@@ -5098,9 +5098,8 @@ function drawTower(tu){
   ctx.restore();
   hpBar(tu.x,tu.y-18,26,tu.hp/tu.maxHp,'#3ee67a');
 }
-function drawTurretsSoldiers(){
-  for(const tu of turrets){
-    if(tu.type==='sniper'||tu.type==='bazooka'){ drawTower(tu); continue; }
+function drawTurret(tu){
+    if(tu.type==='sniper'||tu.type==='bazooka'){ drawTower(tu); return; }
     ctx.save(); ctx.translate(tu.x,tu.y);
     ctx.fillStyle='#1c3b3d'; ctx.fillRect(-12,-12,24,24);
     ctx.fillStyle=tu.flash>0?'#fff':'#3ee6e6'; ctx.fillRect(-10,-10,20,20);
@@ -5111,8 +5110,8 @@ function drawTurretsSoldiers(){
     ctx.fillStyle='#8ff'; ctx.fillRect(15,-2,2,4);
     ctx.restore();
     hpBar(tu.x,tu.y-18,26,tu.hp/tu.maxHp,'#3ee67a');
-  }
-  for(const so of soldiers){
+}
+function drawSoldier(so){
     drawFeet(so.x,so.y,so.angle,so.walk||0,1,2.5,'#1d4d31');
     ctx.save(); ctx.translate(so.x,so.y); ctx.rotate(so.angle);
     ctx.fillStyle=so.flash>0?'#fff':'#2f7d4f'; ctx.fillRect(-4,-4,8,8);
@@ -5120,13 +5119,16 @@ function drawTurretsSoldiers(){
     ctx.fillStyle='#e8c9a0'; ctx.fillRect(-1,-2,3,4);
     ctx.fillStyle='#222'; ctx.fillRect(3,1,6,2);
     ctx.restore();
-    if(shadowPass) continue;
+    if(shadowPass) return;
     if(so.hp<so.maxHp) hpBar(so.x,so.y-10,12,so.hp/so.maxHp,'#ff4757');
     // marca encima: verde = escolta, naranja = distrae al enemigo
     if(so.role==='escort'){ ctx.fillStyle='#3ee67a'; ctx.beginPath(); ctx.moveTo(so.x-3,so.y-16); ctx.lineTo(so.x+3,so.y-16); ctx.lineTo(so.x,so.y-12); ctx.closePath(); ctx.fill(); }
     else if(so.role==='decoy'){ ctx.fillStyle='#ff8a3a'; ctx.fillRect(so.x-1,so.y-20,2,6); ctx.fillRect(so.x-1,so.y-12,2,2); }
-  }
-  if(!shadowPass) drawEscortRoute();
+}
+function drawTurretsSoldiers(){
+  turrets.forEach(tu=>drawTurret(tu));
+  soldiers.forEach(so=>drawSoldier(so));
+  drawEscortRoute();
 }
 function drawDrones(){
   for(const d of drones){
@@ -5276,7 +5278,7 @@ function render(){
   drawOrb();
   drawGroundMarks();
   drawPickups();
-  drawSunShadows(cx,cy,SH_MISSION);   // sombras según el sol (p9m_daynight.js)
+  drawSunShadows(cx,cy,castMission);   // sombras según el sol (p9m_daynight.js)
   pows.forEach(drawPow);
   drawShadows();
   drawDeposits();
@@ -5689,9 +5691,8 @@ function buildHome(){
   rectT(46,17,48,coast,FLOOR);
   rectT(46,coast+1,48,coast+6,BRIDGE);                 // muelle
   ship={x:47*TILE+TILE/2+30, y:(coast+7)*TILE+32, launched:true};
-  // Taller militar y estación de mejora
+  // Taller militar (dentro está el garaje, p9n_interiors.js)
   L.workshop={c0:27,r0:18,w:12,h:8}; rectT(27,18,38,25,BLD); rectT(27,26,38,28,FLOOR);
-  L.pad={c0:29,r0:33,w:8,h:6}; rectT(29,33,36,38,FLOOR);   // garaje de vehículos (sin pedestal: las plazas se pisan)
   // Casa (zona reservada para que crezca) y su patio
   L.houseArea={c0:54,r0:19,w:9,h:7}; rectT(54,26,62,28,FLOOR);
   applyHouseFootprint(false);
@@ -5724,7 +5725,6 @@ function buildHomeSpots(){
   const L=homeL, f=houseFootprint();
   homeSpots=[
     {id:'shop', to:'workshop', x:(L.workshop.c0+6)*TILE, y:(L.workshop.r0+L.workshop.h)*TILE+20, label:'ENTRAR · TALLER MILITAR', r:54},
-    {id:'hangar', x:(L.pad.c0+4)*TILE, y:(L.pad.r0+L.pad.h)*TILE+16, label:'GARAJE · ELIGE VEHÍCULO Y ALIADO', r:52},
     {id:'house', to:'house', x:(f.c0+f.w/2)*TILE, y:(f.r0+f.h)*TILE+18, label:'ENTRAR · CASA · '+houseLv().name, r:48},
     {id:'heli', x:(L.heli.c0+3)*TILE, y:(L.heli.r0+3)*TILE, label:'HELIPUERTO · MAPA DE OPERACIONES', r:84},
   ];
@@ -5802,18 +5802,13 @@ function stepHome(dt){
   }
   homeNear=null; let bd=1e9;
   for(const s of homeSpots){ const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<s.r&&d<bd){ bd=d; homeNear=s; } }
-  if(!interior) homeFx(dt);
+  if(!interior) homeFx(dt); else if(interior.def.fx) interior.def.fx(dt,interior.o);
   updateParticles(dt);
   updateHomeGuide();
   updateHomeHud();
 }
 function homeFx(dt){
   const L=homeL;
-  // Chispas de los brazos de la estación de mejora
-  if(Math.random()<0.25*dt){
-    const cx=(L.pad.c0+L.pad.w/2)*TILE, cy=(L.pad.r0+L.pad.h/2)*TILE+6, sd=Math.random()<0.5?-1:1;
-    particles.push({x:cx+sd*22+rand(-6,6),y:cy+rand(-10,10),vx:rand(-1.5,1.5),vy:rand(-2,0.5),life:14,maxLife:14,color:pick(['#fff3b0','#ffb347','#9ff']),size:2});
-  }
   // Humo de la chimenea (casa de piedra en adelante)
   if(save.home.house>=3 && Math.random()<0.08*dt){
     const f=houseFootprint();
@@ -5834,7 +5829,6 @@ function homeInteract(){
   S.pickup();
   switch(s.id){
     case 'shop': renderShop(); openHomeUI('scrShop'); guideEvent('shop'); break;
-    case 'hangar': renderHangar(); openHomeUI('scrHangar'); guideEvent('shop'); break;
     case 'house': renderHouse(); openHomeUI('scrHouse'); guideEvent('house'); break;
     case 'heli': renderWorldMap(); openHomeUI('scrWorldMap'); guideEvent('heli'); break;
     case 'plot': plotInteract(s.i); break;
@@ -5933,7 +5927,7 @@ function renderHouse(){
 /* ---------- guía de la base (la primera vez) ---------- */
 const HOME_GUIDE=[
   {t:'BIENVENIDO A LA BASE', txt:'Esta isla es tu hogar. Camina con W A S D y mantén SHIFT para correr.', target:null},
-  {t:'TALLER MILITAR', txt:'Ve al hangar grande y pulsa E en su puerta para comprar mejoras PERMANENTES. En el garaje de delante (una plaza por vehículo) eliges vehículo y aliado.', target:'shop'},
+  {t:'TALLER MILITAR', txt:'Ve al hangar grande y pulsa E en su puerta. Dentro, en el banco de trabajo compras mejoras PERMANENTES y en el garaje (una plaza por vehículo) eliges vehículo y aliado.', target:'shop'},
   {t:'EL HUERTO', txt:'Pulsa E sobre una parcela del huerto para plantar patatas, zanahorias o trigo. Crecen con el tiempo real, incluso mientras estás en una misión.', target:'plot'},
   {t:'TU CASA', txt:'Pulsa E en la puerta de tu casa: ahí la mejoras, cocinas raciones para las misiones y vendes la cosecha a cambio de WORK.', target:'house'},
   {t:'¡A LA MISIÓN!', txt:'Sube al HELIPUERTO y pulsa E para abrir el mapa de operaciones. Si es tu primera vez, empieza por la ISLA DE ENTRENAMIENTO.', target:'heli'},
@@ -5994,6 +5988,7 @@ function drawHuman(x,y,dir,walk,pal,s){
     return;
   }
   const back=dir==='up';
+  if(shadowPass) R(-3,-5,6,5,'#000');   // en la sombra las dos piernas son una sola mancha
   R(-3,-5+(a>0?-a*0.5:0),2,4,pal.suit); R(1,-5+(a<0?a*0.5:0),2,4,pal.suit);
   R(-3,-1,2,1,'#3a2a1a'); R(1,-1,2,1,'#3a2a1a');
   R(-3,-11,6,6,pal.suit); R(-3,-11,6,1,pal.light); R(-3,-6,6,1,pal.dark);
@@ -6072,8 +6067,8 @@ function drawWorkshop(){
 }
 /* GARAJE DE VEHÍCULOS (antes «estación de mejora»): una plaza por vehículo con su nivel de mejoras. El que llevas está
    iluminado, con los brazos de reparación encima; el JINETE aparece tapado con una lona hasta que capturas una moto. */
-function drawUpgradeStation(){
-  const L=homeL.pad, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE;
+function drawUpgradeStation(L){
+  const x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE;
   // vista 3/4: suelo, MURO DEL FONDO (albardilla clara y cara de hormigón; los carteles van colgados en él),
   // muretes a los lados y separadores bajos entre plazas; delante, la entrada con el borde de peligro
   ctx.fillStyle='#2a2f36'; ctx.fillRect(x+4,y+40,w-8,h-44);
@@ -6254,17 +6249,15 @@ function drawAnnounceOnly(){
   if(a.sub){ ctx.font='bold 16px Rajdhani, monospace'; ctx.fillStyle='#e8edf5'; ctx.fillText(a.sub,W/2,H*0.3+28); }
   ctx.globalAlpha=1;
 }
-/* Lo que proyecta sombra en la base: los muros del garaje, el helicóptero aparcado y, de perfil, farolas, bandera y personas */
-const SH_HOME={
-  boxes(){ const L=homeL.pad, x=L.c0*TILE, y=L.r0*TILE, w=L.w*TILE, h=L.h*TILE; return [[x,y,w,40,34],[x,y,8,h-10,10],[x+w-8,y,8,h-10,10]]; },
-  ground(){ drawParkedHeli(); },
-  side(){
-    for(const [c,r] of homeLamps) shStand(c*TILE+15,r*TILE+22,16,34,()=>drawLamp(c,r));
-    shStand(44*TILE+7,28*TILE+22,90,60,drawHomeFlag);
-    for(const r of residents) shStand(r.x,r.y+3,40,56,()=>drawHuman(r.x,r.y,r.dir,r.walk,r.pal,2));
-    if(human) shStand(human.x,human.y+3,40,56,()=>drawHuman(human.x,human.y,human.dir,human.walk,PILOT_PAL,2));
-  }
-};
+/* Lo que proyecta sombra en la base: el helicóptero aparcado y, de perfil, farolas, bandera y personas */
+function castHome(){
+  const L=homeL.heli;
+  shLong({x:(L.c0+L.w/2)*TILE+6,y:(L.r0+L.h/2)*TILE-4,radius:44},drawParkedHeli);
+  for(const [c,r] of homeLamps) shStand(c*TILE+15,r*TILE+22,16,34,()=>drawLamp(c,r));
+  shStand(44*TILE+7,28*TILE+22,90,60,drawHomeFlag);
+  for(const r of residents) shStand(r.x,r.y,40,40,()=>drawHuman(r.x,r.y,r.dir,r.walk,r.pal,2));
+  if(human) shStand(human.x,human.y,40,40,()=>drawHuman(human.x,human.y,human.dir,human.walk,PILOT_PAL,2));
+}
 function renderHome(){
   if(interior){ renderInterior(); return; }
   const cx=Math.round(cam.x), cy=Math.round(cam.y);
@@ -6274,9 +6267,8 @@ function renderHome(){
   drawShip();
   drawHomeFarm();
   drawHelipadHome();
-  drawSunShadows(cx,cy,SH_HOME);   // sombras según el sol
+  drawSunShadows(cx,cy,castHome);   // sombras según el sol
   drawParkedHeli();
-  drawUpgradeStation();
   drawWorkshop();
   drawHouse();
   drawHomeFlag();
@@ -7106,7 +7098,7 @@ function renderWorldMap(){
 function opsPanelHtml(k){
   const s=save.sel;
   const head=(t,sub)=>'<div class="wmHead">'+t+'</div>'+(sub?'<div class="opsRegion">'+sub+'</div>':'');
-  if(k==='base') return head('🏠 BASE ISLEFORGE','Tu isla hogar')+'<div class="wmDesc">Taller militar, estación de mejora, tu casa y el huerto. Aquí vuelves después de cada misión.</div><div class="row"><button class="btn small" data-m="home">QUEDARME EN LA BASE</button></div>';
+  if(k==='base') return head('🏠 BASE ISLEFORGE','Tu isla hogar')+'<div class="wmDesc">Taller militar con su garaje, tu casa y el huerto. Aquí vuelves después de cada misión.</div><div class="row"><button class="btn small" data-m="home">QUEDARME EN LA BASE</button></div>';
   if(k==='tutorial') return head('📘 ISLA DE ENTRENAMIENTO'+(s.tutorial===false?' <span class="wmOk">✔</span>':' <span class="wmTag">RECOMENDADO</span>'),'Islote junto a la base')+
     '<div class="wmDesc">Isla abierta para aprender: moverte, disparar, el ataque en arco, los rehenes, el sigilo, tu aliado y el Hollow Boom.</div><div class="row"><button class="btn small" data-m="tutorial">ENTRENAR</button></div>';
   if(k==='arch') return head('♾️ ARCHIPIÉLAGO · SUPERVIVENCIA','Las islas del este')+'<div class="wmDesc">Sin rehenes: aguanta isla tras isla (jefe cada 5). Cada isla es un nivel más para todos, en vida y daño: enemigos +'+SURV_PCT.enemigos+'%, tú +'+SURV_PCT.tu+'% y tus aliados +'+SURV_PCT.aliados+'% por nivel. Récord: nivel '+save.bestWave+'.</div><div class="wmDesc">Clima posible: '+weatherIcons('arch')+'</div>'+(depositMinerals('isla').length?'<div class="wmDesc">⛏ '+depositMinerals('isla').map(minName).join(', ')+'</div>':'')+
@@ -10957,7 +10949,7 @@ function drawWatchers(cx,cy){
    Cada cosa proyecta SU PROPIA SILUETA hacia el lado contrario al sol, y más larga cuanto más bajo está: al mediodía
    cortas y hacia el norte (arriba), al atardecer largas hacia el este (derecha) y al amanecer hacia el oeste (izquierda).
    De noche, si hay luna en el cielo, la luna da sombras débiles. El mapa mira al norte (arriba).
-   · Lo visto desde arriba (vehículos, androides, torretas): se copia su dibujo real, con su giro y su pose, y se estira.
+   · Lo visto desde arriba (vehículos, androides, torretas): su dibujo real, con su giro y su pose, se estira desde atrás.
    · Lo visto de perfil (pinos, personas, farolas): su dibujo se tumba en el suelo desde el pie.
    · Lo que vuela: su copia cae separada de él, más lejos cuanto más alto y cuanto más bajo está el sol.
    Dos capas: la de las unidades va debajo de ellas, y la del mundo (bloques, edificios, pinos) se pinta después, así
@@ -10965,7 +10957,8 @@ function drawWatchers(cx,cy){
    se cruzan no se oscurecen el doble) y lo alto no se oscurece a sí mismo (su techo está al sol). */
 const SHADOW_H={[WALL]:34,[DOOR]:34,[BLD]:60,[TREE]:52,[ROCK]:24,[RUB]:10,[CAGE]:18,[CONT]:40};   // altura en píxeles
 const SHADOW_MAXLEN=3.2;   // con el sol muy bajo la sombra mide como mucho 3,2 veces la altura
-const SHADOW_UNIT=22;      // altura de las unidades vistas desde arriba
+const SHADOW_STRETCH=0.6;  // lo visto desde arriba se alarga menos que un muro: mide 1,2 veces su radio de alto
+const SHADOW_STAND=1.8;    // tope de lo visto de perfil: una persona 3 veces más larga que alta ya no parece una persona
 let shCv=null, shG=null, shCv2=null, shG2=null, shTmp=null, shTmpG=null, shS=null, shKey=null, shMemo=null, shTop=0, shX=0, shY=0;
 function sunShadow(){
   const S=skyNow(); if(shKey===S.k) return shMemo;
@@ -10986,9 +10979,9 @@ function shCapture(g,cx,cy,fn){
   try{ fn(cx,cy); } finally { g.restore(); shadowPass=false; ctx=c0; }
 }
 /* Tumba en el suelo una imagen de w×h con el pie en (x,foot): lo que en la imagen va hacia arriba, en el suelo va hacia la sombra */
-function shProject(G,img,w,h,x,foot){
+function shProject(G,img,w,h,x,foot,L){
   const s=shS, px=-s.dy, py=s.dx;
-  G.save(); G.transform(px,py,-s.dx*s.len,-s.dy*s.len,x-px*w/2+s.dx*s.len*h,foot-py*w/2+s.dy*s.len*h);
+  G.save(); G.transform(px,py,-s.dx*L,-s.dy*L,x-px*w/2+s.dx*L*h,foot-py*w/2+s.dy*L*h);
   G.drawImage(img,0,0,w,h,0,0,w,h); G.restore();
 }
 /* Lo mismo con algo que se dibuja en vivo (dentro de una captura): w y h caben en el lienzo auxiliar de 96×96 */
@@ -10997,7 +10990,13 @@ function shStand(x,foot,w,h,draw){
   if(!shTmp){ shTmp=mkCanvas(96,96); shTmpG=shTmp.getContext('2d'); }
   shTmpG.clearRect(0,0,w,h);
   ctx=shTmpG; ctx.save(); ctx.translate(w/2-x,h-foot); draw(); ctx.restore(); ctx=G;
-  shProject(G,shTmp,w,h,x,foot);
+  shProject(G,shTmp,w,h,x,foot,Math.min(shS.len,SHADOW_STAND));
+}
+/* Lo visto desde arriba: su dibujo se estira hacia la sombra desde su parte de atrás, así conserva la forma (cañón, brazos...) */
+function shLong(u,draw){
+  const s=shS, k=SHADOW_STRETCH*s.len, r=u.radius||10, ox=u.x-s.dx*r, oy=u.y-s.dy*r;
+  ctx.save(); ctx.translate(ox,oy); ctx.transform(1+k*s.dx*s.dx,k*s.dx*s.dy,k*s.dx*s.dy,1+k*s.dy*s.dy,0,0); ctx.translate(-ox,-oy);
+  draw(); ctx.restore();
 }
 function shAt(z,fn){ ctx.save(); ctx.translate(shS.dx*z*shS.len,shS.dy*z*shS.len); fn(); ctx.restore(); }   // algo que vuela a z píxeles
 /* Un bloque: el rectángulo, su copia desplazada y lo que hay entre las dos */
@@ -11007,9 +11006,8 @@ function shBox(g,x,y,w,h,ex,ey){
     g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by); g.lineTo(bx+ex,by+ey); g.lineTo(ax+ex,ay+ey); g.closePath(); g.fill(); }
   g.fillRect(x+ex,y+ey,w,h);
 }
-/* C: lo que proyecta sombra en esta escena. ground() = visto desde arriba, air() = lo que vuela, side() = de perfil,
-   boxes() = muros que no son casillas del mapa, [x, y, ancho, fondo, altura] */
-function drawSunShadows(cx,cy,C){
+/* cast: pinta en la capa de las unidades lo que proyecta sombra en esta escena */
+function drawSunShadows(cx,cy,cast){
   shTop=0;
   if(interior) return;
   const s=shS=sunShadow(); if(!s) return;
@@ -11026,18 +11024,13 @@ function drawSunShadows(cx,cy,C){
     const v=map[r*WC+c], h=SHADOW_H[v]; if(!h) continue;
     const L=h*s.len, ex=s.dx*L, ey=s.dy*L, x=c*TILE-cx, y=r*TILE-cy;
     if(v===TREE){
-      if(SHEET_GRASS_ERAS[era.id]){ const sp=treeSprite(r*WC+c,c,r); shProject(g,sp,sp.width,sp.height,x+TILE/2,y+TILE-4); }
+      if(SHEET_GRASS_ERAS[era.id]){ const sp=treeSprite(r*WC+c,c,r); shProject(g,sp,sp.width,sp.height,x+TILE/2,y+TILE-4,s.len); }
       else { g.beginPath(); g.ellipse(x+TILE/2+ex*0.55,y+TILE-5+ey*0.55,Math.max(8,L*0.5),8,Math.atan2(s.dy,s.dx),0,Math.PI*2); g.fill(); }   // su pino va pintado en la casilla
       continue;
     }
     shBox(g,x,y,TILE,TILE,ex,ey); tall.push([x,y,TILE,TILE]);
   }
-  if(C.boxes) for(const [x,y,w,h,hh] of C.boxes()){ shBox(g,x-cx,y-cy,w,h,s.dx*hh*s.len,s.dy*hh*s.len); tall.push([x-cx,y-cy,w,h]); }
-  shCapture(u,cx,cy,C.ground);
-  // estirar la silueta doblando copias: 4 pasadas son 16 copias, y da igual cuántas unidades haya en pantalla
-  const L=SHADOW_UNIT*s.len, n=clamp(Math.ceil(Math.log2(Math.max(1,L/3))),0,4);
-  for(let i=0,d=L/(1<<n);i<n;i++,d*=2) u.drawImage(shCv2,s.dx*d,s.dy*d);
-  shCapture(u,cx,cy,()=>{ if(C.air) C.air(cx,cy); C.side(); });
+  shCapture(u,cx,cy,cast);
   for(const q of [g,u]){
     q.globalCompositeOperation='destination-out'; for(const b of tall) q.fillRect(...b);   // el techo de lo alto está al sol
     q.globalCompositeOperation='source-in'; q.fillStyle=s.col; q.fillRect(0,0,W,H);
@@ -11054,22 +11047,19 @@ function drawSunShadowsTop(){
 }
 const shNear=(u,cx,cy)=>u.x>cx-150&&u.x<cx+W+150&&u.y>cy-150&&u.y<cy+H+150;
 /* Lo que proyecta sombra en una misión: lo mismo que pinta render() */
-const SH_MISSION={
-  ground(cx,cy){
-    drawTurretsSoldiers();
-    for(const en of enemies) if(en.alive&&!en.air&&!en.hidden&&shNear(en,cx,cy)) drawEnemy(en);
-    if(mate&&mate.alive&&!mate.air) drawMate(mate);
-    drawPlayer();
-    drawBoss();
-  },
-  air(cx,cy){
-    shAt(40,()=>{ for(const en of enemies) if(en.alive&&en.air&&shNear(en,cx,cy)) drawEnemy(en); });
-    shAt(24,drawDrones);
-    if(mate&&mate.alive&&mate.air) shAt(30,()=>drawMate(mate));
-    drawHelis(); drawEnemyHelis();
-  },
-  side(){ for(const p of pows) if(p.alive) shStand(p.x,p.y+6,30,24,()=>drawPow(p)); }
-};
+function castMission(cx,cy){
+  for(const tu of turrets) shLong(tu,()=>drawTurret(tu));
+  for(const so of soldiers) shLong(so,()=>drawSoldier(so));
+  for(const en of enemies) if(en.alive&&!en.air&&!en.hidden&&shNear(en,cx,cy)) shLong(en,()=>drawEnemy(en));
+  if(mate&&mate.alive&&!mate.air) shLong(mate,()=>drawMate(mate));
+  if(player&&player.alive) shLong(player,drawPlayer);
+  if(boss&&boss.alive) shLong(boss,drawBoss);
+  for(const p of pows) if(p.alive) shStand(p.x,p.y+5,30,24,()=>drawPow(p));
+  shAt(40,()=>{ for(const en of enemies) if(en.alive&&en.air&&shNear(en,cx,cy)) drawEnemy(en); });
+  shAt(24,drawDrones);
+  if(mate&&mate.alive&&mate.air) shAt(30,()=>drawMate(mate));
+  drawHelis(); drawEnemyHelis();
+}
 /* ===================== INTERIORES =====================
    Al pulsar E en la puerta de un edificio entras en un mapa pequeño propio: paredes, suelo, muebles (sólidos) y
    puntos de interacción. Al salir por la puerta vuelves a la base, delante del edificio.
@@ -11079,6 +11069,7 @@ const SH_MISSION={
      spots   puntos de interacción {id,c,r,label,act}; un act que llame a enterInterior(otro) sirve de
              escalera (pisos de una mina)
      paint   dibuja los muebles una vez sobre el suelo
+     live,fx lo que se mueve: se dibuja cada fotograma / efectos que se actualizan
    La sala se centra en un mapa al menos del tamaño de la pantalla; lo de fuera es negro. */
 const INTERIORS={
   house:{name:'CASA', w:12, h:8, floor:'wood',
@@ -11094,18 +11085,24 @@ const INTERIORS={
       g.fillStyle='#2a2a2a'; g.fillRect((o.ox+9)*TILE+6,(o.oy)*TILE+8,18,14); g.fillStyle='#ff8a3a'; g.fillRect((o.ox+9)*TILE+9,(o.oy)*TILE+15,12,4);   // fogón
       paintBlock(g,o,5,3,2,2,'#5a3a20','#9a6a3a');                       // mesa
     }},
-  workshop:{name:'TALLER MILITAR', w:16, h:9, floor:'concrete',
-    solid:[[2,0,5,2],[10,0,4,1],[0,4,1,3],[15,4,1,3]],
+  workshop:{name:'TALLER MILITAR', w:20, h:10, floor:'concrete',
+    solid:[[1,0,5,2],[6,0,4,1],[11,0,8,1],[0,5,1,3],[19,6,1,3]],
     spots:[
-      {id:'shop', c:4.5, r:2.6, label:'BANCO DE TRABAJO · MEJORAS PERMANENTES', act:()=>{ shopVeh=null; renderShop(); openHomeUI('scrShop'); guideEvent('shop'); }},
+      {id:'shop', c:3.5, r:2.6, label:'BANCO DE TRABAJO · MEJORAS PERMANENTES', act:()=>{ shopVeh=null; renderShop(); openHomeUI('scrShop'); guideEvent('shop'); }},
+      {id:'hangar', c:15, r:6.5, label:'GARAJE · ELIGE VEHÍCULO Y ALIADO', act:()=>{ S.pickup(); renderHangar(); openHomeUI('scrHangar'); guideEvent('shop'); }},
     ],
     paint:(g,o)=>{
-      paintBlock(g,o,2,0,5,2,'#3a4048','#6a737d');                       // banco de trabajo
-      g.fillStyle='#ffd76e'; g.fillRect((o.ox+3)*TILE,(o.oy)*TILE+12,10,4); g.fillStyle='#9aa0a8'; g.fillRect((o.ox+5)*TILE,(o.oy)*TILE+8,16,6);   // herramientas
-      paintBlock(g,o,10,0,4,1,'#2e353c','#4a5059');                      // estanterías
-      for(let i=0;i<4;i++){ g.fillStyle=['#b8672e','#9aa0a8','#3ee6e6','#d9a53a'][i]; g.fillRect((o.ox+10+i)*TILE+8,(o.oy)*TILE+6,14,10); }
-      paintBlock(g,o,0,4,1,3,'#2e353c','#4a5059'); paintBlock(g,o,15,4,1,3,'#2e353c','#4a5059');   // armeros
-    }},
+      paintBlock(g,o,1,0,5,2,'#3a4048','#6a737d');                       // banco de trabajo
+      g.fillStyle='#ffd76e'; g.fillRect((o.ox+2)*TILE,(o.oy)*TILE+12,10,4); g.fillStyle='#9aa0a8'; g.fillRect((o.ox+4)*TILE,(o.oy)*TILE+8,16,6);   // herramientas
+      paintBlock(g,o,6,0,4,1,'#2e353c','#4a5059');                       // estanterías
+      for(let i=0;i<4;i++){ g.fillStyle=['#b8672e','#9aa0a8','#3ee6e6','#d9a53a'][i]; g.fillRect((o.ox+6+i)*TILE+8,(o.oy)*TILE+6,14,10); }
+      paintBlock(g,o,0,5,1,3,'#2e353c','#4a5059'); paintBlock(g,o,19,6,1,3,'#2e353c','#4a5059');   // armeros
+    },
+    live:o=>drawUpgradeStation({c0:o.ox+11,r0:o.oy,w:8,h:6}),   // el garaje: sin pedestal, las plazas se pisan
+    fx:(dt,o)=>{ if(Math.random()<0.25*dt){   // chispas de los brazos de reparación
+      const cx=(o.ox+15)*TILE, cy=(o.oy+3)*TILE+6, sd=Math.random()<0.5?-1:1;
+      particles.push({x:cx+sd*22+rand(-6,6),y:cy+rand(-10,10),vx:rand(-1.5,1.5),vy:rand(-2,0.5),life:14,maxLife:14,color:pick(['#fff3b0','#ffb347','#9ff']),size:2});
+    } }},
 };
 let interior=null;   // {id, def, o, back:{x,y}} mientras estás dentro
 
@@ -11174,6 +11171,7 @@ function renderInterior(){
   const cx=Math.round(cam.x), cy=Math.round(cam.y);
   ctx.save(); ctx.translate(-cx,-cy);
   ctx.drawImage(mapCanvas,cx,cy,W,H,cx,cy,W,H);
+  if(interior.def.live) interior.def.live(interior.o);
   drawHuman(human.x,human.y,human.dir,human.walk,PILOT_PAL,2);
   drawParticles(); drawPopups(); drawHomePrompt();
   ctx.restore();
