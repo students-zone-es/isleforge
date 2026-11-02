@@ -11648,18 +11648,18 @@ let prRes=1;   // píxeles del muñeco por cada píxel del juego: 2 en la base s
 const prRampCache=new Map();
 
 /* Aparta hacia su lado un punto del brazo si se mete en el cuerpo. A cada altura el cuerpo es una «pastilla»: media anchura X y fondo D */
-function prClear(q,s,r,g,w,pz,sway){
+function prClear(q,s,r,g,pz,sway){
   const zr=(q[2]-pz)/g.h, T=g.loft; if(zr>T[3][0]) return;
   const j=zr<T[1][0]?0:zr<T[2][0]?1:2, k=clamp((zr-T[j][0])/(T[j+1][0]-T[j][0]),0,1);
-  let X=lerp(T[j][1],T[j+1][1],k)*w+Math.abs(sway), D=lerp(T[j][2],T[j+1][2],k)*w;
-  if(zr<3){ X=Math.max(X,4*w*g.stance); D=Math.max(D,g.th[0]*w); }      // de cadera para abajo mandan los muslos
+  let X=lerp(T[j][1],T[j+1][1],k)+Math.abs(sway), D=lerp(T[j][2],T[j+1][2],k);
+  if(zr<3){ X=Math.max(X,4*g.stance); D=Math.max(D,g.th[0]); }      // de cadera para abajo mandan los muslos
   const need=D+r+0.3; if(Math.abs(q[1])>=need) return;
   const x=X+Math.sqrt(need*need-q[1]*q[1]); if(s*q[0]<x) q[0]=s*x;
 }
 /* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
    Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
-function prPose(mode,ph,br,w,g){
-  const th=ph*Math.PI*2, walk=mode>0, run=mode===2, TH=10*g.h, SH=10*g.h, UA=8*g.h, FA=7.5*g.h, stance=4*w*g.stance;
+function prPose(mode,ph,br,g){
+  const th=ph*Math.PI*2, walk=mode>0, run=mode===2, TH=10*g.h, SH=10*g.h, UA=8*g.h, FA=7.5*g.h, stance=4*g.stance;
   const A=run?0.95:walk?0.58:0, K=run?1.75:walk?1.0:0, B=(run?0.95:walk?0.55:0)*g.swing, lean=run?0.24:walk?0.06:0;
   const sway=g.sway*(walk?Math.sin(th)*(run?0.5:1):0.4);   // la cadera se balancea al andar y descansa un poco hacia un lado parada
   const leg=(s,p)=>{
@@ -11672,18 +11672,23 @@ function prPose(mode,ph,br,w,g){
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
     const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,13+br*0.4);
-    const sh=[s*8.6*w*g.sh,sy,sz], el=[s*9.6*w*g.sh*g.elbow,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e, q=w*g.arm;
+    const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e, q=g.arm;
     const ha=[el[0]-s*(run?1.8:0),el[1]+Math.sin(c)*FA,el[2]-Math.cos(c)*FA];
-    prClear(el,s,2.9*q,g,w,pz,sway); prClear(ha,s,Math.max(g.hand,2.6*q)+0.5,g,w,pz,sway);   // el codo y la mano nunca dentro del cuerpo
+    prClear(el,s,2.9*q,g,pz,sway); prClear(ha,s,Math.max(g.hand,2.6*q)+0.5,g,pz,sway);   // el codo y la mano nunca dentro del cuerpo
     const mid=[(el[0]+ha[0])/2,(el[1]+ha[1])/2,(el[2]+ha[2])/2], mx=mid[0];
-    prClear(mid,s,2.8*q,g,w,pz,sway); el[0]+=mid[0]-mx; ha[0]+=mid[0]-mx;                      // ni el antebrazo entre los dos
+    prClear(mid,s,2.8*q,g,pz,sway); el[0]+=mid[0]-mx; ha[0]+=mid[0]-mx;                      // ni el antebrazo entre los dos
     return {sh,el,ha};
   };
   return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br};
 }
 /* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
    sh = cuenta para la sombra. pal.key = el piloto, con su aspecto elegido; sin key, androide de la base */
-const PR_BUILD=[0.86,1,1.16];
+/* Las complexiones cambian cada zona por su lado: el fuerte gana hombros, pecho y brazos más que cintura (espalda en V, no barriga);
+   el ligero afina todo, también manos y botas, y es algo más alto */
+const PR_BUILD=[
+  {chest:0.86,waist:0.84,hip:0.88,arm:0.8,leg:0.84,end:0.86,head:0.97,h:1.03},
+  {chest:1,waist:1,hip:1,arm:1,leg:1,end:1,head:1,h:1},
+  {chest:1.2,waist:1.04,hip:1.04,arm:1.26,leg:1.14,end:1.12,head:1.03,h:0.99}];
 /* Lo que distingue a cada género: anchura de hombros y caderas, tronco ([altura, media anchura, fondo] en cadera, cintura y pecho),
    grosor de brazos, muslos y gemelos, tamaño de manos y botas, cuello, separación de piernas y codos, balanceo al andar y altura.
    n = neutro, el cuerpo de los androides */
@@ -11691,7 +11696,15 @@ const PR_GEN={
   n:{sh:1,hip:1,loft:[[1,2.9,4.1],[6,2.5,4.9],[12.6,3,5.5],[15.2,1.4,3.6]],seat:null,nk:3.2,arm:1,th:[4,3.3],cf:[3.3,2.8],hand:2.9,boot:1,stance:1,elbow:1,swing:1,sway:0,h:1},
   m:{sh:1.05,hip:0.96,loft:[[1,2.9,4.1],[6,2.9,4.8],[12.6,3.4,5.4],[15.2,1.8,3.7]],seat:[2.3,-1.7,0.6,3.7],nk:3.5,arm:1.06,th:[4.1,3.6],cf:[3.6,3.1],hand:3.1,boot:1.1,stance:1.08,elbow:1.02,swing:1.16,sway:0,h:1},
   f:{sh:0.84,hip:1,loft:[[1,3.5,3.8],[6,2,3.9],[12.6,2.6,4.4],[15.2,1,3.1]],seat:[2.7,-1.7,0.2,4],nk:2.7,arm:0.8,th:[3.8,3.1],cf:[3.1,2.2],hand:2.4,boot:0.88,stance:0.94,elbow:0.9,swing:0.8,sway:0.7,h:0.96}};
-function prGen(pal){ return PR_GEN[pal.key?pal.gender:'n']; }
+const prGenCache={};
+function prGen(pal){
+  const id=(pal.key?pal.gender:'n')+(pal.build==null?1:pal.build); if(prGenCache[id]) return prGenCache[id];
+  const g=PR_GEN[id[0]], b=PR_BUILD[+id[1]], T=g.loft;
+  return prGenCache[id]=Object.assign({},g,{
+    sh:g.sh*b.chest, hip:g.hip*b.hip, stance:g.stance*b.hip, arm:g.arm*b.arm, hand:g.hand*b.end, boot:g.boot*b.end, nk:g.nk*Math.sqrt(b.chest), h:g.h*b.h,
+    loft:[[T[0][0],T[0][1]*b.hip,T[0][2]*b.hip],[T[1][0],T[1][1]*b.waist,T[1][2]*b.waist],[T[2][0],T[2][1]*b.chest,T[2][2]*b.chest],[T[3][0],T[3][1]*b.chest,T[3][2]*b.chest]],
+    th:g.th.map(v=>v*b.leg), cf:g.cf.map(v=>v*b.leg), seat:g.seat&&[g.seat[0]*b.hip,g.seat[1],g.seat[2],g.seat[3]*b.leg], cw:b.chest, hw:b.hip, hd:b.head});
+}
 /* LA MOCHILA: modelo guardado para el almacenamiento ampliado. Hoy no la lleva nadie: se pone con pal.pack=true, y entonces también
    salen sus tirantes en el pecho y su sombra. Cómo se ve: sprites/personaje/mochila */
 function prBackpack(cap,pt){
@@ -11729,7 +11742,7 @@ function prFace(fx,v,fem,expr){
   if((fem||expr==='risa')&&Math.abs(ax-5.3)<1.2&&Math.abs(v+4)<0.85) return PM.blush;
   return 0;
 }
-function prParts(pal,P,yaw,w,expr,h){
+function prParts(pal,P,yaw,expr,h){
   const pilot=!!pal.key, O=[], {pz,up,L,R,AL,AR,br,sway}=P, hd=pal.head, g=prGen(pal), fem=pilot&&pal.gender==='f';
   let grp=1;   // cuerpo, brazo, brazo, cabeza: entre piezas distintas no se mezcla la luz y hay una línea limpia
   const cap=(a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh,g:grp});
@@ -11737,15 +11750,15 @@ function prParts(pal,P,yaw,w,expr,h){
   // piernas y botas
   const shin=(x,y,z,k)=>k>0.42&&k<0.62?PM.band:k<0.1?PM.pocket:0;   // el arranque, igual que el final del muslo: si no, se pisan en la rodilla
   for(const [G,s] of [[L,-1],[R,1]]){
-    const hipX=s*4*w*g.hip+sway;
+    const hipX=s*4*g.hip+sway;
     const thigh=(x,y,z)=>{   // bolsillo de carga por fuera del muslo, con su solapa, y rodillera abajo
       const kx=G.knee[0]-hipX, ky=G.knee[1], kz=G.knee[2]-pz, k=((x-hipX)*kx+y*ky+(z-pz)*kz)/(kx*kx+ky*ky+kz*kz);   // según el punto: la k de cada esfera tiembla si la pierna va hacia la cámara
       const out=s*(x-(hipX+kx*k));
-      if(out>1.5&&k>0.34&&k<0.72) return k<0.41?PM.seam:PM.pocket;
+      if(out>1.5&&k>0.46&&k<0.78) return k<0.52?PM.seam:PM.pocket;
       return k>0.86?PM.pocket:0;
     };
-    cap([hipX,0,pz],G.knee,g.th[0]*w,g.th[1]*w,PM.suit,pilot?thigh:null,1);
-    cap(G.knee,G.ank,g.cf[0]*w,g.cf[1]*w,PM.suit,shin,1);
+    cap([hipX,0,pz],G.knee,g.th[0],g.th[1],PM.suit,pilot?thigh:null,1);
+    cap(G.knee,G.ank,g.cf[0],g.cf[1],PM.suit,shin,1);
     cap(G.ank,G.toe,3.3*g.boot,3.0*g.boot,PM.boot,(x,y,z)=>z<1.5?PM.sole:0,1);
   }
   // tronco: dos columnas juntas para que sea más ancho que profundo
@@ -11753,7 +11766,7 @@ function prParts(pal,P,yaw,w,expr,h){
     const zr=(z-pz)/g.h;
     if(zr>4.4&&zr<6.6) return Math.abs(x)<1.7&&y>0?PM.buckle:PM.belt;
     if(zr<=4.4) return 0;
-    if(pilot&&pal.pack&&zr<15.5&&Math.abs(Math.abs(x)-4.6*w)<0.95) return PM.helmD;              // tirantes de la radio
+    if(pilot&&pal.pack&&zr<15.5&&Math.abs(Math.abs(x)-4.6*g.cw)<0.95) return PM.helmD;              // tirantes de la radio
     if(y>0&&Math.abs(x)<0.4) return PM.band;                                                     // cremallera
     if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>8.6&&zr<11.2) return zr>10.3?PM.seam:PM.pocket; // bolsillos con solapa
     return 0;
@@ -11762,17 +11775,17 @@ function prParts(pal,P,yaw,w,expr,h){
   // cadera: lo que queda por debajo son los muslos; bajarlas más deja un pañal colgando entre las piernas
   for(let i=0,z=1;z<=15.2;i++,z+=0.4){
     const j=z<6?0:z<12.6?1:2, A=g.loft[j], B=g.loft[j+1], k=(z-A[0])/(B[0]-A[0]);
-    const x=lerp(A[1],B[1],k)*w, r=lerp(A[2],B[2],k)*w, c=sway*Math.max(0,1-z/12.6);
+    const x=lerp(A[1],B[1],k), r=lerp(A[2],B[2],k), c=sway*Math.max(0,1-z/12.6);
     cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%9===0);
   }
   // el frente de la cadera baja hasta los muslos: sin esto, debajo del cinturón se ve la panza de la losa, en sombra
-  cap(pt(sway-2*w,1.3,-0.4),pt(sway+2*w,1.3,-0.4),3.3*w,3.3*w,PM.suit);
+  cap(pt(sway-2*g.hw,1.3,-0.4),pt(sway+2*g.hw,1.3,-0.4),3.3*g.hw,3.3*g.hw,PM.suit);
   // las nalgas, solo por detrás
-  if(g.seat) for(const s of [-1,1]){ const [bx,by,bz,br]=g.seat, q=pt(s*bx*w+sway,by,bz); cap(q,q,br*w,br*w,PM.suit,null,1); }
-  if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*w,1.2,11); cap(q,q,3.7*w,3.7*w,PM.suit,torso); }
+  if(g.seat) for(const s of [-1,1]){ const [bx,by,bz,br]=g.seat, q=pt(s*bx+sway,by,bz); cap(q,q,br,br,PM.suit,null,1); }
+  if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*g.cw,1.2,11); cap(q,q,3.7*g.cw,3.7*g.cw,PM.suit,torso); }
   // brazos: hombro, codo, guante y banda reflectante; el parche va en el hombro izquierdo
   for(const [H,s] of [[AL,-1],[AR,1]]){
-    const q=w*g.arm; grp=s<0?2:3;
+    const q=g.arm; grp=s<0?2:3;
     cap(H.sh,H.sh,3.6*q,3.6*q,PM.suit,pilot&&s<0?(x,y,z)=>x<H.sh[0]-0.5&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
     cap(H.sh,H.el,3.3*q,2.9*q,PM.suit,(x,y,z,k)=>k>0.55&&k<0.74?PM.band:0,1);
     cap(H.el,H.ha,2.9*q,2.6*q,PM.suit,(x,y,z,k)=>k>0.8?PM.pocket:0,1);   // con su puño
@@ -11787,7 +11800,7 @@ function prParts(pal,P,yaw,w,expr,h){
   // cabeza: esfera con casco, gafas y cara pintados según el punto; orejeras y gafas con relieve; yaw = hacia dónde mira
   // la cabeza se inclina hacia arriba solo cuando mira a la cámara, para que desde tan alto se le vea la cara: de lado o de espaldas
   // esa inclinación la haría mirar al cielo. Las medidas de la cara van en unidades de una cabeza de radio 9,4: hs la pasa a su tamaño
-  const HR=8.6, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h)), hc=pt(0,0.5,26.6+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const HR=8.6*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h)), hc=pt(0,0.5,26.6+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
   const hp=(x,y,z)=>{ const yy=(y*cp-z*sp)*hs, zz=(y*sp+z*cp)*hs, xx=x*hs; return [hc[0]+xx*cy+yy*sy,hc[1]-xx*sy+yy*cy,hc[2]+zz]; };
   const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [(dx*cy-dy*sy)/hs,(yy*cp+dz*sp)/hs,(dz*cp-yy*sp)/hs]; };   // al revés: del mundo a la cabeza
   const headF=(x,y,z)=>{
@@ -11853,7 +11866,7 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 function prBuild(pal,d,mode,f,look,expr){
   const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
-  const w=PR_BUILD[pal.build==null?1:pal.build], P=prPose(mode,mode?f/8:0,mode?0:f,w,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=prParts(pal,P,look*0.42,w,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
+  const P=prPose(mode,mode?f/8:0,mode?0:f,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
   prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
     const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
