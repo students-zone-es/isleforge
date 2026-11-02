@@ -11615,12 +11615,13 @@ function upgradeTurrets(){
    La versión 0.1, dibujada a mano, sigue en sprites/personaje/v0.1 (y en la etiqueta personaje-v0.1 de git). */
 const PR_W=52, PR_H=72, PR_OX=26, PR_OY=66;              // lienzo de una pose y dónde caen los pies
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
-const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,scarf:9,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26};
+const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,scarf:9,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27};
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
 const PR_SCARF_N=7, PR_SCARF_L=3.2;
 const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
-const prZ=new Float32Array(prArea), prNX=new Int8Array(prArea), prNY=new Int8Array(prArea), prNZ=new Int8Array(prArea), prM=new Uint8Array(prArea);
+const prZ=new Float32Array(prArea), prNX=new Float32Array(prArea), prNY=new Float32Array(prArea), prNZ=new Float32Array(prArea), prM=new Uint8Array(prArea);
+const prTX=new Float32Array(prArea), prTY=new Float32Array(prArea), prTZ=new Float32Array(prArea);
 let prRes=1;   // píxeles del muñeco por cada píxel del juego: 2 en la base si la pantalla los muestra, 4 en la vista previa
 const prRampCache=new Map();
 
@@ -11652,9 +11653,9 @@ const PR_BUILD=[0.86,1,1.16];
    grosor de brazos, muslos y gemelos, tamaño de manos y botas, cuello, separación de piernas y codos, balanceo al andar y altura.
    n = neutro, el cuerpo de los androides */
 const PR_GEN={
-  n:{sh:1,hip:1,loft:[[0,2.9,4.6],[6,2.5,4.9],[12.6,3,5.5]],arm:1,th:[4,3.3],cf:[3.3,2.8],hand:3.1,boot:1,neck:5,stance:1,elbow:1,swing:1,sway:0,h:1},
-  m:{sh:1.12,hip:0.96,loft:[[0,2.9,4.6],[6,2.9,4.8],[12.6,4,5.6]],arm:1.16,th:[4.1,3.6],cf:[3.6,3.1],hand:3.5,boot:1.1,neck:5.4,stance:1.08,elbow:1.06,swing:1.16,sway:0,h:1},
-  f:{sh:0.84,hip:1,loft:[[0,3.5,4.2],[6,2,3.9],[12.6,2.6,4.4]],arm:0.8,th:[3.8,3.1],cf:[3.1,2.2],hand:2.5,boot:0.88,neck:4.2,stance:0.94,elbow:0.9,swing:0.8,sway:0.7,h:0.96}};
+  n:{sh:1,hip:1,loft:[[1,2.9,4.1],[6,2.5,4.9],[12.6,3,5.5]],seat:null,arm:1,th:[4,3.3],cf:[3.3,2.8],hand:3.1,boot:1,neck:5,stance:1,elbow:1,swing:1,sway:0,h:1},
+  m:{sh:1.12,hip:0.96,loft:[[1,2.9,4.1],[6,2.9,4.8],[12.6,4,5.6]],seat:[2.3,-1.7,0.6,3.7],arm:1.16,th:[4.1,3.6],cf:[3.6,3.1],hand:3.5,boot:1.1,neck:5.4,stance:1.08,elbow:1.06,swing:1.16,sway:0,h:1},
+  f:{sh:0.84,hip:1,loft:[[1,3.5,3.8],[6,2,3.9],[12.6,2.6,4.4]],seat:[2.7,-1.7,0.2,4],arm:0.8,th:[3.8,3.1],cf:[3.1,2.2],hand:2.5,boot:0.88,neck:4.2,stance:0.94,elbow:0.9,swing:0.8,sway:0.7,h:0.96}};
 function prGen(pal){ return PR_GEN[pal.key?pal.gender:'n']; }
 /* LA MOCHILA: modelo guardado para el almacenamiento ampliado. Hoy no la lleva nadie: se pone con pal.pack=true, y entonces también
    salen sus tirantes en el pecho y su sombra. Cómo se ve: sprites/personaje/mochila */
@@ -11698,9 +11699,15 @@ function prParts(pal,P,yaw,w,expr){
   const cap=(a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh});
   const pt=(x,y,z)=>{ const [yy,zz]=up(y,z); return [x,yy,zz]; };
   // piernas y botas
-  const shin=(x,y,z,k)=>k>0.42&&k<0.62?PM.band:0;
+  const shin=(x,y,z,k)=>k>0.42&&k<0.62?PM.band:k<0.1?PM.pocket:0;   // el arranque, igual que el final del muslo: si no, se pisan en la rodilla
   for(const [G,s] of [[L,-1],[R,1]]){
-    cap([s*4*w*g.hip+sway,0,pz],G.knee,g.th[0]*w,g.th[1]*w,PM.suit,null,1);
+    const hipX=s*4*w*g.hip+sway;
+    const thigh=(x,y,z,k)=>{   // bolsillo de carga por fuera del muslo, con su solapa, y rodillera abajo
+      const out=s*(x-(hipX+(G.knee[0]-hipX)*k));
+      if(out>1.5&&k>0.34&&k<0.72) return k<0.41?PM.seam:PM.pocket;
+      return k>0.86?PM.pocket:0;
+    };
+    cap([hipX,0,pz],G.knee,g.th[0]*w,g.th[1]*w,PM.suit,pilot?thigh:null,1);
     cap(G.knee,G.ank,g.cf[0]*w,g.cf[1]*w,PM.suit,shin,1);
     cap(G.ank,G.toe,3.3*g.boot,3.0*g.boot,PM.boot,(x,y,z)=>z<1.5?PM.sole:0,1);
   }
@@ -11714,12 +11721,17 @@ function prParts(pal,P,yaw,w,expr){
     if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>8.6&&zr<11.2) return zr>10.3?PM.band:PM.pocket; // bolsillos con solapa
     return 0;
   };
-  // losas horizontales apiladas de la entrepierna al pecho: de una sola pieza, sin surco en el centro, y la anchura no añade fondo
-  for(let i=0,z=-3;z<=12.6;i++,z++){
-    const [A,B,k]=z<6?[g.loft[0],g.loft[1],Math.max(0,z)/6]:[g.loft[1],g.loft[2],(z-6)/6.6], low=z<0?1+z/6:1;
-    const x=lerp(A[1],B[1],k)*w*low, r=lerp(A[2],B[2],k)*w*(z<0?0.9:1), c=sway*(1-Math.max(0,z)/12.6);
-    cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%3===0);
+  // losas horizontales apiladas de la cadera al pecho: de una sola pieza por delante, y la anchura no añade fondo. No bajan de la
+  // cadera: lo que queda por debajo son los muslos; bajarlas más deja un pañal colgando entre las piernas
+  for(let i=0,z=1;z<=12.6;i++,z+=0.7){
+    const [A,B,k]=z<6?[g.loft[0],g.loft[1],(z-1)/5]:[g.loft[1],g.loft[2],(z-6)/6.6];
+    const x=lerp(A[1],B[1],k)*w, r=lerp(A[2],B[2],k)*w, c=sway*(1-z/12.6);
+    cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%5===0);
   }
+  // el frente de la cadera baja hasta los muslos: sin esto, debajo del cinturón se ve la panza de la losa, en sombra
+  cap(pt(sway-2*w,1.3,-0.4),pt(sway+2*w,1.3,-0.4),3.3*w,3.3*w,PM.suit);
+  // las nalgas, solo por detrás
+  if(g.seat) for(const s of [-1,1]){ const [bx,by,bz,br]=g.seat, q=pt(s*bx*w+sway,by,bz); cap(q,q,br*w,br*w,PM.suit,null,1); }
   if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*w,1.2,11); cap(q,q,3.7*w,3.7*w,PM.suit,torso); }
   // brazos: hombro, codo, guante y banda reflectante; el parche va en el hombro izquierdo
   for(const [H,s] of [[AL,-1],[AR,1]]){
@@ -11781,6 +11793,20 @@ function prParts(pal,P,yaw,w,expr){
   if(pilot&&pal.pack) shadow.push({a:pt(0,-9,8),b:pt(0,-9,15),ra:4.8,rb:4.8});
   return {O,shadow};
 }
+/* Alisa la superficie en una dirección (dx,dy): las esferas dejan ondas que con la luz por bandas se ven como grano. No cruza bordes */
+function prSmooth(BW,BH,R,dx,dy,edge){
+  for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
+    const q=y*BW+x; if(!prM[q]) continue;
+    let a=prNX[q], b=prNY[q], c=prNZ[q];
+    for(let s=-1;s<=1;s+=2) for(let j=1;j<=R;j++){
+      const px=x+dx*s*j, py=y+dy*s*j; if(px<0||py<0||px>=BW||py>=BH) break;
+      const p=py*BW+px; if(!prM[p]||Math.abs(prZ[p]-prZ[q])>edge) break;
+      a+=prNX[p]; b+=prNY[p]; c+=prNZ[p];
+    }
+    const l=Math.hypot(a,b,c)||1; prTX[q]=a/l; prTY[q]=b/l; prTZ[q]=c/l;
+  }
+  for(let q=BW*BH-1;q>=0;q--) if(prM[q]){ prNX[q]=prTX[q]; prNY[q]=prTY[q]; prNZ[q]=prTZ[q]; }
+}
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 function prBuild(pal,d,mode,f,look,expr){
   const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
@@ -11796,20 +11822,21 @@ function prBuild(pal,d,mode,f,look,expr){
         const ax=x+0.5-vx, ay=y+0.5-vy, d2=ax*ax+ay*ay; if(d2>=rr*rr) continue;
         const nz=Math.sqrt(rr*rr-d2), z=vz+nz, q=y*BW+x; if(z<=prZ[q]) continue;
         const nwx=ax/rr, nwy=(ay*PR_SE+nz*PR_CE)/rr, nwz=(nz*PR_SE-ay*PR_CE)/rr;
-        prZ[q]=z; prNX[q]=nwx*127; prNY[q]=nwy*127; prNZ[q]=nwz*127;
+        prZ[q]=z; prNX[q]=nwx; prNY[q]=nwy; prNZ[q]=nwz;
         let m=p.m;
         if(p.f){ const px=wx+r*nwx, py=wy+r*nwy; m=p.f(px*c-py*s,px*s+py*c,lz+r*nwz,k)||p.m; }
         prM[q]=m;
       }
     }
   }
+  prSmooth(BW,BH,S,1,0,1.4*S); prSmooth(BW,BH,S,0,1,1.4*S);
   const I=[], NX=[], NY=[], NZ=[], M=[], F=[], R=Math.max(1,S>>1);   // el contorno engorda con la resolución para no quedarse en un hilo
   for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
     const q=y*BW+x, nb=[];
     for(let j=1;j<=R;j++) nb.push(y>=j?q-BW*j:-1,y<BH-j?q+BW*j:-1,x>=j?q-j:-1,x<BW-j?q+j:-1);
     if(prM[q]){   // un borde dentro de la figura (brazo sobre el tronco) se marca oscuro
       let ink=0; for(const b of nb) if(b>=0&&prM[b]&&prZ[b]-prZ[q]>3.4*S) ink=1;
-      I.push(q); NX.push(prNX[q]); NY.push(prNY[q]); NZ.push(prNZ[q]); M.push(prM[q]); F.push(ink);
+      I.push(q); NX.push(prNX[q]*127); NY.push(prNY[q]*127); NZ.push(prNZ[q]*127); M.push(prM[q]); F.push(ink);
     } else {      // contorno: del color más oscuro de lo que tiene al lado
       let m=0; for(const b of nb) if(b>=0&&prM[b]) m=prM[b];
       if(m){ I.push(q); NX.push(0); NY.push(0); NZ.push(0); M.push(m); F.push(2); }
@@ -11829,7 +11856,7 @@ function prRamps(pal){
   let R=prRampCache.get(pal); if(R) return R;
   const cap=pal.cap||pal.hair, pilot=!!pal.key; R=[];
   const set={suit:pal.suit,band:pilot?'#f4ecd2':pal.light,pocket:shade(pal.suit,-0.3),helm:pilot?shade(cap,0.1):cap,helmD:shade(cap,-0.55),skin:pal.skin,eye:pal.eye,lens:'#7fd8ee',scarf:pal.scarf||pal.light,
-    belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pilot?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.56),led:'#ff4757',hair:pal.hair,eyeW:'#f2eee6',inside:'#5a1620',teeth:'#f2eee6',brow:shade(pal.hair,-0.2)};
+    belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pilot?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.56),led:'#ff4757',hair:pal.hair,eyeW:'#f2eee6',inside:'#5a1620',teeth:'#f2eee6',brow:shade(pal.hair,-0.2),seam:shade(pal.suit,-0.5)};
   const mix=(a,b,k)=>'#'+hexRgb(a).map((v,i)=>Math.round(v+(hexRgb(b)[i]-v)*k).toString(16).padStart(2,'0')).join('');
   set.lips=mix(pal.skin,'#d0344c',0.62); set.blush=mix(pal.skin,'#f0607a',0.3);
   for(const k in PM) R[PM[k]]=prRamp(set[k],pilot&&(k==='skin'||k==='blush'));
