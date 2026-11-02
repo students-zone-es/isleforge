@@ -605,6 +605,7 @@ function normalizeSave(s){
   for(const k in dw) dw[k]=Object.assign(dw[k],sw[k]||{});
   s.worlds=dw;
   s.rescuedTotal=s.rescuedTotal||0;
+  s.sectorBest=s.sectorBest||0;
   s.loreSeen=!!s.loreSeen;
   s.minerals=Object.assign({},s.minerals||{});
   if(s.vol==null) s.vol=1;
@@ -621,7 +622,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ look:p.look, work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, sectorBest:p.sectorBest, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -5343,6 +5344,7 @@ function render(){
   drawEnemyLamps(cx,cy);
   drawMuzzles(cx,cy);
   drawAlarmHud();   // p9_campaign.js
+  drawSectorHud();   // p9t_sector.js
   drawScreenFx();
   drawReticle();
 }
@@ -6326,7 +6328,7 @@ function worldUnlocked(id){
   const prev=worldSave(id-1); return !!(prev&&prev.cleared);
 }
 /* Otros puntos del mapa de operaciones (posiciones en % sobre la imagen del mapa) */
-const OPS_PTS={ base:[13,45], tutorial:[12,62], arch:[80,57], ocean:[66,87] };
+const OPS_PTS={ base:[13,45], tutorial:[12,62], arch:[80,57], ocean:[66,87], sector:[24,80] };
 /* Encuentros del Mundo 1: [fila que dispara el encuentro, [[tipo, columna, fila, opciones], ...]] */
 const W1_ENC=[
   // Sección 1: playa
@@ -6975,6 +6977,7 @@ function drawHeli(x,y,ang,alt,rotor,carry,spin,enemy){
 }
 function drawHelis(){ for(const h of helis) drawHeli(h.x,h.y,h.ang,h.state==='hover'?20:46,h.rotor,h.kind==='orb'&&h.state==='in'?'orb':null); }
 function drawWorldHelipads(){
+  if(sector) drawSectorPad();
   if(!world) return;
   for(const hp of world.helipads){
     ctx.strokeStyle='#f5c518'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(hp.x,hp.y,38,0,Math.PI*2); ctx.stroke();
@@ -6991,7 +6994,7 @@ function deliveryPoints(){
 function resetRun(){
   score=0; wave=1; combo=0; comboTimer=0; runWork=0; runOres={}; shake=0;
   lives=3+(save.up.lives||0)+(save.home.house>=4?1:0);
-  rescued=0; weaponLvl=1; survLvl=0; mate=null; mateTimer=0; mateLvl=1;
+  rescued=0; weaponLvl=1; survLvl=0; sector=null; mate=null; mateTimer=0; mateLvl=1;
   respawnTimer=0; gameOverT=0; helis=[];
   player=makePlayer();
   applyRations();
@@ -7043,6 +7046,7 @@ function showResults(o){
 }
 function missionFailed(){
   const m=mission||{type:'arch'};
+  if(m.type==='sector') return sectorLost();
   const w=bankRun();
   const stats='Puntuación: <span style="color:var(--gold)">'+score+'</span> · WORK: <span style="color:var(--gold)">◆'+w+'</span> · '+(survLvl?'Nivel: <span style="color:var(--gold)">'+survLvl:'Rehenes: <span style="color:var(--gold)">'+rescued)+'</span>';
   const home=['⌂ VOLVER A LA BASE',()=>enterHome('triste'),false];
@@ -7070,6 +7074,7 @@ function finishTutorial(){
     buttons:[['⌂ VOLVER A LA BASE',()=>enterHome('risa'),true]]});
 }
 function abandonMission(){
+  if(sector) return sectorAbandon();
   bankRun();
   enterHome();
   announce('MISIÓN ABANDONADA','#ff8a8a','El WORK recogido se ha guardado');
@@ -7100,6 +7105,7 @@ function renderWorldMap(){
     const m=b.dataset.m;
     if(m==='home') closeHomeUI();
     else if(m==='tutorial') startMission({type:'tutorial'});
+    else if(m==='sector') startMission({type:'sector'});
     else if(m==='arch'){ save.archPlayed=true; saveSave(); startMission({type:'arch'}); }
     else if(/^w\d+c?$/.test(m)){
       const id=parseInt(m.slice(1),10);
@@ -7117,6 +7123,7 @@ function opsPanelHtml(k){
   if(k==='arch') return head('♾️ ARCHIPIÉLAGO · SUPERVIVENCIA','Las islas del este')+'<div class="wmDesc">Sin rehenes: aguanta isla tras isla (jefe cada 5). Cada isla es un nivel más para todos, en vida y daño: enemigos +'+SURV_PCT.enemigos+'%, tú +'+SURV_PCT.tu+'% y tus aliados +'+SURV_PCT.aliados+'% por nivel. Récord: nivel '+save.bestWave+'.</div><div class="wmDesc">Clima posible: '+weatherIcons('arch')+'</div>'+(depositMinerals('isla').length?'<div class="wmDesc">⛏ '+depositMinerals('isla').map(minName).join(', ')+'</div>':'')+
     '<div class="row"><button class="modeBtn'+(s.mode!=='tanks'?' sel':'')+'" data-mode="robots">🤖 ROBOTS</button><button class="modeBtn'+(s.mode==='tanks'?' sel':'')+'" data-mode="tanks">🛡️ TANQUES</button></div>'+
     '<div class="row"><button class="btn small" data-m="arch">JUGAR</button></div>';
+  if(k==='sector') return head('🧭 EXPEDICIÓN <span class="wmTag">PRUEBA</span>','Islas sin cartografiar')+'<div class="wmDesc">Cada isla se genera al llegar, y cada sector es más peligroso y paga más que el anterior. El botín solo es tuyo si te saca el helicóptero: si caes o abandonas, salvas el '+SEC_KEEP*100+' %.</div><div class="wmDesc">Sector más lejano: '+save.sectorBest+'</div><div class="row"><button class="btn small" data-m="sector">SALIR DE EXPEDICIÓN</button></div>';
   if(k==='ocean') return head('🌊 ???','Bajo el océano')+'<div class="wmDesc">Algo brilla en el fondo del mar, bajo la niebla... Dicen que ahí abajo está <b style="color:#7fd8ff">BÉNTICA FANTASMA</b>, la ciudad que extrae la Afotita.</div><div class="wmDesc" style="color:var(--gold)">Primero hay que liberar la superficie.</div>';
   const w=WORLD_LIST.find(x=>'w'+x.id===k); if(!w) return '';
   const sv=worldSave(w.id);
@@ -7854,6 +7861,7 @@ function opsPinList(){
     ...WORLD_LIST.map(w=>{ const un=worldUnlocked(w.id), sv=worldSave(w.id);
       return {k:'w'+w.id,pos:w.pos,label:(un?w.icon:'🔒')+' MUNDO '+w.id,cls:!un?'locked':(sv.cleared?'done':'avail'),play:un}; }),
     {k:'arch',pos:OPS_PTS.arch,label:'♾️ ARCHIPIÉLAGO',cls:'',play:true},
+    {k:'sector',pos:OPS_PTS.sector,label:'🧭 EXPEDICIÓN',cls:'avail',play:true},
     {k:'ocean',pos:OPS_PTS.ocean,label:'🌊 ???',cls:'locked',play:false},
   ];
 }
@@ -7873,7 +7881,7 @@ function opsDraw(now){
   for(const p of pins){
     const cx=p.pos[0]/100*DW, cy=p.pos[1]/100*DH;
     if(p.k==='ocean') continue;
-    opsSprite(g,OPS_SPR[p.k],cx,cy,P);
+    opsSprite(g,OPS_SPR[p.k==='sector'?'arch':p.k],cx,cy,P);
     if(p.k==='w2'){ for(let i=0;i<3;i++){ const k=((tm*0.6+i/3)%1); g.globalAlpha=0.55*(1-k); g.fillStyle='#d8d8d8'; g.fillRect(cx+6+k*10,cy-8*P-k*24,P*2,P*2); } g.globalAlpha=1; }
   }
   // niebla de guerra
@@ -8399,9 +8407,9 @@ function seedDepositsStage(){
   const av=[{x:landing.x,y:landing.y,d:220}];
   if(mission.type==='tutorial'){
     placeDeposits(DEPOSIT_TABLES.tutorial,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],avoid:av,avoidRect:[landing.c-12,landing.r-19,landing.c+12,landing.r+1]});
-  } else if(mission.type==='arch'){
+  } else if(mission.type==='arch'||mission.type==='sector'){
     const list=(DEPOSIT_TABLES[era.id]||DEPOSIT_TABLES.isla).filter(inWorld), sel=[];
-    if(list.length) for(let i=0;i<2;i++) sel.push(pick(list));
+    if(list.length) for(let i=0;i<(sector?4:2);i++) sel.push(pick(list));
     placeDeposits(sel,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],avoid:av});
   }
 }
@@ -12118,6 +12126,105 @@ function lookKey(k){
     applyLook(lookW); renderLook(); S.pickup();
   };
 })();
+/* ===================== SECTORES (prueba del mundo semi-infinito) =====================
+   Una expedición es una cadena de islas generadas: cada sector es más peligroso y paga más que el anterior. Lo que llevas no es
+   tuyo hasta que te saca el helicóptero: te quedas en el círculo del Orbe para pedirlo, aguantas hasta que llega y decides si
+   cobrar en la base o seguir más lejos. Si caes o abandonas, solo salvas SEC_KEEP del botín.
+   shortcut: cada sector se genera al entrar y no se recuerda; cuando sean lugares fijos del mapa harán falta semilla y guardado. */
+const SEC_R=84, SEC_HOLD=90, SEC_WAIT=1200, SEC_DROP=300, SEC_KEEP=0.4;
+const sectorMul=n=>1+0.25*(n-1);
+let sector=null;
+function newSector(){ return {phase:'open',hold:0,t:0,drop:0,left:false,clean:false,heli:null}; }
+/* Sin helicóptero solo se salva una parte. Devuelve el WORK perdido */
+function sectorSalvage(){
+  const kept=Math.floor(runWork*SEC_KEEP), lost=runWork-kept;
+  runWork=kept;
+  for(const k in runOres) runOres[k]=Math.floor(runOres[k]*SEC_KEEP);
+  return lost;
+}
+function updateSector(dt){
+  const s=sector, p=player, d=dist(p,landing), inside=p.alive&&d<SEC_R;
+  if(p.alive&&d>SEC_R+120) s.left=true;   // aterrizas dentro del círculo: hay que salir antes de poder pedir el helicóptero
+  if(!s.clean&&(bossStage?bossDefeated&&enemies.length===0:spawned>=toKill&&toKill>0&&enemies.length===0&&dropsInAir===0)){
+    const b=10+5*wave; s.clean=true; runWork+=b; S.upgrade();
+    announce('¡SECTOR LIMPIO!','#3ee67a','+'+b+' ◆ · Vuelve al Orbe y pide el helicóptero');
+  }
+  if(s.phase==='open'){
+    s.hold=inside&&s.left?s.hold+dt:Math.max(0,s.hold-dt*2);
+    if(s.hold>=SEC_HOLD) sectorCallHeli();
+  } else if(s.phase==='wait'){
+    s.t-=dt; s.drop-=dt;
+    if(s.drop<=0){ s.drop=SEC_DROP; sectorDrop(); }
+    if(s.t<=0){ s.phase='board'; s.heli=callHeli(landing.x,landing.y,'pickup',null); }
+  } else if(s.heli.state==='hover'){
+    s.heli.t=0;   // te espera todo lo que haga falta
+    if(inside) finishSector();
+  }
+}
+function sectorCallHeli(){
+  const s=sector;
+  s.phase='wait'; s.t=SEC_WAIT; s.drop=60;
+  alarmT=Math.max(alarmT,SEC_WAIT); S.alarm();
+  alertEnemies(landing.x,landing.y,1e9);
+  announce('🚁 HELICÓPTERO EN CAMINO','#ffd76e','Aguanta junto al Orbe: saben que te vas');
+}
+function sectorDrop(){
+  if(enemies.length>=maxAlive+4) return;
+  const ground=(ROSTER[sel().mode]||ROSTER.robots).filter(r=>wave>=r[1]&&r[0]!=='hawk');
+  if(ground.length) survDropSquad(ground,2+Math.min(2,Math.floor(wave/2)),newSquad({hunter:true}));
+}
+function finishSector(){
+  const follow=pows.filter(q=>q.alive&&q.follow), k=sectorMul(wave);
+  follow.forEach(q=>q.alive=false); rescued+=follow.length; save.rescuedTotal+=follow.length; runWork+=3*follow.length;
+  save.sectorBest=Math.max(save.sectorBest,wave); saveSave(); S.upgrade();
+  const pay=Math.round(runWork*k), g=v=>'<span style="color:var(--gold)">'+v+'</span>';
+  showResults({title:'¡EXTRACCIÓN LOGRADA!',color:'var(--green)',
+    html:'<span style="color:var(--text-dim)">Sector '+wave+' superado. El botín va a bordo, pero aún no es tuyo.</span><br><br>'+
+      'Botín: '+g('◆'+runWork+' × '+k)+' = '+g('◆'+pay)+' · Rehenes: '+g(rescued)+(oreTotal(runOres)?'<br>⛏ '+oresHtml(runOres):'')+
+      '<br><span style="color:var(--text-dim)">Más lejos pagan × '+sectorMul(wave+1)+', pero si caes solo salvas el '+SEC_KEEP*100+' %.</span>',
+    buttons:[['⌂ COBRAR ◆'+pay+' Y VOLVER',sectorBank,true],['➜ SEGUIR AL SECTOR '+(wave+1),openLevelUp,false]]});
+}
+function sectorBank(){
+  runWork=Math.round(runWork*sectorMul(wave));
+  const w=bankRun();
+  enterHome('risa');
+  announce('BOTÍN A SALVO','#3ee67a','+'+w+' ◆ en tu base');
+}
+function sectorLost(){
+  const lost=sectorSalvage(), n=wave, w=bankRun(), g=v=>'<span style="color:var(--gold)">'+v+'</span>';
+  showResults({title:'TE HAN DERRIBADO',
+    html:'<span style="color:var(--text-dim)">Caíste en el sector '+n+' y casi todo el botín se quedó en la isla.</span><br><br>'+
+      'Salvas: '+g('◆'+w)+' · Pierdes: <span style="color:var(--red)">◆'+lost+'</span> · Rehenes a salvo: '+g(rescued),
+    buttons:[['↻ NUEVA EXPEDICIÓN',()=>startMission({type:'sector'}),true],['⌂ VOLVER A LA BASE',()=>enterHome('triste'),false]]});
+}
+function sectorAbandon(){
+  const lost=sectorSalvage(), w=bankRun();
+  enterHome('triste');
+  announce('EXPEDICIÓN ABANDONADA','#ff8a8a','Salvas ◆'+w+' · pierdes ◆'+lost);
+}
+/* El círculo de la zona de extracción, en el suelo */
+function drawSectorPad(){
+  const s=sector, x=landing.x, y=landing.y;
+  ctx.save();
+  ctx.lineWidth=3; ctx.strokeStyle=s.phase==='open'?'#f5c518':'#ff8a3a'; ctx.setLineDash([14,10]); ctx.lineDashOffset=-t*0.5;
+  ctx.beginPath(); ctx.arc(x,y,SEC_R,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+  if(s.hold>0){ ctx.lineWidth=6; ctx.strokeStyle='#3ee67a'; ctx.beginPath(); ctx.arc(x,y,SEC_R,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,s.hold/SEC_HOLD)); ctx.stroke(); }
+  ctx.font='15px "Jersey 15", monospace'; ctx.textAlign='center'; ctx.fillStyle='#000'; ctx.fillText('EXTRACCIÓN',x+1,y+SEC_R+17); ctx.fillStyle='#f5c518'; ctx.fillText('EXTRACCIÓN',x,y+SEC_R+16);
+  ctx.restore();
+}
+/* Lo que dura la llamada, arriba en el centro, y la flecha hacia el círculo cuando toca volver */
+function drawSectorHud(){
+  const s=sector; if(!s||cine>0) return;
+  if(s.phase!=='open'||s.clean) drawOffscreenArrow(landing.x,landing.y,'#f5c518','🚁');
+  if(s.phase==='open'&&s.hold<=0) return;
+  const txt=s.phase==='open'?'🚁 LLAMANDO AL HELICÓPTERO':s.phase==='wait'?'🚁 AGUANTA · LLEGA EN '+Math.ceil(Math.max(0,s.t)/60)+' s':'🚁 ¡SUBE AL HELICÓPTERO!';
+  const k=s.phase==='open'?s.hold/SEC_HOLD:s.phase==='wait'?s.t/SEC_WAIT:1, bw=250, bx=W/2-bw/2, by=58;
+  ctx.save(); ctx.font='19px "Jersey 15", monospace'; ctx.textAlign='center';
+  ctx.fillStyle='rgba(13,20,32,.85)'; ctx.fillRect(bx,by,bw,26); ctx.strokeStyle='#f5c518'; ctx.strokeRect(bx+0.5,by+0.5,bw-1,25);
+  ctx.fillStyle='#ffd76e'; ctx.fillText(txt,W/2,by+17);
+  ctx.fillStyle='#f5c518'; ctx.fillRect(bx+3,by+21,(bw-6)*clamp(k,0,1),2);
+  ctx.restore();
+}
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -12916,6 +13023,7 @@ function newRun(){ resetRun(); wave=1; startStage(); }
 function startStage(){
   supplyInbound=0;
   if(mission&&mission.type==='arch'&&wave>1) weatherMaybeChange('arch',0.45);   // cada isla puede traer otro tiempo
+  if(mission&&mission.type==='sector'){ sector=newSector(); if(wave>1) weatherMaybeChange('arch',0.45); }
   if(mission&&mission.type==='arch') survApplyLevel();
   // SUPERVIVENCIA: tus torretas, soldados y drones vivos te acompañan a la siguiente isla
   const keep=(mission&&mission.type==='arch'&&wave>1)?[...turrets,...soldiers,...drones].filter(u=>u.alive):[];
@@ -13021,13 +13129,17 @@ function portalEmerge(){
   flashScreen('#c8fff0',0.35); shake=Math.max(shake,14); S.boom();
   rings.push({x:p.x,y:p.y,r:10,max:150,life:26,maxLife:26,color:'#c8fff0'});
   for(let i=0;i<24;i++){ const a=rand(0,Math.PI*2); particles.push({x:p.x,y:p.y,vx:Math.cos(a)*4,vy:Math.sin(a)*4,life:26,maxLife:26,color:pick(['#3ee67a','#3ee6e6','#ffffff']),size:3}); }
+  if(alertEnemies(p.x,p.y,650)) popup(p.x,p.y-48,'¡HAN NOTADO TU LLEGADA!','#ff8a3a',13);
+}
+/* Los enemigos que andan a menos de R van a ese punto. Devuelve cuántos */
+function alertEnemies(x,y,R){
   let n=0;
   for(const en of enemies){
-    if(!en.alive||en.static||Math.hypot(en.x-p.x,en.y-p.y)>650) continue;
+    if(!en.alive||en.static||Math.hypot(en.x-x,en.y-y)>R) continue;
     const r=en.def.role; if(r==='turret'||r==='structure'||r==='spawner'||r==='dummy') continue;
-    if(en.ai!=='combat'){ en.ai='hunt'; en.lastKnown={x:p.x,y:p.y}; en.aware=1; en.searchT=0; n++; }
+    if(en.ai!=='combat'){ en.ai='hunt'; en.lastKnown={x,y}; en.aware=1; en.searchT=0; n++; }
   }
-  if(n) popup(p.x,p.y-48,'¡HAN NOTADO TU LLEGADA!','#ff8a3a',13);
+  return n;
 }
 function assemblePlayer(){
   const p=player;
@@ -13044,6 +13156,7 @@ function endIntro(){
   cine=0; cineFocus=null;
   lobs=lobs.filter(l=>l.kind!=='orb');
   if(tut){ announce('ISLA DE ENTRENAMIENTO','#f5c518','Sigue las instrucciones del panel de arriba'); return; }
+  if(sector){ announce('SECTOR '+wave+' · BOTÍN × '+sectorMul(wave),'#f5c518',(bossStage?'Señal enorme en la isla · ':'')+'Rescata, coge lo que puedas y vuelve al círculo para irte'); return; }
   if(world){ announce('MUNDO '+world.id+' · SECCIÓN '+world.section,'#f5c518',worldInfo(world.id).sections[world.section-1]+(world.section<4?' · destruye los generadores de la compuerta':'')); return; }
   if(survLvl){ announce('SUPERVIVENCIA · NIVEL '+survLvl,'#f5c518',(bossStage?'Señal enorme en el centro de la isla... · ':'Sobrevive: '+toKill+' robots · ')+survTxt()); return; }
   announce('STAGE '+String(wave).padStart(2,'0')+' · '+era.label,'#f5c518',bossStage?'Señal enorme en el centro de la isla...':'Libera la isla: '+toKill+' robots hackeados');
@@ -13057,7 +13170,7 @@ function skipIntro(){
   endIntro();
 }
 function checkStageClear(dt){
-  if(state!=='playing'||cine>0||world) return;
+  if(state!=='playing'||cine>0||world||sector) return;
   if(clearT>0){
     clearT-=dt;
     if(clearT<=0){ if(mission&&mission.type==='tutorial') finishTutorial(); else openLevelUp(); }
@@ -13135,7 +13248,7 @@ function updateHUD(){
   setText('workV',save.work+runWork);
   setText('oreV',oreTotal(runOres));
   setText('wxV',dayIcon()+' '+clockHHMM()+' · '+WEATHERS[weather.id].icon+' '+WEATHERS[weather.id].name);
-  let remaining=bossStage?(boss?1:0):Math.max(0,toKill-killed);
+  let remaining=sector?0:bossStage?(boss?1:0):Math.max(0,toKill-killed);
   if(world){
     remaining=0;
     setText('stagePre','MUNDO '+world.id); setText('waveV','SECCIÓN '+world.section);
@@ -13143,8 +13256,8 @@ function updateHUD(){
     if(g){ setText('enemyLbl','GENERADORES'); setText('enemyV',g.gens.filter(x=>!x.alive).length+'/'+g.gens.length); }
     else { setText('enemyLbl','JEFE'); setText('enemyV',boss&&boss.alive?'¡DERRÓTALO!':(bossDefeated?'DERROTADO':'EN EL PATIO')); }
   } else {
-    setText('stagePre',tut?'ENTRENAMIENTO':'STAGE'); setText('waveV',tut?'':String(wave).padStart(2,'0'));
-    setText('enemyLbl','ENEMY LEFT'); setText('enemyV',remaining);
+    setText('stagePre',tut?'ENTRENAMIENTO':sector?'SECTOR':'STAGE'); setText('waveV',tut?'':String(wave).padStart(2,'0'));
+    setText('enemyLbl',sector?'BOTÍN × '+sectorMul(wave):'ENEMY LEFT'); setText('enemyV',sector?'◆'+runWork:remaining);
   }
   setText('hiScoreV',Math.max(save.bestScore,score));
   setText('livesV2',Math.max(0,lives));
@@ -13239,6 +13352,8 @@ function step(dt){
   updateSupport(dt);
   updatePows(dt);
   updateTutorial(dt);
+  if(sector) updateSector(dt);
+  if(state!=='playing') return;   // el helicóptero te ha sacado
   separateAll();
   if(boss&&boss.alive){ bossKeepInArena(boss); if(SOLID[tileAt(boss.x,boss.y)]) unstick(boss); }   // los empujones tampoco lo sacan de su arena ni lo meten en un muro
   updateBullets(dt);
