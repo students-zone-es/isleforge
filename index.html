@@ -5323,6 +5323,7 @@ function render(){
   drawPresses();
   drawSunShadowsTop();
   drawTrees(cx,cy);
+  drawCloudShadows(cx,cy);
   drawWorldTop(cx,cy);
   drawBullets();
   for(const en of enemies) if(en.alive&&en.air) drawEnemy(en);
@@ -6214,7 +6215,7 @@ function drawParkedHeli(){   // aparcado (más grande, ocupa el helipuerto): las
 }
 function drawLamp(c,r){
   const x=c*TILE+15, y=r*TILE+20;
-  if(ownShadow()){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(x+3,y+2,6,3); }
+  if(!shadowPass){ ctx.fillStyle='rgba(6,10,20,.28)'; ctx.beginPath(); ctx.ellipse(x+1,y+2,6,2.5,0,0,Math.PI*2); ctx.fill(); }
   ctx.fillStyle='#2e353c'; ctx.fillRect(x-1,y-26,3,28);
   ctx.fillStyle='#4a5059'; ctx.fillRect(x-5,y-30,11,5);
   if(shadowPass) return;
@@ -6225,7 +6226,7 @@ function drawLamp(c,r){
 function drawLamps(){ for(const [c,r] of homeLamps) drawLamp(c,r); }
 function drawHomeFlag(){
   const x=44*TILE+6, y=28*TILE+20;
-  if(ownShadow()){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(x+2,y,8,3); }
+  if(!shadowPass){ ctx.fillStyle='rgba(6,10,20,.28)'; ctx.beginPath(); ctx.ellipse(x+1,y+2,6,2.5,0,0,Math.PI*2); ctx.fill(); }
   ctx.fillStyle='#cfd6df'; ctx.fillRect(x,y-56,3,58);
   for(let i=0;i<8;i++){ const wv=Math.sin(t*0.12-i*0.7)*2; ctx.fillStyle=i<2?'#1a3a2a':'#2a6a3a'; ctx.fillRect(x+3+i*4,y-54+wv,4,22); }
   glowCircle(x+19,y-43+Math.sin(t*0.12-2.8)*2,3,'#3ee67a');
@@ -6264,11 +6265,16 @@ function drawAnnounceOnly(){
   ctx.globalAlpha=1;
 }
 /* Lo que proyecta sombra en la base: el helicóptero aparcado y, de perfil, farolas, bandera y personas */
+/* Los edificios con tejado: x, y, ancho, alto y lo que ocupa de alto su fachada dibujada (el suelo que pisan empieza ahí) */
+function homeRoofs(){
+  const L=homeL.workshop, f=houseFootprint(), hh=f.h*TILE;
+  return [[L.c0*TILE,L.r0*TILE,L.w*TILE,L.h*TILE,84],[f.c0*TILE,f.r0*TILE,f.w*TILE,hh,Math.min(42,Math.round(hh*0.34))]];
+}
 function castHome(){
   const L=homeL.heli;
   shLong({x:(L.c0+L.w/2)*TILE+6,y:(L.r0+L.h/2)*TILE-4,radius:44},drawParkedHeli);
   for(const [c,r] of homeLamps) shStand(c*TILE+15,r*TILE+22,16,34,()=>drawLamp(c,r));
-  shStand(44*TILE+7,28*TILE+22,90,60,drawHomeFlag);
+  shStand(44*TILE+7,28*TILE+22,90,60,drawHomeFlag,true);
   for(const r of residents) shPerson(r);
   if(human) shPerson(human);
 }
@@ -6292,6 +6298,7 @@ function renderHome(){
   for(const [p,pal] of people) drawHuman(p,pal);
   drawSunShadowsTop();
   drawTrees(cx,cy);
+  drawCloudShadows(cx,cy);
   drawParticles();
   drawPopups();
   drawHomeMarks();
@@ -10998,12 +11005,15 @@ function drawWatchers(cx,cy){
    · Lo que vuela: su copia cae separada de él, más lejos cuanto más alto y cuanto más bajo está el sol.
    Dos capas: la de las unidades va debajo de ellas, y la del mundo (bloques, edificios, pinos) se pinta después, así
    que su sombra CAE TAMBIÉN sobre las unidades que pasan por debajo. Las dos capas se recortan entre sí (dos sombras que
-   se cruzan no se oscurecen el doble) y lo alto no se oscurece a sí mismo (su techo está al sol). */
+   se cruzan no se oscurecen el doble) y lo alto no se oscurece a sí mismo (su techo está al sol).
+   La sombra se aclara hacia la punta y tiene el borde suave; con el cielo cubierto casi desaparece. La de contacto pega al
+   suelo lo que tiene altura a cualquier hora, y las nubes pasan haciendo sombra por encima de todo. */
 const SHADOW_H={[WALL]:34,[DOOR]:34,[BLD]:60,[TREE]:52,[ROCK]:24,[RUB]:10,[CAGE]:18,[CONT]:40};   // altura en píxeles
 const SHADOW_MAXLEN=3.2;   // con el sol muy bajo la sombra mide como mucho 3,2 veces la altura
 const SHADOW_STRETCH=0.6;  // lo visto desde arriba se alarga menos que un muro: mide 1,2 veces su radio de alto
 const SHADOW_STAND=1.8;    // tope de lo visto de perfil: una persona 3 veces más larga que alta ya no parece una persona
-let shCv=null, shG=null, shCv2=null, shG2=null, shTmp=null, shTmpG=null, shS=null, shKey=null, shMemo=null, shTop=0, shX=0, shY=0;
+const SHADOW_FADE=14, SHADOW_TIP=0.58;   // la punta se aclara en los últimos 14 px por cada vez su altura, hasta el 58 %
+let shCv=null, shG=null, shCv2=null, shG2=null, shT=null, shTG=null, shB=null, shBG=null, shB2=null, shB2G=null, cloudCv=null, shTmp=null, shTmpG=null, shS=null, shKey=null, shMemo=null, shTop=0, shX=0, shY=0;
 function sunShadow(){
   const S=skyNow(); if(shKey===S.k) return shMemo;
   shKey=S.k;
@@ -11023,18 +11033,18 @@ function shCapture(g,cx,cy,fn){
   try{ fn(cx,cy); } finally { g.restore(); shadowPass=false; ctx=c0; }
 }
 /* Tumba en el suelo una imagen de w×h con el pie en (x,foot): lo que en la imagen va hacia arriba, en el suelo va hacia la sombra */
-function shProject(G,img,w,h,x,foot,L){
-  const s=shS, px=-s.dy, py=s.dx;
-  G.save(); G.transform(px,py,-s.dx*L,-s.dy*L,x-px*w/2+s.dx*L*h,foot-py*w/2+s.dy*L*h);
+function shProject(G,img,w,h,x,foot,L,flat){
+  const s=shS, px=flat?1:-s.dy, py=flat?0:s.dx;   // flat: una tela o un cartel no da la cara al sol, su anchura se queda donde está
+  G.save(); G.imageSmoothingEnabled=true; G.transform(px,py,-s.dx*L,-s.dy*L,x-px*w/2+s.dx*L*h,foot-py*w/2+s.dy*L*h);
   G.drawImage(img,0,0,w,h,0,0,w,h); G.restore();
 }
 /* Lo mismo con algo que se dibuja en vivo (dentro de una captura): w y h caben en el lienzo auxiliar de 96×96 */
-function shStand(x,foot,w,h,draw){
+function shStand(x,foot,w,h,draw,flat){
   const G=ctx;
   if(!shTmp){ shTmp=mkCanvas(96,96); shTmpG=shTmp.getContext('2d'); shTmpG.imageSmoothingEnabled=false; }
   shTmpG.clearRect(0,0,w,h);
   ctx=shTmpG; ctx.save(); ctx.translate(w/2-x,h-foot); draw(); ctx.restore(); ctx=G;
-  shProject(G,shTmp,w,h,x,foot,Math.min(shS.len,SHADOW_STAND));
+  shProject(G,shTmp,w,h,x,foot,Math.min(shS.len,SHADOW_STAND),flat);
 }
 /* Lo visto desde arriba: su dibujo se estira hacia la sombra desde su parte de atrás, así conserva la forma (cañón, brazos...) */
 function shLong(u,draw){
@@ -11050,14 +11060,50 @@ function shBox(g,x,y,w,h,ex,ey){
     g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by); g.lineTo(bx+ex,by+ey); g.lineTo(ax+ex,ay+ey); g.closePath(); g.fill(); }
   g.fillRect(x+ex,y+ey,w,h);
 }
+/* Un edificio con tejado a dos aguas (cumbrera de este a oeste): sus caras tumbadas en el suelo. Al atardecer la punta de la sombra es el piñón */
+function shRoof(g,x,y,w,h,he,hr){
+  const s=shS, k=s.len, x1=x+w, y1=y+h, ym=y+h/2, a=[[x,y],[x1,y],[x1,y1],[x,y1]].map(q=>[q[0],q[1],0]), e=a.map(q=>[q[0],q[1],he]), r0=[x,ym,hr], r1=[x1,ym,hr];
+  const F=[a,[e[0],e[1],r1,r0],[e[3],e[2],r1,r0],[e[0],r0,e[3]],[e[1],r1,e[2]]];
+  for(let i=0;i<4;i++) F.push([a[i],a[(i+1)%4],e[(i+1)%4],e[i]]);
+  for(const f of F){ g.beginPath(); for(const q of f) g.lineTo(q[0]+s.dx*k*q[2],q[1]+s.dy*k*q[2]); g.closePath(); g.fill(); }
+}
+/* La sombra de contacto, en el suelo: va aparte de la del sol porque se ve a cualquier hora */
+function drawContact(cx,cy){
+  const c0=Math.max(0,Math.floor(cx/TILE)), c1=Math.min(WC-1,Math.ceil((cx+W)/TILE)), r0=Math.max(0,Math.floor(cy/TILE)), r1=Math.min(WR-1,Math.ceil((cy+H)/TILE));
+  const high=(c,r)=>inB(c,r)&&SHADOW_H[map[idx(c,r)]]>=18;
+  ctx.fillStyle='rgba(6,10,20,.2)';
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    const v=map[r*WC+c]; if(!(SHADOW_H[v]>=18)) continue;
+    const x=c*TILE, y=r*TILE;
+    if(v===TREE||v===ROCK){ ctx.beginPath(); ctx.ellipse(x+15,y+26,15,5,0,0,Math.PI*2); ctx.fill(); continue; }
+    if(!high(c,r+1)){ ctx.fillRect(x,y+TILE,TILE,6); ctx.fillRect(x,y+TILE,TILE,3); }
+    if(!high(c-1,r)) ctx.fillRect(x-4,y,4,TILE);
+    if(!high(c+1,r)) ctx.fillRect(x+TILE,y,4,TILE);
+  }
+}
+/* Aclara la punta: lo que aún tiene sombra un poco más allá es el centro, y lo demás es la punta */
+function shFade(q,c){
+  const T=shTG, d=SHADOW_FADE*shS.len;
+  T.globalCompositeOperation='copy'; T.drawImage(c,0,0);
+  T.globalCompositeOperation='destination-in'; T.drawImage(c,-shS.dx*d,-shS.dy*d);
+  q.globalCompositeOperation='destination-out'; q.globalAlpha=1-SHADOW_TIP; q.fillRect(0,0,W,H);
+  q.globalCompositeOperation='source-over'; q.globalAlpha=1; q.drawImage(shT,0,0);
+}
+/* Reducir a la mitad y volver a ampliar con suavizado: un borde blando que cuesta casi nada */
+function shSoft(B,src,cx,cy,a){
+  B.clearRect(0,0,W>>1,H>>1); B.drawImage(src,0,0,W>>1,H>>1);
+  ctx.save(); ctx.globalAlpha=a; ctx.imageSmoothingEnabled=true; ctx.drawImage(B.canvas,cx,cy,W,H); ctx.restore();
+}
 /* cast: pinta en la capa de las unidades lo que proyecta sombra en esta escena */
 function drawSunShadows(cx,cy,cast){
   shTop=0;
   if(interior) return;
+  drawContact(cx,cy);
   const s=shS=sunShadow(); if(!s) return;
   if(!shCv||shCv.width!==W||shCv.height!==H){
-    shCv=mkCanvas(W,H); shG=shCv.getContext('2d'); shCv2=mkCanvas(W,H); shG2=shCv2.getContext('2d');
-    shG.imageSmoothingEnabled=shG2.imageSmoothingEnabled=false;
+    shCv=mkCanvas(W,H); shG=shCv.getContext('2d'); shCv2=mkCanvas(W,H); shG2=shCv2.getContext('2d'); shT=mkCanvas(W,H); shTG=shT.getContext('2d');
+    shB=mkCanvas(W>>1,H>>1); shBG=shB.getContext('2d'); shB2=mkCanvas(W>>1,H>>1); shB2G=shB2.getContext('2d');
+    shG.imageSmoothingEnabled=shG2.imageSmoothingEnabled=shTG.imageSmoothingEnabled=false;
   }
   const g=shG, u=shG2, m=Math.ceil(SHADOW_MAXLEN*90/TILE)+1, tall=[];
   g.globalCompositeOperation=u.globalCompositeOperation='source-over';
@@ -11067,6 +11113,8 @@ function drawSunShadows(cx,cy,cast){
   for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
     const v=map[r*WC+c], h=SHADOW_H[v]; if(!h) continue;
     const L=h*s.len, ex=s.dx*L, ey=s.dy*L, x=c*TILE-cx, y=r*TILE-cy;
+    if(v===BLD&&inHome) continue;   // los edificios de la base tienen tejado: van enteros después
+    if(v===ROCK){ g.strokeStyle='#000'; g.lineCap='round'; g.lineWidth=TILE; g.beginPath(); g.moveTo(x+15,y+15); g.lineTo(x+15+ex,y+15+ey); g.stroke(); tall.push([x+15,y+15]); continue; }
     if(v===TREE){
       if(SHEET_GRASS_ERAS[era.id]){ const sp=treeSprite(r*WC+c,c,r); shProject(g,sp,sp.width,sp.height,x+TILE/2,y+TILE-4,s.len); }
       else { g.beginPath(); g.ellipse(x+TILE/2+ex*0.55,y+TILE-5+ey*0.55,Math.max(8,L*0.5),8,Math.atan2(s.dy,s.dx),0,Math.PI*2); g.fill(); }   // su pino va pintado en la casilla
@@ -11074,20 +11122,43 @@ function drawSunShadows(cx,cy,cast){
     }
     shBox(g,x,y,TILE,TILE,ex,ey); tall.push([x,y,TILE,TILE]);
   }
+  if(inHome) for(const [x,y,w,h,fh] of homeRoofs()){ shRoof(g,x-cx,y+fh-cy,w,h-fh,60,88); tall.push([x-cx-6,y-cy,w+12,h]); }
   shCapture(u,cx,cy,cast);
+  shFade(g,shCv); shFade(u,shCv2);
   for(const q of [g,u]){
-    q.globalCompositeOperation='destination-out'; for(const b of tall) q.fillRect(...b);   // el techo de lo alto está al sol
+    q.globalCompositeOperation='destination-out';
+    for(const b of tall){ if(b.length>2) q.fillRect(...b); else { q.beginPath(); q.arc(b[0],b[1],14,0,Math.PI*2); q.fill(); } }   // el techo de lo alto está al sol
     q.globalCompositeOperation='source-in'; q.fillStyle=s.col; q.fillRect(0,0,W,H);
   }
   u.globalCompositeOperation='destination-out'; u.drawImage(shCv,0,0);
-  ctx.save(); ctx.globalAlpha=s.a; ctx.drawImage(shCv2,cx,cy); ctx.restore();
-  shTop=s.a; shX=cx; shY=cy;
+  const a=s.a*(0.2+0.8*wAmt('clear'));   // con el cielo cubierto el sol apenas marca sombras
+  shSoft(shBG,shCv2,cx,cy,a);
+  shTop=a; shX=cx; shY=cy;
 }
 /* La sombra del mundo, encima de las unidades del suelo */
 function drawSunShadowsTop(){
   if(!shTop) return;
-  ctx.save(); ctx.globalAlpha=shTop; ctx.drawImage(shCv,shX,shY); ctx.restore();
+  shSoft(shB2G,shCv,shX,shY,shTop);
   shTop=0;
+}
+/* Las nubes que pasan: suma de ondas repetidas, así el mosaico no tiene costuras */
+function cloudMask(){
+  if(cloudCv) return cloudCv;
+  const N=96, R=mulberry32(77), W6=[]; for(let i=0;i<9;i++) W6.push([Math.floor(R()*7)-3,1+Math.floor(R()*3),R()*6.28]);
+  const c=mkCanvas(N,N), g=c.getContext('2d'), im=g.createImageData(N,N);
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+    let v=0; for(const [a,b,p] of W6) v+=Math.sin((x*a+y*b)/N*Math.PI*2+p);
+    const q=(y*N+x)*4; im.data[q]=5; im.data[q+1]=10; im.data[q+2]=24; im.data[q+3]=clamp((v-2.2)/1.6,0,1)*255;
+  }
+  g.putImageData(im,0,0);
+  return cloudCv=c;
+}
+function drawCloudShadows(cx,cy){
+  const s=sunShadow(), a=s?s.a*0.42*wAmt('clear'):0; if(interior||a<0.02) return;
+  const T=1152, ox=(t*0.16)%T, oy=(t*0.05)%T;
+  ctx.save(); ctx.globalAlpha=a; ctx.imageSmoothingEnabled=true;
+  for(let y=Math.floor((cy-oy)/T)*T+oy;y<cy+H;y+=T) for(let x=Math.floor((cx-ox)/T)*T+ox;x<cx+W;x+=T) ctx.drawImage(cloudMask(),x,y,T,T);
+  ctx.restore();
 }
 const shNear=(u,cx,cy)=>u.x>cx-150&&u.x<cx+W+150&&u.y>cy-150&&u.y<cy+H+150;
 /* Lo que proyecta sombra en una misión: lo mismo que pinta render() */
