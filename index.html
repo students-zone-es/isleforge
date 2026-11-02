@@ -116,7 +116,7 @@
   .overlay.top{ justify-content:flex-start; }
   .lookWrap{ display:flex; gap:16px; align-items:center; justify-content:center; flex-wrap:wrap; max-width:100%; }
   .lookStage{ display:flex; flex-direction:column; align-items:center; gap:6px; max-width:420px; }
-  #lookCv{ height:340px; aspect-ratio:320/380; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 42%, #24364c, #0d1420 72%); border:1px solid var(--border); border-radius:6px; }
+  #lookCv{ height:340px; aspect-ratio:3/4; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 42%, #24364c, #0d1420 72%); border:1px solid var(--border); border-radius:6px; }
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
@@ -394,7 +394,7 @@
     <div id="scrLook" class="overlay hidden">
       <h1 class="title" style="font-size:27px;">TU PILOTO</h1>
       <div class="lookWrap">
-        <div class="lookStage"><canvas id="lookCv" width="480" height="570"></canvas><div class="lookPose" id="lookPose"></div><div class="lookPose" id="lookFace"></div></div>
+        <div class="lookStage"><canvas id="lookCv" width="480" height="640"></canvas><div class="lookPose" id="lookPose"></div><div class="lookPose" id="lookFace"></div></div>
         <div class="lookOpts" id="lookOpts"></div>
       </div>
       <div class="row"><button class="btn small" id="btnLookBack">← VOLVER</button><button class="btn small" id="btnLookRand">🎲 AL AZAR</button><button class="btn small" id="btnLookReset">↺ ORIGINAL</button><button class="btn" id="btnLookOk">✔ LISTO</button></div>
@@ -11623,14 +11623,15 @@ function upgradeTurrets(){
   for(const e of w.enc){ e.units=e.units.map(u=>u.slice());   // copia: la lista del mundo es compartida entre partidas
     for(const u of e.units) if(u[0]==='emplacement'&&(n++)%2===1) u[0]='rocketpad'; }
 }
-/* ===================== PERSONAS EN 3D (personaje v0.2) =====================
+/* ===================== PERSONAS EN 3D (personaje v0.3) =====================
    El piloto y los androides de la base son un muñeco 3D hecho de esferas, con huesos que respiran, andan y corren. Cada pose se
    pinta en píxeles desde la cámara de la base y se guarda: de cada píxel, hacia dónde mira su superficie y de qué material es.
    Lo que se calcula cada fotograma es solo la LUZ (sol o luna de verdad, color del cielo, farolas y balizas). Por eso gira en
    16 direcciones, le da el sol por el lado que toca y el rojo del helipuerto le tiñe al pasar. Su sombra sale de sus huesos.
-   La versión 0.1, dibujada a mano, sigue en sprites/personaje/v0.1 (y en la etiqueta personaje-v0.1 de git). */
-const PR_W=52, PR_H=72, PR_OX=26, PR_OY=66;              // lienzo de una pose y dónde caen los pies
-const PR_STEP=[7,11.2];   // cuánto crece u.walk en una vuelta de piernas, andando y corriendo: a este ritmo el pie apoyado no resbala (tools/prueba_poses.py)
+   Mide unas 5,3 cabezas: proporciones de adulto. Las versiones anteriores siguen en sprites/personaje (0.1 a mano, 0.2 con 3,4 cabezas)
+   y en las etiquetas personaje-v0.1 y personaje-v0.2 de git. */
+const PR_W=60, PR_H=86, PR_OX=30, PR_OY=66;              // lienzo de una pose y dónde caen los pies
+const PR_STEP=[9.2,14.8];   // cuánto crece u.walk en una vuelta de piernas, andando y corriendo: a este ritmo el pie apoyado no resbala (tools/prueba_poses.py)
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
 const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27};
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle]), PR_GLOW=new Set([PM.patch,PM.led]);
@@ -11646,31 +11647,31 @@ function prClear(q,s,r,g,pz,sway){
   const zr=(q[2]-pz)/g.h, T=g.loft; if(zr>T[3][0]) return;
   const j=zr<T[1][0]?0:zr<T[2][0]?1:2, k=clamp((zr-T[j][0])/(T[j+1][0]-T[j][0]),0,1);
   let X=lerp(T[j][1],T[j+1][1],k)+Math.abs(sway), D=lerp(T[j][2],T[j+1][2],k);
-  if(zr<3){ X=Math.max(X,4*g.stance); D=Math.max(D,g.th[0]); }      // de cadera para abajo mandan los muslos
+  if(zr<3.5){ X=Math.max(X,4*g.stance); D=Math.max(D,g.th[0]); }      // de cadera para abajo mandan los muslos
   const need=D+r+0.3; if(Math.abs(q[1])>=need) return;
   const x=X+Math.sqrt(need*need-q[1]*q[1]); if(s*q[0]<x) q[0]=s*x;
 }
 /* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
    Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
 function prPose(mode,ph,br,g){
-  const th=ph*Math.PI*2, walk=mode>0, run=mode===2, TH=10*g.h, SH=10*g.h, UA=8*g.h, FA=7.5*g.h, stance=4*g.stance;
+  const th=ph*Math.PI*2, walk=mode>0, run=mode===2, TH=13.4*g.h, SH=13*g.h, UA=10*g.h, FA=9*g.h, stance=4*g.stance;
   const A=run?0.95:walk?0.58:0, K=run?1.75:walk?1.0:0, B=(run?0.95:walk?0.55:0)*g.swing, lean=run?0.24:walk?0.06:0;
   const sway=g.sway*(walk?Math.sin(th)*(run?0.5:1):0.4);   // la cadera se balancea al andar y descansa un poco hacia un lado parada
   const leg=(s,p)=>{
     const a=A*Math.sin(p), k=(walk?0.12:0.03)+K*Math.max(0,Math.cos(p-0.35)), b=a-k, f=b<0?-b*0.8:-b*0.35;
     const knee=[s*stance,Math.sin(a)*TH,-Math.cos(a)*TH], ank=[s*stance*1.05,knee[1]+Math.sin(b)*SH,knee[2]-Math.cos(b)*SH];
-    return {knee,ank,toe:[s*stance*1.15,ank[1]+Math.cos(f)*5.5,ank[2]-Math.sin(f)*5.5]};
+    return {knee,ank,toe:[s*stance*1.15,ank[1]+Math.cos(f)*5,ank[2]-Math.sin(f)*5]};
   };
-  const L=leg(-1,th), R=leg(1,th+Math.PI), pz=3.3*g.boot+0.1-Math.min(L.ank[2],R.ank[2],L.toe[2]+0.3*g.boot,R.toe[2]+0.3*g.boot);
+  const L=leg(-1,th), R=leg(1,th+Math.PI), pz=2.9*g.boot+0.1-Math.min(L.ank[2],R.ank[2],L.toe[2]+0.3*g.boot,R.toe[2]+0.3*g.boot);
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,13+br*0.4);
+    const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,15.8+br*0.4);
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e, q=g.arm;
     const ha=[el[0]-s*(run?1.8:0),el[1]+Math.sin(c)*FA,el[2]-Math.cos(c)*FA];
-    prClear(el,s,2.9*q,g,pz,sway); prClear(ha,s,Math.max(g.hand,2.6*q)+0.5,g,pz,sway);   // el codo y la mano nunca dentro del cuerpo
+    prClear(el,s,2.6*q,g,pz,sway); prClear(ha,s,Math.max(g.hand,2*q)+0.5,g,pz,sway);   // el codo y la mano nunca dentro del cuerpo
     const mid=[(el[0]+ha[0])/2,(el[1]+ha[1])/2,(el[2]+ha[2])/2], mx=mid[0];
-    prClear(mid,s,2.8*q,g,pz,sway); el[0]+=mid[0]-mx; ha[0]+=mid[0]-mx;                      // ni el antebrazo entre los dos
+    prClear(mid,s,2.3*q,g,pz,sway); el[0]+=mid[0]-mx; ha[0]+=mid[0]-mx;                      // ni el antebrazo entre los dos
     return {sh,el,ha};
   };
   return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br};
@@ -11687,9 +11688,9 @@ const PR_BUILD=[
    grosor de brazos, muslos y gemelos, tamaño de manos y botas, cuello, separación de piernas y codos, balanceo al andar y altura.
    n = neutro, el cuerpo de los androides */
 const PR_GEN={
-  n:{sh:1,hip:1,loft:[[1,2.9,4.1],[6,2.5,4.9],[12.6,3,5.5],[15.2,1.4,3.6]],seat:null,nk:3.2,arm:1,th:[4,3.3],cf:[3.3,2.8],hand:2.9,boot:1,stance:1,elbow:1,swing:1,sway:0,h:1},
-  m:{sh:1.05,hip:0.96,loft:[[1,2.9,4.1],[6,2.9,4.8],[12.6,3.4,5.4],[15.2,1.8,3.7]],seat:[2.3,-1.7,0.6,3.7],nk:3.5,arm:1.06,th:[4.1,3.6],cf:[3.6,3.1],hand:3.1,boot:1.1,stance:1.08,elbow:1.02,swing:1.16,sway:0,h:1},
-  f:{sh:0.84,hip:1,loft:[[1,3.5,3.8],[6,2,3.9],[12.6,2.6,4.4],[15.2,1,3.1]],seat:[2.7,-1.7,0.2,4],nk:2.7,arm:0.8,th:[3.8,3.1],cf:[3.1,2.2],hand:2.4,boot:0.88,stance:0.94,elbow:0.9,swing:0.8,sway:0.7,h:0.96}};
+  n:{sh:1,hip:1,loft:[[1.2,2.9,4.1],[7.5,2.6,4.6],[14.8,3.2,5.1],[16.6,1.5,2.9]],seat:null,nk:2.8,arm:1,th:[4,3.3],cf:[3.3,2.7],hand:2.1,boot:1,stance:1,elbow:1,swing:1,sway:0,h:1,jaw:0.86},
+  m:{sh:1.08,hip:0.94,loft:[[1.2,2.9,4.1],[7.5,2.8,4.5],[14.8,3.8,5.3],[16.6,1.9,3]],seat:[2.3,-1.7,0.6,3.7],nk:3.1,arm:1.08,th:[4.1,3.3],cf:[3.4,2.7],hand:2.3,boot:1.08,stance:1.06,elbow:1.02,swing:1.16,sway:0,h:1,jaw:0.87},
+  f:{sh:0.84,hip:1.02,loft:[[1.2,3.6,3.8],[7.8,1.8,3.5],[14.2,2.5,3.9],[16.2,1,2.5]],seat:[2.8,-1.5,0.2,3.7],nk:2.3,arm:0.78,th:[3.9,2.9],cf:[2.9,2],hand:1.8,boot:0.86,stance:0.94,elbow:0.9,swing:0.8,sway:0.9,h:0.94,jaw:0.76}};
 const prGenCache={};
 function prGen(pal){
   const id=(pal.key?pal.gender:'n')+(pal.build==null?1:pal.build); if(prGenCache[id]) return prGenCache[id];
@@ -11702,8 +11703,8 @@ function prGen(pal){
 /* LA MOCHILA: modelo guardado para el almacenamiento ampliado. Hoy no la lleva nadie: se pone con pal.pack=true, y entonces también
    salen sus tirantes en el pecho y su sombra. Cómo se ve: sprites/personaje/mochila */
 function prBackpack(cap,pt){
-  for(let i=0;i<5;i++) for(let j=0;j<5;j++) { const c=pt(-4+i*2,-9,7.5+j*2); cap(c,c,2.1,2.1,PM.pack,(x,y)=>j===4&&i===1?PM.metal:0); }
-  const t0=pt(4.4,-10,16.6), t1=pt(9.4,-12,25);
+  for(let i=0;i<5;i++) for(let j=0;j<5;j++) { const c=pt(-4+i*2,-9,10.5+j*2); cap(c,c,2.1,2.1,PM.pack,(x,y)=>j===4&&i===1?PM.metal:0); }
+  const t0=pt(4.4,-10,19.6), t1=pt(9.4,-12,28);
   cap(t0,t1,0.55,0.4,PM.metal); cap(t1,t1,0.95,0.95,PM.led);
 }
 /* LAS CARAS: b y t mueven las cejas (t positivo las baja hacia el centro, enfado; negativo las sube, pena), e los ojos y m la boca.
@@ -11716,7 +11717,7 @@ function prFace(fx,v,fem,expr){
   const F=PR_FACE[expr], ax=Math.abs(fx), ex=ax-3.3, ey=-1.5, cy=-5.2, skin=fem?PM.lips:PM.mouth;
   const by=(fem?1.05:0.9)+F.b+F.t*ex;
   if(Math.abs(ex)<(fem?1.7:1.9)&&Math.abs(v-by)<(fem?0.35:0.55)) return PM.brow;
-  const eyes=F.e==='wink'?(fx<0?'shut':'open'):F.e, H=eyes==='wide'?1.6:fem?1.5:1.25;
+  const eyes=F.e==='wink'?(fx<0?'shut':'open'):F.e, H=eyes==='wide'?1.6:fem?1.3:1.15;
   if(eyes==='shut'){ if(Math.abs(ex)<1.6&&Math.abs(v-ey)<0.5) return PM.eye; }
   else if(eyes==='joy'){ if(Math.abs(ex)<1.7&&Math.abs(v-(ey+0.5-0.45*ex*ex))<0.55) return PM.eye; }
   else {
@@ -11733,7 +11734,7 @@ function prFace(fx,v,fem,expr){
   else if(F.m==='o'){ const a=ax/1.5, b=(v-cy)/1.7; if(a*a+b*b<1) return PM.inside; }
   else if(F.m==='pant'){ if(ax<1.7&&v>cy-1.3&&v<cy+0.8) return PM.inside; }
   else if(F.m==='laugh'){ if(ax<2.9&&v<cy+1&&v>cy-1.8+0.14*ax*ax) return v>cy+0.2?PM.teeth:PM.inside; }
-  if((fem||expr==='risa')&&Math.abs(ax-5.3)<1.2&&Math.abs(v+4)<0.85) return PM.blush;
+  if(expr==='risa'&&Math.abs(ax-5.3)<1.2&&Math.abs(v+4)<0.85) return PM.blush;
   return 0;
 }
 function prParts(pal,P,yaw,expr,h){
@@ -11753,48 +11754,48 @@ function prParts(pal,P,yaw,expr,h){
     };
     cap([hipX,0,pz],G.knee,g.th[0],g.th[1],PM.suit,pilot?thigh:null,1);
     cap(G.knee,G.ank,g.cf[0],g.cf[1],PM.suit,shin,1);
-    cap(G.ank,G.toe,3.3*g.boot,3.0*g.boot,PM.boot,(x,y,z)=>z<1.5?PM.sole:0,1);
+    cap(G.ank,G.toe,2.9*g.boot,2.6*g.boot,PM.boot,(x,y,z)=>z<1.5?PM.sole:0,1);
   }
   // tronco: dos columnas juntas para que sea más ancho que profundo
   const torso=(x,y,z)=>{
     const zr=(z-pz)/g.h;
-    if(zr>4.4&&zr<6.6) return Math.abs(x)<1.7&&y>0?PM.buckle:PM.belt;
-    if(zr<=4.4) return 0;
-    if(pilot&&pal.pack&&zr<15.5&&Math.abs(Math.abs(x)-4.6*g.cw)<0.95) return PM.helmD;              // tirantes de la radio
+    if(zr>5.4&&zr<7.4) return Math.abs(x)<1.7&&y>0?PM.buckle:PM.belt;
+    if(zr<=5.4) return 0;
+    if(pilot&&pal.pack&&zr<18&&Math.abs(Math.abs(x)-4.6*g.cw)<0.95) return PM.helmD;              // tirantes de la radio
     if(y>0&&Math.abs(x)<0.4) return PM.band;                                                     // cremallera
-    if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>8.6&&zr<11.2) return zr>10.3?PM.seam:PM.pocket; // bolsillos con solapa
+    if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>10.8&&zr<13.8) return zr>12.8?PM.seam:PM.pocket; // bolsillos con solapa
     return 0;
   };
   // losas horizontales apiladas de la cadera al pecho: de una sola pieza por delante, y la anchura no añade fondo. No bajan de la
   // cadera: lo que queda por debajo son los muslos; bajarlas más deja un pañal colgando entre las piernas
-  for(let i=0,z=1;z<=15.2;i++,z+=0.4){
-    const j=z<6?0:z<12.6?1:2, A=g.loft[j], B=g.loft[j+1], k=(z-A[0])/(B[0]-A[0]);
-    const x=lerp(A[1],B[1],k), r=lerp(A[2],B[2],k), c=sway*Math.max(0,1-z/12.6);
+  for(let i=0,T=g.loft,z=T[0][0];z<=T[3][0];i++,z+=0.4){
+    const j=z<T[1][0]?0:z<T[2][0]?1:2, A=T[j], B=T[j+1], k=(z-A[0])/(B[0]-A[0]);
+    const x=lerp(A[1],B[1],k), r=lerp(A[2],B[2],k), c=sway*Math.max(0,1-z/T[2][0]);
     cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%9===0);
   }
   // el frente de la cadera baja hasta los muslos: sin esto, debajo del cinturón se ve la panza de la losa, en sombra
   cap(pt(sway-2*g.hw,1.3,-0.4),pt(sway+2*g.hw,1.3,-0.4),3.3*g.hw,3.3*g.hw,PM.suit);
   // las nalgas, solo por detrás
   if(g.seat) for(const s of [-1,1]){ const [bx,by,bz,br]=g.seat, q=pt(s*bx+sway,by,bz); cap(q,q,br,br,PM.suit,null,1); }
-  if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*g.cw,1.2,11); cap(q,q,3.7*g.cw,3.7*g.cw,PM.suit,torso); }
+  if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*g.cw,1.5,12.6); cap(q,q,3.4*g.cw,3.4*g.cw,PM.suit,torso); }
   // brazos: hombro, codo, guante y banda reflectante; el parche va en el hombro izquierdo
   for(const [H,s] of [[AL,-1],[AR,1]]){
     const q=g.arm; grp=s<0?2:3;
-    cap(H.sh,H.sh,3.6*q,3.6*q,PM.suit,pilot&&s<0?(x,y,z)=>x<H.sh[0]-0.5&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
-    cap(H.sh,H.el,3.3*q,2.9*q,PM.suit,(x,y,z,k)=>k>0.55&&k<0.74?PM.band:0,1);
-    cap(H.el,H.ha,2.9*q,2.6*q,PM.suit,(x,y,z,k)=>k>0.8?PM.pocket:0,1);   // con su puño
+    cap(H.sh,H.sh,3.2*q,3.2*q,PM.suit,pilot&&s<0?(x,y,z)=>x<H.sh[0]-0.5&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
+    cap(H.sh,H.el,3*q,2.6*q,PM.suit,(x,y,z,k)=>k>0.55&&k<0.74?PM.band:0,1);
+    cap(H.el,H.ha,2.6*q,2*q,PM.suit,(x,y,z,k)=>k>0.8?PM.pocket:0,1);   // con su puño
     cap(H.ha,[H.ha[0],H.ha[1],H.ha[2]-1.8],g.hand,g.hand*0.82,PM.glove);
     cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
   }
   grp=1;
   // cuello y solapas del traje, abiertas por delante
-  const n=pt(0,0,16.4+br*0.3), nr=g.nk+0.8;
-  cap(pt(0,0,14.5),pt(0,0.3,21),g.nk,g.nk,pilot?PM.skin:PM.metal);
-  for(let i=0;i<16;i++){ const a=i/16*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a); if(sa>0.86) continue; const q=[n[0]+ca*nr,n[1]+sa*nr,n[2]]; cap(q,q,1.3,1.3,pilot?PM.suit:PM.band); }
+  const n=pt(0,0,18.4+br*0.3), nr=g.nk+0.7;
+  cap(pt(0,0,16),pt(0,0.3,24),g.nk,g.nk*0.92,pilot?PM.skin:PM.metal);
+  for(let i=0;i<16;i++){ const a=i/16*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a); if(sa>0.86) continue; const q=[n[0]+ca*nr,n[1]+sa*nr,n[2]]; cap(q,q,1.1,1.1,pilot?PM.suit:PM.band); }
   // cabeza: esfera con casco, gafas y cara pintados según el punto; orejeras y gafas con relieve; yaw = hacia dónde mira
   // la cabeza se inclina hacia arriba solo cuando mira a la cámara, para que desde tan alto se le vea la cara: de lado o de espaldas
   // esa inclinación la haría mirar al cielo. Las medidas de la cara van en unidades de una cabeza de radio 9,4: hs la pasa a su tamaño
-  const HR=8.6*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h)), hc=pt(0,0.5,26.6+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const HR=5.8*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h)), hc=pt(0,0.8,29.2+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
   const hp=(x,y,z)=>{ const yy=(y*cp-z*sp)*hs, zz=(y*sp+z*cp)*hs, xx=x*hs; return [hc[0]+xx*cy+yy*sy,hc[1]-xx*sy+yy*cy,hc[2]+zz]; };
   const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [(dx*cy-dy*sy)/hs,(yy*cp+dz*sp)/hs,(dz*cp-yy*sp)/hs]; };   // al revés: del mundo a la cabeza
   const headF=(x,y,z)=>{
@@ -11819,28 +11820,28 @@ function prParts(pal,P,yaw,expr,h){
     if(fem&&hd==='casco'&&ax>5.5&&zr>-5.6) return PM.hair;                        // mechones que enmarcan la cara
     if(!fem&&hd!=='casco'&&ax>6.3&&zr>-2.6) return PM.hair;                     // patillas
     const fc=prFace(fx,zr,fem,expr); if(fc) return fc;
-    if(!fem&&pal.beard&&zr<-3.4&&fy>1) return PM.hair;
+    if(!fem&&pal.beard&&zr<-4.2+0.22*ax&&fy>1) return PM.hair;                 // baja de las patillas hasta encima de la boca
     return PM.skin;
   };
   grp=4;
-  cap(hc,hc,HR,HR,PM.skin,headF);
+  cap(hp(0,0,1.2),hp(0,0,-3),HR,HR*g.jaw,PM.skin,headF);   // ovalada: arriba el cráneo, abajo la mandíbula
   if(pilot){
-    cap(hp(0,9.2,-3),hp(0,9.2,-3),(fem?0.9:1.2)*hs,(fem?0.9:1.2)*hs,PM.skin);       // nariz
-    if(hd==='pelo'||hd==='gorra') for(const s of [-1,1]) cap(hp(s*9.2,1,-2),hp(s*9.2,1,-2),1.9,1.9,PM.skin);   // orejas
+    const ns=hp(0,fem?7.5:8.4,-3); cap(ns,ns,(fem?0.8:1.1)*hs,(fem?0.8:1.1)*hs,PM.skin);   // nariz
+    if(hd==='pelo'||hd==='gorra') for(const s of [-1,1]) cap(hp(s*8.6,1,-2),hp(s*8.6,1,-2),1.9*hs,1.9*hs,PM.skin);   // orejas
   }
   const hw=(x,y,z)=>[hc[0]+(x*cy+y*sy)*hs,hc[1]+(y*cy-x*sy)*hs,hc[2]+z*hs];   // lo que cuelga no se inclina con la cabeza
   if(pilot){
-    if(hd==='gorra') for(const [y,x,r] of [[7.6,6,1.5],[10,5,1.4],[12,3,1.2]]) cap(hp(-x,y,2.4),hp(x,y,2.4),r,r,PM.helm);
-    if(hd==='coleta'||(fem&&hd==='gorra')){ cap(hw(0,-8.6,3),hw(0,-11,-4),3,2.3,PM.hair); cap(hw(0,-11,-4),hw(0,-10,-13),2.3,0.9,PM.hair); }
-    if(hd==='melena'){ cap(hw(0,-6,0),hw(0,-7,-12),6,3.6,PM.hair); for(const s of [-1,1]) cap(hw(s*7.2,-2,-1),hw(s*6.6,-3,-11),3.4,2.3,PM.hair); }
+    if(hd==='gorra') for(const [y,x,r] of [[7.6,6,1.5],[10,5,1.4],[12,3,1.2]]) cap(hp(-x,y,2.4),hp(x,y,2.4),r*hs,r*hs,PM.helm);
+    if(hd==='coleta'||(fem&&hd==='gorra')){ cap(hw(0,-8.6,3),hw(0,-11,-4),3*hs,2.3*hs,PM.hair); cap(hw(0,-11,-4),hw(0,-10,-18),2.3*hs,0.9*hs,PM.hair); }
+    if(hd==='melena'){ cap(hw(0,-6,0),hw(0,-7,-17),6*hs,3.6*hs,PM.hair); for(const s of [-1,1]) cap(hw(s*7.2,-2,-1),hw(s*6.6,-3,-15),3.4*hs,2.3*hs,PM.hair); }
     for(const s of [-1,1]){
       if(hd==='casco') cap(hp(s*7.9,0.4,-1),hp(s*7.7,0.8,-4.4),2.4*hs,2.2*hs,PM.helm);
     }
     if(pal.pack) prBackpack(cap,pt);
   } else cap(hp(0,0,9),hp(0,0,11.5),0.7,0.5,PM.metal);
   const shadow=O.filter(p=>p.sh);
-  shadow.push({a:[hc[0],hc[1],hc[2]-5],b:[hc[0],hc[1],hc[2]+5],ra:7.9,rb:7.9});
-  if(pilot&&pal.pack) shadow.push({a:pt(0,-9,8),b:pt(0,-9,15),ra:4.8,rb:4.8});
+  shadow.push({a:[hc[0],hc[1],hc[2]-1.5],b:[hc[0],hc[1],hc[2]+0.8],ra:HR*0.9,rb:HR*0.9});
+  if(pilot&&pal.pack) shadow.push({a:pt(0,-9,11),b:pt(0,-9,18),ra:4.8,rb:4.8});
   return {O,shadow};
 }
 /* Alisa la superficie en una dirección (dx,dy): las esferas dejan ondas que con la luz por bandas se ven como grano. No cruza bordes */
@@ -11893,7 +11894,7 @@ function prBuild(pal,d,mode,f,look,expr){
     }
   }
   const toW=v=>[v[0]*c+v[1]*s,-v[0]*s+v[1]*c,v[2]];
-  return prCache[key]={S,I:Uint16Array.from(I),NX:Int8Array.from(NX),NY:Int8Array.from(NY),NZ:Int8Array.from(NZ),M:Uint8Array.from(M),F:Uint8Array.from(F),
+  return prCache[key]={S,I:Uint32Array.from(I),NX:Int8Array.from(NX),NY:Int8Array.from(NY),NZ:Int8Array.from(NZ),M:Uint8Array.from(M),F:Uint8Array.from(F),
     bones:shadow.map(p=>[toW(p.a),toW(p.b),(p.ra+p.rb)/2])};
 }
 /* Cinco tonos por material: las sombras tiran a violeta y las luces a crema */
@@ -12069,9 +12070,9 @@ function lookFrame(){
   u.idle=0;   // aquí no mira a los lados: la cara tiene que verse
   if(!lookShCv) lookShCv=mkCanvas(cv.width,cv.height);
   const sg=lookShCv.getContext('2d'), src=sky.sun.alt>0?sky.sun:sky.moon, A=src.az/DEG, c0=ctx;
-  const r0=prRes, at=q=>{ ctx=q; ctx.imageSmoothingEnabled=false; ctx.save(); ctx.scale(k,k); ctx.translate(Math.round(cv.width/2/k)-Math.round(u.x),Math.round((cv.height-66)/k)-Math.round(u.y)); };
+  const r0=prRes, at=q=>{ ctx=q; ctx.imageSmoothingEnabled=false; ctx.save(); ctx.scale(k,k); ctx.translate(Math.round(cv.width/2/k)-Math.round(u.x),Math.round((cv.height-130)/k)-Math.round(u.y)); };
   g.clearRect(0,0,cv.width,cv.height);
-  g.fillStyle=['#2c3b4e','#3a2f44','#141c2c'][lookSky]; g.beginPath(); g.ellipse(cv.width/2,cv.height-66,219,78,0,0,Math.PI*2); g.fill();
+  g.fillStyle=['#2c3b4e','#3a2f44','#141c2c'][lookSky]; g.beginPath(); g.ellipse(cv.width/2,cv.height-130,219,78,0,0,Math.PI*2); g.fill();
   g.strokeStyle='#ffffff14'; g.lineWidth=3; g.stroke();
   prRes=LOOK_RES; prSkyFix=sky; shS={dx:Math.sin(A),dy:-Math.cos(A),len:Math.min(SHADOW_MAXLEN,1/Math.tan(Math.max(3,src.alt)/DEG))};
   sg.clearRect(0,0,cv.width,cv.height);
