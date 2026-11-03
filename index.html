@@ -120,6 +120,21 @@
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
+  #devMenu{ position:absolute; inset:0; z-index:40; display:flex; flex-direction:column; gap:8px; padding:12px 16px; pointer-events:auto; color:#cfd6df; background:#0a1019; font-family:var(--font-body); }
+  .devHead{ display:flex; align-items:center; justify-content:space-between; font-family:var(--font-head); font-size:27px; color:var(--gold); }
+  .devHead b{ font-weight:400; }
+  .devBody{ flex:1; min-height:0; display:flex; gap:16px; align-items:center; justify-content:center; }
+  #devCv{ height:100%; max-height:400px; aspect-ratio:368/416; image-rendering:pixelated; background:radial-gradient(#2c3b4e,#101722); border:1px solid var(--border); border-radius:8px; }
+  .devSide{ display:flex; flex-direction:column; gap:10px; max-width:400px; }
+  #devInfo{ font-family:var(--font-head); font-size:29px; color:#fff; }
+  #devInfo i{ font-style:normal; color:#ff8a3a; }
+  .devSide .lookPose{ justify-content:flex-start; }
+  .devDir{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:14px; color:var(--text-dim); }
+  .devDir input{ flex:1; accent-color:#f5c518; }
+  .devHelp{ font-size:14px; font-weight:700; color:var(--text-dim); }
+  .devStrip{ display:flex; gap:6px; justify-content:center; }
+  .devStrip canvas{ width:84px; height:95px; image-rendering:pixelated; cursor:pointer; background:#101722; border:2px solid var(--border); border-radius:6px; }
+  .devStrip canvas.on{ border-color:#f5c518; }
   .toolWrap{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
   .toolCard{ display:flex; flex-direction:column; align-items:center; gap:6px; font-family:var(--font-head); font-size:25px; color:var(--gold); }
   .toolCard b{ font-weight:400; }
@@ -496,7 +511,22 @@
         <div class="toolCard"><canvas id="toolCv" width="368" height="416"></canvas><b>HACHA</b></div>
         <div class="toolCard"><canvas id="toolUseCv" width="368" height="416"></canvas><div class="lookPose" id="toolPose"></div></div>
       </div>
-      <button class="btn small" id="btnToolBack">← VOLVER</button>
+      <div class="row"><button class="btn small" id="btnToolBack">← VOLVER</button><button class="btn small" id="btnToolDev">🛠 MENÚ DEV</button></div>
+    </div>
+    <div id="devMenu" class="hidden">
+      <div class="devHead"><b>MENÚ DEV · ANIMACIÓN DEL HACHA</b><button class="btn small" data-x="close">✕ CERRAR (F2)</button></div>
+      <div class="devBody">
+        <canvas id="devCv" width="368" height="416"></canvas>
+        <div class="devSide">
+          <div id="devInfo"></div>
+          <div class="lookPose" id="devAnims"></div>
+          <div class="lookPose" id="devCtl"></div>
+          <div class="lookPose" id="devSpeeds"></div>
+          <label class="devDir">GIRAR <input type="range" id="devDir" min="0" max="15" step="1"></label>
+          <div class="devHelp">Espacio: pausa · ← →: fotograma · A D: girar · 1 a 4: animación · Esc: cerrar</div>
+        </div>
+      </div>
+      <div class="devStrip" id="devStrip"></div>
     </div>
     <div id="scrArcade" class="overlay hidden">
       <div class="arcCab">
@@ -12659,7 +12689,7 @@ function zonaStep(dt){
   const h=human;
   if(h.swingT>0){
     const t0=h.swingT; h.swingT=Math.max(0,t0-dt);
-    if(t0>PR_SWING*0.4&&h.swingT<=PR_SWING*0.4) zonaHit();   // aquí el filo llega abajo
+    if(t0>PR_SWING*0.25&&h.swingT<=PR_SWING*0.25) zonaHit();   // fotograma 7 de 8: aquí el filo llega abajo
   } else if(keys[' ']||mouse.down) h.swingT=PR_SWING;
   for(const f of zonaFalls) f.k+=dt/40;
   zonaFalls=zonaFalls.filter(f=>f.k<1);
@@ -12680,6 +12710,85 @@ function drawZonaFalls(){
     ctx.drawImage(f.s,-f.s.width/2,-f.s.height); ctx.restore();
   }
 }
+
+/* ===================== MENÚ DEV =====================
+   F2 desde cualquier sitio, o el botón de HERRAMIENTAS: la animación del piloto con el hacha, a cámara lenta o fotograma a
+   fotograma y desde cualquier lado. Tiene su propio estado: lo de detrás se queda congelado y vuelve igual al cerrar. */
+const DEV_ANIM=[['PARADO',0,2,2/88],['ANDAR',1,8,8/19.2],['CORRER',2,8,8/20.6],['TALAR',3,8,8/PR_SWING]];   // nombre, modo, fotogramas y fotogramas por tick
+const DEV_SPEED=[0.1,0.25,0.5,1,2];
+let devPrev='menu', devAnim=3, devF=0, devPlay=true, devSpeed=2, devDir=4, devPal=null, devLast=0;
+const devEl=id=>document.getElementById(id);
+const devPhase=f=>f<4?'SUBE':f<6?'BAJA':f===6?'IMPACTO':'VUELVE';
+function toggleDev(){ if(state==='dev') closeDev(); else openDev(); }
+function openDev(){
+  devPrev=state; state='dev'; devLast=performance.now();
+  for(const k in keys) delete keys[k];
+  mouse.down=false;
+  devPal=Object.assign({},PILOT_PAL,{tool:'hacha'});
+  devEl('devMenu').classList.remove('hidden');
+  renderDev(); requestAnimationFrame(devFrame);
+}
+function closeDev(){ S.pickup(); state=devPrev; devEl('devMenu').classList.add('hidden'); }
+/* Pinta una pose a la resolución S sobre un lienzo */
+function devPose(g,f,S0){
+  const r0=prRes, m=DEV_ANIM[devAnim][1];
+  prRes=S0; prSkyFix=LOOK_SKY[0][1];
+  try{
+    const c=prRender(prBuild(devPal,devDir,m,f,0,m===3?'enfado':'normal'),devPal,prLight(toolU),false);
+    g.clearRect(0,0,g.canvas.width,g.canvas.height); g.imageSmoothingEnabled=false; g.drawImage(c,0,0,g.canvas.width,g.canvas.height);
+  } finally { prRes=r0; prSkyFix=null; }
+}
+function devShow(){
+  const n=DEV_ANIM[devAnim][2], f=Math.floor(devF)%n;
+  devPose(devEl('devCv').getContext('2d'),f,4);
+  devEl('devInfo').innerHTML='Fotograma '+(f+1)+'/'+n+(devAnim===3?' · <i>'+devPhase(f)+'</i>':'');
+  [...devEl('devStrip').children].forEach((c,i)=>c.classList.toggle('on',i===f));
+}
+function renderDev(){
+  const n=DEV_ANIM[devAnim][2], chip=(t,on,a,v)=>'<button class="lkChip'+(on?' on':'')+'" data-'+a+'="'+v+'">'+t+'</button>';
+  devEl('devAnims').innerHTML=DEV_ANIM.map((a,i)=>chip(a[0],i===devAnim,'a',i)).join('');
+  devEl('devCtl').innerHTML=chip('◀ FOTOGRAMA',false,'s',-1)+chip(devPlay?'⏸ PAUSA':'▶ PLAY',devPlay,'p',1)+chip('FOTOGRAMA ▶',false,'s',1);
+  devEl('devSpeeds').innerHTML=DEV_SPEED.map((v,i)=>chip('×'+v,i===devSpeed,'v',i)).join('');
+  devEl('devDir').value=devDir;
+  const st=devEl('devStrip');
+  st.innerHTML=Array.from({length:n},(_,i)=>'<canvas width="184" height="208" data-f="'+i+'"></canvas>').join('');
+  [...st.children].forEach((c,i)=>devPose(c.getContext('2d'),i,2));
+  devShow();
+}
+function devStep(s){ const n=DEV_ANIM[devAnim][2]; devPlay=false; devF=(Math.floor(devF)+s+n)%n; S.tick(); renderDev(); }
+function devSetAnim(i){ devAnim=i; devF=0; renderDev(); }
+function devTurn(s){ devDir=(devDir+s+16)%16; renderDev(); }
+function devFrame(now){
+  if(state!=='dev') return;
+  const dt=Math.min(3,(now-devLast)/16.667); devLast=now;
+  if(devPlay){
+    const a=DEV_ANIM[devAnim], f0=Math.floor(devF);
+    devF=(devF+a[3]*DEV_SPEED[devSpeed]*dt)%a[2];
+    if(Math.floor(devF)!==f0) devShow();
+  }
+  requestAnimationFrame(devFrame);
+}
+function devKey(k){
+  if(k==='escape') closeDev();
+  else if(k===' '){ devPlay=!devPlay; renderDev(); }
+  else if(k==='arrowleft') devStep(-1);
+  else if(k==='arrowright') devStep(1);
+  else if(k==='a') devTurn(-1);
+  else if(k==='d') devTurn(1);
+  else if(k>='1'&&k<='4') devSetAnim(+k-1);
+}
+devEl('devMenu').addEventListener('click',e=>{
+  const q=e.target.closest('button,canvas'); if(!q) return;
+  const d=q.dataset;
+  if(d.x) closeDev();
+  else if(d.a!=null) devSetAnim(+d.a);
+  else if(d.s!=null) devStep(+d.s);
+  else if(d.p!=null){ devPlay=!devPlay; renderDev(); }
+  else if(d.v!=null){ devSpeed=+d.v; renderDev(); }
+  else if(d.f!=null){ devPlay=false; devF=+d.f; renderDev(); }
+});
+devEl('devDir').addEventListener('input',e=>{ devDir=+e.target.value; renderDev(); });
+devEl('btnToolDev').onclick=()=>{ S.pickup(); openDev(); };
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -12711,6 +12820,7 @@ function menuBuildItems(){
     {id:'opt_mira',label:'MIRA',val:['NORMAL','GRANDE','ENORME'][save.mira],sub:'Tamaño del puntero al apuntar'},
     {id:'opt_miraEst',label:'COLOR MIRA',val:['ADAPTATIVA','CLARA','OSCURA'][save.miraEst],sub:'Adaptativa: cambia sola para verse sobre niebla, arena o suelo oscuro'},
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
+    {id:'opt_dev',label:'MENÚ DEV',sub:'Ver las animaciones fotograma a fotograma (también con F2)'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
     {id:'back',label:'← VOLVER'}];
   if(menuView==='controls') return [{id:'back',label:'← VOLVER'}];
@@ -12807,6 +12917,7 @@ function menuActivate(){
     case 'controls': S.pickup(); menuView='controls'; menuIdx=0; renderMainMenu(); break;
     case 'options': S.pickup(); menuView='options'; menuIdx=0; renderMainMenu(); break;
     case 'back': { const from=menuView; S.pickup(); menuView='main'; menuItems=menuBuildItems(); menuIdx=Math.max(0,menuItems.findIndex(x=>x.id===(from==='confirm'?'new':from))); renderMainMenu(); break; }
+    case 'opt_dev': S.pickup(); openDev(); break;
     case 'opt_sound': save.sound=!save.sound; saveSave(); updateSoundBtn(); S.pickup(); renderMainMenu(); break;
     case 'opt_vol': menuOption(1,true); break;
     case 'opt_miraEst': save.miraEst=(save.miraEst+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
@@ -13870,6 +13981,8 @@ function loop(now){
 window.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(arcDemo){ arcDemoEnd(); e.preventDefault(); return; }
+  if(k==='f2'){ toggleDev(); e.preventDefault(); return; }
+  if(state==='dev'){ devKey(k); e.preventDefault(); return; }
   if(state==='arcade'){ arcKey(k); e.preventDefault(); return; }
   keys[k]=true;
   if(k===' '||k.startsWith('arrow')) e.preventDefault();
