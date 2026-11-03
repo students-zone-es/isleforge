@@ -120,6 +120,10 @@
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
+  .toolWrap{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+  .toolCard{ display:flex; flex-direction:column; align-items:center; gap:6px; font-family:var(--font-head); font-size:25px; color:var(--gold); }
+  .toolCard b{ font-weight:400; }
+  .toolCard canvas{ height:300px; aspect-ratio:368/416; image-rendering:pixelated; background:radial-gradient(#2c3b4e,#101722); border:1px solid var(--border); border-radius:8px; }
   .arcCab{ width:min(620px,94%); padding:12px 16px 16px; background:linear-gradient(#262b6e,#14163a); border:4px solid #0a0b1c; border-radius:16px 16px 6px 6px; box-shadow:0 0 44px #3ee6e633; }
   .arcMarquee{ font-family:var(--font-head); font-size:46px; line-height:1; letter-spacing:4px; padding:8px 4px; text-align:center; color:#1a1400; background:linear-gradient(#ffe88a,#f5a623); border-radius:6px; box-shadow:0 0 20px #f5c51899; }
   .arcScreen{ position:relative; margin-top:10px; padding:14px 18px; height:320px; overflow:hidden; display:flex; flex-direction:column; justify-content:center; background:radial-gradient(#0a2230,#03070c); border:7px solid #05060e; border-radius:18px; font-family:var(--font-head); color:#9ff5e0; text-align:center; }
@@ -486,6 +490,14 @@
       <div class="row"><button class="btn" id="btnStoryOk">CONTINUAR</button></div>
     </div>
     <div id="scrSeed" class="overlay hidden"></div>
+    <div id="scrTools" class="overlay hidden">
+      <h1 class="title" style="font-size:27px;">HERRAMIENTAS</h1>
+      <div class="toolWrap">
+        <div class="toolCard"><canvas id="toolCv" width="368" height="416"></canvas><b>HACHA</b></div>
+        <div class="toolCard"><canvas id="toolUseCv" width="368" height="416"></canvas><div class="lookPose" id="toolPose"></div></div>
+      </div>
+      <button class="btn small" id="btnToolBack">← VOLVER</button>
+    </div>
     <div id="scrArcade" class="overlay hidden">
       <div class="arcCab">
         <div class="arcMarquee">ARCHIPIÉLAGO</div>
@@ -496,7 +508,7 @@
 
     <div id="homeHud" class="hidden">
       <div class="homeInfo">
-        <div class="hiTitle">BASE ISLEFORGE</div>
+        <div class="hiTitle" id="hTitle">BASE ISLEFORGE</div>
         <div class="workTag">◆ <span id="hWork">0</span></div>
         <div id="hInv"></div><div id="hHouse"></div><div id="hWx" style="color:#8ae7ff"></div><div id="hOre" style="color:#e0b07a"></div><div id="hPack"></div><div id="hFarm" style="color:var(--green)"></div>
       </div>
@@ -525,7 +537,7 @@ const ASSETS={"pulso_hadal": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggA
 (function(){
 "use strict";
 const DEBUG = /[?&]debug/.test(location.search);
-let arcadeRun=false, arcDemo=false;   // partida en la máquina recreativa, y su demostración (p9u_arcade.js)
+let arcadeRun=false, arcDemo=false, zonaOn=false;   // partida en la máquina recreativa, su demostración (p9u_arcade.js) y la zona de pruebas (p9v_tools.js)
 
 /* ===================== PERSISTENCIA ===================== */
 const SAVE_KEY='omnialoya_save_v4', OLD_SAVE_KEY='omnialoya_save_v3';   // se mantienen para no perder la partida guardada
@@ -634,7 +646,7 @@ function normalizeSave(s){
   const uv=s.upV||{}; s.upV={};
   for(const v of VEHICLE_IDS){ s.upV[v]={}; for(const k of VEH_UPS) s.upV[v][k]=uv[v]?(uv[v][k]||0):((s.up&&s.up[k])||0); }
   const h=Object.assign(defaultHome(),s.home||{});
-  h.inv=Object.assign({potato:0,carrot:0,wheat:0},h.inv||{});
+  h.inv=Object.assign({potato:0,carrot:0,wheat:0,wood:0},h.inv||{});
   const plots=Array.isArray(h.plots)?h.plots:[];
   h.plots=Array.from({length:16},(_,i)=>Object.assign({c:null,at:0},plots[i]||{}));
   if(!Array.isArray(h.pack)) h.pack=[];
@@ -5795,12 +5807,14 @@ function buildHome(){
     for(let y=-2;y<=2;y++) for(let x=-2;x<=2;x++) if(x*x+y*y<=5 && inB(c+x,r+y) && map[idx(c+x,r+y)]===G) setTile(c+x,r+y,BUSH);
   }
   homeLamps=[[26,28],[38,28],[53,28],[66,28],[45,33],[49,33],[45,47],[49,47],[45,coast-1],[49,coast-1]];
+  if(zonaOn) clearZona();
   buildMapCanvas();
   buildHomeSolids();
   buildHomeSpots();
 }
 /* Lo que estorba sin ser casilla del mapa: farolas, mástil, helicóptero aparcado y valla del huerto, como rectángulos [x0,y0,x1,y1] */
 function buildHomeSolids(){
+  if(zonaOn){ homeSolids=[]; return; }
   const L=homeL.heli, hx=(L.c0+L.w/2)*TILE+6, hy=(L.r0+L.h/2)*TILE-4, fx=52*TILE-6, fy=33*TILE-6, fw=13*TILE+12, fh=12*TILE+12;
   homeSolids=homeLamps.map(([c,r])=>[c*TILE+12,r*TILE+20,c*TILE+18,r*TILE+24]);
   homeSolids.push([44*TILE+4,28*TILE+20,44*TILE+10,28*TILE+24]);
@@ -5818,6 +5832,7 @@ function homePush(u){
 }
 function buildHomeSpots(){
   if(interior){ homeSpots=interiorSpots(); return; }   // dentro de un edificio (p9n_interiors.js)
+  if(zonaOn){ homeSpots=zonaSpots(); return; }
   const L=homeL, f=houseFootprint();
   homeSpots=[
     {id:'shop', to:'workshop', x:(L.workshop.c0+6)*TILE, y:(L.workshop.r0+L.workshop.h)*TILE+20, label:'ENTRAR · TALLER MILITAR', r:54},
@@ -5847,14 +5862,14 @@ function enterHome(mood){
   human=makeWalker(hs.x,hs.y+24);
   if(mood) setMood(human,mood,260);
   residents=[];
-  const n=Math.min(14,save.rescuedTotal||0);
+  const n=zonaOn?0:Math.min(14,save.rescuedTotal||0);
   for(let i=0;i<n;i++){ const p=randomBaseSpot(); residents.push(makeWalker(p.x,p.y,{radius:10,mass:0.6,accel:0.3,friction:0.8,speedMax:1.1,tx:p.x,ty:p.y,wait:rand(0,240),pal:RES_PALS[i%RES_PALS.length],stuck:0})); }
   homeMoved=0;
   snapCamera(human.x,human.y);
   document.body.className='era-base';
   state='home'; showOnly(null); setHomeHud(true);
   updateHomeHud();
-  if(!save.loreSeen){ save.loreSeen=true; saveSave(); openStory(true); }   // la primera vez se cuenta la historia
+  if(!save.loreSeen&&!zonaOn){ save.loreSeen=true; saveSave(); openStory(true); }   // la primera vez se cuenta la historia
 }
 function setHomeHud(on){
   document.getElementById('homeHud').classList.toggle('hidden',!on);
@@ -5872,6 +5887,7 @@ function stepHome(dt){
   if(keys.a||keys.arrowleft) ix-=1;
   if(keys.d||keys.arrowright) ix+=1;
   h.speedMax=keys.shift?3.6:2.4;
+  if(h.swingT>0) ix=iy=0;   // mientras golpeas no andas
   if(ix||iy){
     accelerate(h,ix,iy,dt);
     if(Math.abs(ix)>Math.abs(iy)) h.dir=ix<0?'left':'right'; else h.dir=iy<0?'up':'down';
@@ -5903,9 +5919,9 @@ function stepHome(dt){
   }
   homeNear=null; let bd=1e9;
   for(const s of homeSpots){ const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<s.r&&d<bd){ bd=d; homeNear=s; } }
-  if(!interior) homeFx(dt); else if(interior.def.fx) interior.def.fx(dt,interior.o);
+  if(zonaOn) zonaStep(dt); else if(!interior) homeFx(dt); else if(interior.def.fx) interior.def.fx(dt,interior.o);
   updateParticles(dt);
-  updateHomeGuide();
+  if(!zonaOn) updateHomeGuide();
   updateHomeHud();
 }
 function homeFx(dt){
@@ -6051,6 +6067,7 @@ function guideAdvance(){
   if(human) popup(human.x,human.y-40,'✔ ¡BIEN!','#3ee67a',16);
 }
 function guideTarget(){
+  if(zonaOn) return null;
   const g=save.home.guide; if(g>=HOME_GUIDE.length) return null;
   const tg=HOME_GUIDE[g].target; if(!tg) return null;
   if(tg==='plot'){ const i=save.home.plots.findIndex((p,j)=>j<houseLv().plots&&!p.c); const s=homeSpots.find(s=>s.id==='plot'&&s.i===(i<0?0:i)); return s; }
@@ -6060,7 +6077,8 @@ function updateHomeHud(){
   const h=save.home, lv=houseLv();
   setText('hWork',save.work);
   setText('hInv','🥔 '+h.inv.potato+'  🥕 '+h.inv.carrot+'  🌾 '+h.inv.wheat);
-  setText('hHouse','CASA Nv '+h.house+' · '+lv.name);
+  setText('hTitle',zonaOn?'ZONA DE PRUEBAS':'BASE ISLEFORGE');
+  setText('hHouse',zonaOn?'🪵 MADERA '+h.inv.wood:'CASA Nv '+h.house+' · '+lv.name);
   { const n=oreTotal(save.minerals); setText('hOre',n?'⛏ '+n+' minerales (almacén en el taller)':''); }
   { const WX=WEATHERS[weather.id], wet=weather.id==='rain'||weather.id==='storm'; setText('hWx',dayIcon()+' '+clockHHMM()+' · '+WX.icon+' '+WX.name+(wet?' · huerto +50%':'')); }
   setText('hPack','🎒 RACIONES '+h.pack.length+'/'+lv.slots);
@@ -6325,6 +6343,7 @@ function homeRoofs(){
   return [[L.c0*TILE,L.r0*TILE,L.w*TILE,L.h*TILE,84],[f.c0*TILE,f.r0*TILE,f.w*TILE,hh,Math.min(42,Math.round(hh*0.34))]];
 }
 function castHome(){
+  if(zonaOn){ if(human) shPerson(human); return; }
   const L=homeL.heli;
   shLong({x:(L.c0+L.w/2)*TILE+6,y:(L.r0+L.h/2)*TILE-4,radius:44},drawParkedHeli);
   for(const [c,r] of homeLamps) shStand(c*TILE+15,r*TILE+22,16,34,()=>drawLamp(c,r));
@@ -6338,20 +6357,16 @@ function renderHome(){
   ctx.save(); ctx.translate(-cx,-cy);
   ctx.drawImage(mapCanvas,cx,cy,W,H,cx,cy,W,H);
   drawWaterFx(cx,cy);
-  drawShip();
-  drawHomeFarm();
-  drawHelipadHome();
+  if(!zonaOn){ drawShip(); drawHomeFarm(); drawHelipadHome(); }
   drawSunShadows(cx,cy,castHome);   // sombras según el sol
-  drawParkedHeli();
-  drawWorkshop();
-  drawHouse();
-  drawHomeFlag();
-  drawLamps();
-  const people=residents.map(r=>[r,r.pal]); if(human) people.push([human,PILOT_PAL]);
+  if(zonaOn) drawZona();
+  else { drawParkedHeli(); drawWorkshop(); drawHouse(); drawHomeFlag(); drawLamps(); }
+  const people=residents.map(r=>[r,r.pal]); if(human) people.push([human,zonaOn?zonaPal:PILOT_PAL]);
   people.sort((a,b)=>a[0].y-b[0].y);
   for(const [p,pal] of people) drawHuman(p,pal);
   drawSunShadowsTop();
   drawTrees(cx,cy);
+  if(zonaOn) drawZonaFalls();
   drawCloudShadows(cx,cy);
   drawParticles();
   drawPopups();
@@ -10831,6 +10846,7 @@ function nightView(){ return 1-0.35*nightAmt(); }
 function beaconK(o){ const p=((t+o)%50)/50; return p<0.5?1-p*p*4:0; }
 function beacons(){
   const B=[];
+  if(zonaOn) return B;
   if(inHome){
     padBeacons().forEach(([x,y],i)=>B.push([x+2.5,y+2.5,beaconK(i*12)]));
     const L=homeL.heli;
@@ -11178,7 +11194,7 @@ function drawSunShadows(cx,cy,cast){
     }
     shBox(g,x,y,TILE,TILE,ex,ey); tall.push([x,y,TILE,TILE]);
   }
-  if(inHome) for(const [x,y,w,h,fh] of homeRoofs()){ shRoof(g,x-cx,y+fh-cy,w,h-fh,60,88); tall.push([x-cx-6,y-cy,w+12,h]); }
+  if(inHome&&!zonaOn) for(const [x,y,w,h,fh] of homeRoofs()){ shRoof(g,x-cx,y+fh-cy,w,h-fh,60,88); tall.push([x-cx-6,y-cy,w+12,h]); }
   shCapture(u,cx,cy,cast);
   shFade(g,shCv); shFade(u,shCv2);
   for(const q of [g,u]){
@@ -11768,11 +11784,12 @@ function upgradeTurrets(){
    16 direcciones, le da el sol por el lado que toca y el rojo del helipuerto le tiñe al pasar. Su sombra sale de sus huesos.
    Mide unas 5,3 cabezas: proporciones de adulto. Las versiones anteriores siguen en sprites/personaje (0.1 a mano, 0.2 con 3,4 cabezas)
    y en las etiquetas personaje-v0.1 y personaje-v0.2 de git. */
-const PR_W=60, PR_H=86, PR_OX=30, PR_OY=66;              // lienzo de una pose y dónde caen los pies
+const PR_W=92, PR_H=104, PR_OX=46, PR_OY=84;              // lienzo de una pose y dónde caen los pies
 const PR_STEP=[9.2,14.8];   // cuánto crece u.walk en una vuelta de piernas, andando y corriendo: a este ritmo el pie apoyado no resbala (tools/prueba_poses.py)
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
-const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27};
-const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle]), PR_GLOW=new Set([PM.patch,PM.led]);
+const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27,wood:28,edge:29,steel:30};
+const PR_SWING=48;   // lo que dura un golpe de herramienta
+const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle,PM.edge]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
 const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
 const prZ=new Float32Array(prArea), prNX=new Float32Array(prArea), prNY=new Float32Array(prArea), prNZ=new Float32Array(prArea), prM=new Uint8Array(prArea), prP=new Uint8Array(prArea);
@@ -11792,7 +11809,7 @@ function prClear(q,s,r,g,pz,sway){
 /* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
    Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
 function prPose(mode,ph,br,g){
-  const th=ph*Math.PI*2, walk=mode>0, run=mode===2, TH=13.4*g.h, SH=13*g.h, UA=10*g.h, FA=9*g.h, stance=4*g.stance;
+  const th=ph*Math.PI*2, walk=mode===1||mode===2, run=mode===2, TH=13.4*g.h, SH=13*g.h, UA=10*g.h, FA=9*g.h, stance=4*g.stance;
   const A=run?0.95:walk?0.58:0, K=run?1.75:walk?1.0:0, B=(run?0.95:walk?0.55:0)*g.swing, lean=run?0.24:walk?0.06:0;
   const sway=g.sway*(walk?Math.sin(th)*(run?0.5:1):0.4);   // la cadera se balancea al andar y descansa un poco hacia un lado parada
   const leg=(s,p)=>{
@@ -11804,15 +11821,18 @@ function prPose(mode,ph,br,g){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const a=lean*0.5-B*Math.sin(p), e=run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,15.8+br*0.4);
+    const chop=mode===3&&s>0, a=chop?(ph<0.45?lerp(0.3,2.9,ph/0.45):ph<0.7?lerp(2.9,1.1,(ph-0.45)/0.25):lerp(1.1,0.3,(ph-0.7)/0.3)):lean*0.5-B*Math.sin(p);   // sube, baja de golpe y vuelve
+    const e=chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,15.8+br*0.4);
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e, q=g.arm;
     const ha=[el[0]-s*(run?1.8:0),el[1]+Math.sin(c)*FA,el[2]-Math.cos(c)*FA];
     prClear(el,s,2.6*q,g,pz,sway); prClear(ha,s,Math.max(g.hand,2*q)+0.5,g,pz,sway);   // el codo y la mano nunca dentro del cuerpo
     const mid=[(el[0]+ha[0])/2,(el[1]+ha[1])/2,(el[2]+ha[2])/2], mx=mid[0];
     prClear(mid,s,2.3*q,g,pz,sway); el[0]+=mid[0]-mx; ha[0]+=mid[0]-mx;                      // ni el antebrazo entre los dos
-    return {sh,el,ha};
+    return {sh,el,ha,c};
   };
-  return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br};
+  // el mango respecto al antebrazo, y hacia qué lado va el filo: al golpear baja por delante, con el filo en cabeza; en reposo cuelga
+  const tk=mode===3?(ph<0.45?1.25:ph<0.7?lerp(1.25,0.1,(ph-0.45)/0.25):lerp(0.1,1.25,(ph-0.7)/0.3)):0.4;
+  return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br,tk,ts:mode===3?-1:1};
 }
 /* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
    sh = cuenta para la sombra. pal.key = el piloto, con su aspecto elegido; sin key, androide de la base */
@@ -11875,6 +11895,17 @@ function prFace(fx,v,fem,expr){
   if(expr==='risa'&&Math.abs(ax-5.3)<1.2&&Math.abs(v+4)<0.85) return PM.blush;
   return 0;
 }
+/* LAS HERRAMIENTAS: piezas 3D como el muñeco. base = donde se agarra, dir = hacia dónde va el mango, side = hacia dónde mira el filo */
+function prAxe(cap,base,dir,side,k){
+  const Q=(a,b)=>[0,1,2].map(i=>base[i]+(dir[i]*a+side[i]*b)*k);
+  cap(Q(-3,0),Q(23,0),0.85*k,0.7*k,PM.wood,null,1);
+  cap(Q(20.5,-3.4),Q(20.5,1.8),1.5*k,1.5*k,PM.steel,null,1);
+  for(let i=-5;i<=5;i++){ const o=i*0.4; cap(Q(20.5+o*0.55,0),Q(20.5+o*1.35,7.2-Math.abs(o)*0.25),0.85*k,0.4*k,PM.steel,(x,y,z,q)=>q>0.72?PM.edge:0,i===0?1:0); }
+}
+function prToolParts(){
+  const O=[]; prAxe((a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh,g:1}),[0,0,8],[0,0,1],[0,1,0],2.4);
+  return {O,shadow:[]};
+}
 function prParts(pal,P,yaw,expr,h){
   const pilot=!!pal.key, O=[], {pz,up,L,R,AL,AR,br,sway}=P, hd=pal.head, g=prGen(pal), fem=pilot&&pal.gender==='f';
   let grp=1;   // cuerpo, brazo, brazo, cabeza: entre piezas distintas no se mezcla la luz y hay una línea limpia
@@ -11925,6 +11956,7 @@ function prParts(pal,P,yaw,expr,h){
     cap(H.ha,[H.ha[0],H.ha[1],H.ha[2]-1.8],g.hand,g.hand*0.82,PM.glove);
     cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
   }
+  if(pal.tool){ grp=5; const c=AR.c+P.tk, q=P.ts; prAxe(cap,AR.ha,[0,Math.sin(c),-Math.cos(c)],[0,q*Math.cos(c),q*Math.sin(c)],1); }
   grp=1;
   // cuello y solapas del traje, abiertas por delante
   const n=pt(0,0,18.4+br*0.3), nr=g.nk+0.7;
@@ -11998,8 +12030,8 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 }
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 function prBuild(pal,d,mode,f,look,expr){
-  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
-  const P=prPose(mode,mode?f/8:0,mode?0:f,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
+  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
+  const P=prPose(mode,mode?f/8:0,mode?0:f,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=pal.solo?prToolParts():prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
   prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
     const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
@@ -12045,7 +12077,7 @@ function prRamps(pal){
   let R=prRampCache.get(pal); if(R) return R;
   const cap=pal.cap||pal.hair, pilot=!!pal.key; R=[];
   const set={suit:pal.suit,band:pilot?'#f4ecd2':pal.light,pocket:shade(pal.suit,-0.3),helm:pilot?shade(cap,0.1):cap,helmD:shade(cap,-0.55),skin:pal.skin,eye:pal.eye,lens:'#7fd8ee',
-    belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pilot?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.56),led:'#ff4757',hair:pal.hair,eyeW:'#f2eee6',inside:'#5a1620',teeth:'#f2eee6',brow:shade(pal.hair,-0.2),seam:shade(pal.suit,-0.5)};
+    belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pilot?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.56),led:'#ff4757',hair:pal.hair,eyeW:'#f2eee6',inside:'#5a1620',teeth:'#f2eee6',brow:shade(pal.hair,-0.2),seam:shade(pal.suit,-0.5),wood:'#9a6a3a',edge:'#dfe7ee',steel:'#4e5862'};
   const mix=(a,b,k)=>'#'+hexRgb(a).map((v,i)=>Math.round(v+(hexRgb(b)[i]-v)*k).toString(16).padStart(2,'0')).join('');
   set.lips=mix(pal.skin,'#d0344c',0.62); set.blush=mix(pal.skin,'#f0607a',0.3);
   for(const k in PM) R[PM[k]]=prRamp(set[k],pilot&&(k==='skin'||k==='blush'));
@@ -12112,6 +12144,7 @@ function prMood(u,moving,run){
 }
 /* Rumbo, paso, mirada y pañuelo: lo que cambia con el tiempo. Devuelve [modo, fotograma, mirada, cara] */
 function prStep(u){
+  if(u.swingT>0) return [3,Math.floor((1-u.swingT/PR_SWING)*8)&7,0,'enfado'];
   const sp=Math.hypot(u.vx,u.vy), run=sp>2.9, moving=sp>0.2;
   if(u.prDir!==u.dir){ u.prDir=u.dir; if(!moving||u.face==null) u.face={up:Math.PI,left:-Math.PI/2,right:Math.PI/2}[u.dir]||0; }
   if(moving) u.face+=angDiff(u.face,Math.atan2(u.vx,u.vy))*0.26;
@@ -12477,7 +12510,7 @@ function renderArcade(){
     h='<div class="arcHead">MEJORES PUNTUACIONES</div><ol class="arcTop">'+A.top.map(e=>'<li><b>'+e.n+'</b><span>'+e.s+'</span><i>NV '+e.l+'</i></li>').join('')+'</ol>'+
       (arcGain?'<div class="arcGain">+'+arcGain+' BOLETOS</div>':'')+'<div class="arcCoin">INSERTA MONEDA</div>'+
       '<div class="arcNote">3 vidas · todos sin mejoras · los puntos dan boletos</div>';
-    b=btn('start','▶ JUGAR')+btn('prizes','🎟 PREMIOS · '+A.tickets)+btn('exit','← SALIR');
+    b=btn('start','▶ JUGAR')+btn('zona','🧪 ZONA DE PRUEBAS')+btn('prizes','🎟 PREMIOS · '+A.tickets)+btn('tools','🪓 HERRAMIENTAS')+btn('exit','← SALIR');
   } else if(arcPhase==='prizes'){
     h='<div class="arcHead">PREMIOS · TIENES 🎟 '+A.tickets+'</div><div class="arcNote">Aparecen en TU PILOTO, en la fila TRAJE</div><div class="arcPrizes">'+ARC_PRIZES.map(p=>{
       const own=A.prizes.includes(p.id), can=A.tickets>=p.cost;
@@ -12505,7 +12538,7 @@ document.getElementById('scrArcade').addEventListener('click',e=>{
   const d=q.dataset;
   if(d.p) return arcBuy(d.p);
   if(d.up!=null||d.dn!=null){ arcI=+(d.up!=null?d.up:d.dn); arcTyped(d.up!=null?'arrowup':'arrowdown'); return; }
-  ({start:arcadeStart,exit:closeArcade,cont:arcadeContinue,over:arcadeOver,sign:arcadeSign,
+  ({start:arcadeStart,exit:closeArcade,tools:openTools,zona:enterZona,cont:arcadeContinue,over:arcadeOver,sign:arcadeSign,
     prizes(){ arcPhase='prizes'; renderArcade(); },title(){ arcPhase='title'; renderArcade(); }}[d.a]||(()=>{}))();
 });
 document.getElementById('gameWrap').addEventListener('pointerdown',()=>{ if(arcDemo) arcDemoEnd(); },true);
@@ -12543,6 +12576,109 @@ function drawArcadeHud(){
   ctx.save(); ctx.font='30px "Jersey 15", monospace'; ctx.textAlign='center';
   if(Math.floor(t/30)%2){ ctx.fillStyle='#000'; ctx.fillText('DEMOSTRACIÓN · PULSA UNA TECLA',W/2+2,H*0.2+2); ctx.fillStyle='#ffd76e'; ctx.fillText('DEMOSTRACIÓN · PULSA UNA TECLA',W/2,H*0.2); }
   ctx.restore();
+}
+/* ===================== HERRAMIENTAS: el apartado para verlas en 3D =====================
+   A la izquierda la herramienta sola, girando; a la derecha el piloto usándola. Es el mismo muñeco 3D del juego (p9r_person.js). */
+const TOOL_POSES=['PARADO','ANDAR','TALAR'];
+const toolU={x:0,y:0,vx:0,vy:0,dir:'down',walk:0,face:0.7,radius:11,moodFix:'normal',swingT:0};
+let toolA=0, toolPose=2, toolSolo=null, toolPal=null;
+function renderToolPose(){ document.getElementById('toolPose').innerHTML=TOOL_POSES.map((t,i)=>'<button class="lkChip'+(i===toolPose?' on':'')+'" data-pose="'+i+'">'+t+'</button>').join(''); }
+function openTools(){
+  S.pickup();
+  toolPal=Object.assign({},PILOT_PAL,{tool:'hacha'}); toolSolo=Object.assign({},PILOT_PAL,{solo:true,key:'solo'});
+  openHomeUI('scrTools'); renderToolPose(); requestAnimationFrame(toolFrame);
+}
+function toolFrame(){
+  if(document.getElementById('scrTools').classList.contains('hidden')) return;
+  const A=document.getElementById('toolCv').getContext('2d'), P=document.getElementById('toolUseCv').getContext('2d'), u=toolU, c0=ctx, r0=prRes, sp=toolPose===1?2.2:0;
+  toolA+=0.02;
+  u.vx=Math.sin(u.face)*sp; u.vy=Math.cos(u.face)*sp; u.x+=u.vx; u.y+=u.vy; u.walk+=sp*0.2;
+  u.swingT=toolPose===2?(u.swingT||PR_SWING)-1:0;
+  prRes=4; prSkyFix=LOOK_SKY[0][1];
+  try{
+    const B=prBuild(toolSolo,Math.round(toolA/(Math.PI*2)*32)%32/2,0,0,0,'');
+    A.clearRect(0,0,368,416); A.drawImage(prRender(B,toolSolo,prLight(u),false),0,0);
+    P.clearRect(0,0,368,416); ctx=P; ctx.imageSmoothingEnabled=false;
+    ctx.save(); ctx.scale(4,4); ctx.translate(46-Math.round(u.x),84-Math.round(u.y)); drawHuman(u,toolPal); ctx.restore();
+  } finally { ctx=c0; prRes=r0; prSkyFix=null; }
+  requestAnimationFrame(toolFrame);
+}
+document.getElementById('toolPose').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; toolPose=+b.dataset.pose; renderToolPose(); S.tick(); });
+document.getElementById('btnToolBack').onclick=()=>{ S.pickup(); closeHomeUI(); };
+
+/* ===================== ZONA DE PRUEBAS =====================
+   La isla de la base sin edificios, para probar cada mecánica a pie. Tu base real no cambia: al salir vuelve tal como estaba.
+   shortcut: los árboles talados vuelven al entrar otra vez; cuando talar sea parte del juego hará falta guardarlos. */
+const ZONA_HITS=3;
+let zonaPal=null, zonaHits=new Map(), zonaFalls=[];
+function enterZona(){
+  S.pickup(); zonaOn=true; zonaPal=Object.assign({},PILOT_PAL,{tool:'hacha'}); zonaHits.clear(); zonaFalls=[];
+  enterHome();
+  document.getElementById('homeGuide').classList.add('hidden');
+  announce('ZONA DE PRUEBAS','#f5c518','ESPACIO o clic: golpear con el hacha · E: usar el cartel y la caja');
+}
+function leaveZona(){
+  S.pickup(); zonaOn=false;
+  enterHome(); enterInterior('house');
+  human.x=(interior.o.ox+6)*TILE; human.y=(interior.o.oy+2.6)*TILE; snapCamera(human.x,human.y);
+}
+/* Quita todo lo construido y deja solo terreno, con pinos cerca de donde apareces */
+function clearZona(){
+  for(let k=0;k<WC*WR;k++){ const v=map[k]; if(v===BRIDGE) map[k]=WATER; else if(v!==WATER&&v!==SAND&&v!==TREE&&v!==BUSH) map[k]=G; }
+  tileHp.fill(0);
+  const R=mulberry32(99);
+  for(let r=20;r<=44;r++) for(let c=30;c<=64;c++) if(Math.hypot(c-49,r-32)>5&&R()<0.06) setTile(c,r,TREE);
+  homeLamps=[];
+}
+function zonaSpots(){
+  return [{id:'house',x:47*TILE,y:30*TILE,label:'CARTEL · VOLVER A CASA',r:40,act:leaveZona},
+    {id:'tools',x:51*TILE,y:30*TILE,label:'CAJA · VER LAS HERRAMIENTAS EN 3D',r:40,act:openTools}];
+}
+/* El árbol que tienes delante */
+function zonaTree(){
+  const h=human, fx=Math.sin(h.face||0), fy=Math.cos(h.face||0), c0=Math.floor(h.x/TILE), r0=Math.floor(h.y/TILE);
+  let best=null, bd=56;
+  for(let r=r0-2;r<=r0+2;r++) for(let c=c0-2;c<=c0+2;c++){
+    if(tileAtC(c,r)!==TREE) continue;
+    const x=c*TILE+15-h.x, y=r*TILE+15-h.y, d=Math.hypot(x,y);
+    if(d<bd&&x*fx+y*fy>0.2*d){ bd=d; best=[c,r]; }
+  }
+  return best;
+}
+function zonaHit(){
+  const T=zonaTree(); if(!T) return;
+  const [c,r]=T, k=idx(c,r), x=c*TILE+15, y=r*TILE+20, n=(zonaHits.get(k)||0)+1;
+  spawnDebris(x,y,6,'#8a5a30'); S.tick();
+  if(n<ZONA_HITS){ zonaHits.set(k,n); popup(x,y-50,n+'/'+ZONA_HITS,'#ffd76e',13); return; }
+  zonaFalls.push({s:treeSprite(k,c,r),x,y:(r+1)*TILE-4,k:0,dir:human.x<x?1:-1});
+  zonaHits.delete(k); setTile(c,r,G); paintTile(c,r);
+  const w=irand(2,3); save.home.inv.wood+=w; saveSave();
+  popup(x,y-50,'+'+w+' 🪵 MADERA','#ffd76e',15); S.upgrade(); setMood(human,'feliz',60);
+}
+function zonaStep(dt){
+  const h=human;
+  if(h.swingT>0){
+    const t0=h.swingT; h.swingT=Math.max(0,t0-dt);
+    if(t0>PR_SWING*0.4&&h.swingT<=PR_SWING*0.4) zonaHit();   // aquí el filo llega abajo
+  } else if(keys[' ']||mouse.down) h.swingT=PR_SWING;
+  for(const f of zonaFalls) f.k+=dt/40;
+  zonaFalls=zonaFalls.filter(f=>f.k<1);
+}
+/* El cartel y la caja: no son edificios, solo marcan dónde usar cada cosa */
+function drawZona(){
+  const x=47*TILE, y=30*TILE, bx=51*TILE;
+  ctx.fillStyle='rgba(6,10,20,.28)'; ctx.beginPath(); ctx.ellipse(x,y+10,10,3,0,0,Math.PI*2); ctx.ellipse(bx,y+10,15,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#6a4426'; ctx.fillRect(x-2,y-22,4,32);
+  ctx.fillStyle='#b8834a'; ctx.fillRect(x-16,y-30,32,15); ctx.fillStyle='#6a4426'; ctx.fillRect(x-16,y-18,32,3);
+  ctx.fillStyle='#3a2414'; ctx.fillRect(x-11,y-25,17,2); ctx.fillRect(x-11,y-21,22,2);
+  ctx.fillStyle='#8a5a30'; ctx.fillRect(bx-14,y-14,28,24); ctx.fillStyle='#b8834a'; ctx.fillRect(bx-14,y-14,28,6);
+  ctx.fillStyle='#5a3418'; ctx.fillRect(bx-14,y-3,28,2); ctx.fillRect(bx-3,y-14,6,24);
+}
+function drawZonaFalls(){
+  for(const f of zonaFalls){
+    ctx.save(); ctx.globalAlpha=clamp((1-f.k)*2.5,0,1); ctx.translate(f.x,f.y); ctx.rotate(f.dir*f.k*f.k*Math.PI/2);
+    ctx.drawImage(f.s,-f.s.width/2,-f.s.height); ctx.restore();
+  }
 }
 
 /* ===================== MENÚ PRINCIPAL =====================
@@ -13740,7 +13876,7 @@ window.addEventListener('keydown',e=>{
   if(state==='menu'){ if(menuKey(k)) e.preventDefault(); return; }
   if(state==='home'){
     if(k==='e') homeInteract();
-    if(k==='escape'||k==='p') openMainMenu(false);
+    if(k==='escape'||k==='p'){ if(zonaOn) leaveZona(); else openMainMenu(false); }
     return;
   }
   if(state==='homeui'){
@@ -13861,7 +13997,7 @@ function renderHangar(){
 }
 
 /* ===================== NAVEGACIÓN ===================== */
-const SCREENS=['scrMenu','scrArcade','scrLook','scrHangar','scrShop','scrLevelUp','scrGameOver','scrPause','scrWorldMap','scrHouse','scrSeed','scrStory'];
+const SCREENS=['scrMenu','scrArcade','scrTools','scrLook','scrHangar','scrShop','scrLevelUp','scrGameOver','scrPause','scrWorldMap','scrHouse','scrSeed','scrStory'];
 function showOnly(id){ SCREENS.forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id)); }
 document.getElementById('btnHShop').onclick=()=>{ renderShop(); showOnly('scrShop'); };
 document.getElementById('btnHBack').onclick=()=>closeHomeUI();
