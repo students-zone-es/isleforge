@@ -119,6 +119,8 @@
   #lookCv{ height:340px; aspect-ratio:3/4; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 42%, #24364c, #0d1420 72%); border:1px solid var(--border); border-radius:6px; }
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
+  .lookCam b{ align-self:center; font-size:13px; color:var(--text-dim); margin-right:4px; }
+  .lookCam em{ flex-basis:100%; text-align:center; font-style:normal; font-size:12px; color:var(--text-dim); }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
   #devMenu{ position:absolute; inset:0; z-index:40; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:12px 16px; pointer-events:auto; color:#cfd6df; background:#0a1019; font-family:var(--font-body); }
   .devHead{ display:flex; align-items:center; justify-content:space-between; font-family:var(--font-head); font-size:27px; color:var(--gold); }
@@ -454,7 +456,7 @@
     <div id="scrLook" class="overlay hidden">
       <h1 class="title" style="font-size:27px;">TU PILOTO</h1>
       <div class="lookWrap">
-        <div class="lookStage"><canvas id="lookCv" width="480" height="640"></canvas><div class="lookPose" id="lookPose"></div><div class="lookPose" id="lookFace"></div></div>
+        <div class="lookStage"><canvas id="lookCv" width="480" height="640"></canvas><div class="lookPose" id="lookPose"></div><div class="lookPose" id="lookFace"></div><div class="lookPose lookCam" id="lookCam"></div></div>
         <div class="lookOpts" id="lookOpts"></div>
       </div>
       <div class="row"><button class="btn small" id="btnLookBack">← VOLVER</button><button class="btn small" id="btnLookRand">🎲 AL AZAR</button><button class="btn small" id="btnLookReset">↺ ORIGINAL</button><button class="btn" id="btnLookOk">✔ LISTO</button></div>
@@ -534,8 +536,9 @@
           <div class="lookPose" id="devCtl"></div>
           <div class="lookPose" id="devSpeeds"></div>
           <label class="devDir">GIRAR <input type="range" id="devDir" min="0" max="15" step="1"></label>
+          <label class="devDir">CÁMARA <input type="range" id="devCam" min="0" max="90" step="5"><span id="devCamV"></span></label>
           <div class="lookPose" id="devLook"></div>
-          <div class="devHelp">Espacio: pausa · ← →: fotograma · A D: girar · 1 a 4: animación · Esc: cerrar</div>
+          <div class="devHelp">Espacio: pausa · ← →: fotograma · A D: girar · W S: subir o bajar la cámara · 1 a 4: animación · Esc: cerrar</div>
         </div>
         <div class="devEdit devPoseEd"><b>EDITOR DE POSES</b>
           <div class="devHelp">Pulsa un punto del muñeco y arrastra para girar esa articulación, o usa las barras. Cada fotograma guarda su pose.</div>
@@ -11844,6 +11847,15 @@ function upgradeTurrets(){
 const PR_W=92, PR_H=104, PR_OX=46, PR_OY=84;              // lienzo de una pose y dónde caen los pies
 const PR_STEP=[9.2,14.8];   // cuánto crece u.walk en una vuelta de piernas, andando y corriendo: a este ritmo el pie apoyado no resbala (tools/prueba_poses.py)
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
+/* La cámara de ahora: la de la base o la que elijas en las vistas previas (TU PILOTO y MENÚ DEV), de 0° (a su altura) a 90°
+   (desde arriba). Las poses vistas desde otra altura se guardan aparte y, al cambiar de altura, se tiran (si no, la memoria
+   se llenaría girando la cámara). */
+let prCamSE=PR_SE, prCamCE=PR_CE, prCamK='', prCamLast='';
+function prCamera(deg){
+  if(deg==null){ prCamSE=PR_SE; prCamCE=PR_CE; prCamK=''; return; }
+  prCamK='|e'+deg; prCamSE=Math.sin(deg/DEG); prCamCE=Math.cos(deg/DEG);
+  if(prCamK!==prCamLast){ for(const q in prCache) if(q.includes('|e')) delete prCache[q]; prCamLast=prCamK; }
+}
 const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27,wood:28,edge:29,steel:30};
 const PR_SWING=48;   // lo que dura un golpe de herramienta
 /* Cómo lleva la herramienta: se edita a mano en el MENÚ DEV (p9v_tools.js) y se guarda en save.toolGrip. Ángulos en radianes */
@@ -12039,7 +12051,7 @@ function prParts(pal,P,yaw,expr,h){
   // la cabeza se inclina hacia arriba solo cuando mira a la cámara, para que desde tan alto se le vea la cara: de lado o de espaldas
   // esa inclinación la haría mirar al cielo. Las medidas de la cara van en unidades de una cabeza de radio 9,4: hs la pasa a su tamaño
   yaw+=P.D['head.yaw']||0;
-  const HR=5.8*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h))+(P.D['head.pitch']||0), hc=pt(0,0.8,29.2+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const HR=5.8*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h))*clamp(prCamSE/PR_SE,0,1.4)+(P.D['head.pitch']||0), hc=pt(0,0.8,29.2+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
   const hp=(x,y,z)=>{ const yy=(y*cp-z*sp)*hs, zz=(y*sp+z*cp)*hs, xx=x*hs; return [hc[0]+xx*cy+yy*sy,hc[1]-xx*sy+yy*cy,hc[2]+zz]; };
   const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [(dx*cy-dy*sy)/hs,(yy*cp+dz*sp)/hs,(dz*cp-yy*sp)/hs]; };   // al revés: del mundo a la cabeza
   const headF=(x,y,z)=>{
@@ -12106,25 +12118,25 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 /* Dónde cae cada articulación de una pose, en píxeles del lienzo de la pose a resolución S (el editor de poses dibuja ahí sus puntos) */
 function prJoints(pal,d,mode,f,S){
   const g=prGen(pal), P=prPose(mode,mode?f/8:0,mode?0:f,g,poseD(mode,f)), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
-  const V=q=>{ const wx=q[0]*c+q[1]*s, wy=-q[0]*s+q[1]*c; return [(PR_OX+wx)*S,(PR_OY+wy*PR_SE-q[2]*PR_CE)*S]; };
+  const V=q=>{ const wx=q[0]*c+q[1]*s, wy=-q[0]*s+q[1]*c; return [(PR_OX+wx)*S,(PR_OY+wy*prCamSE-q[2]*prCamCE)*S]; };
   const hip=s0=>[s0*4*g.hip+P.sway,0,P.pz], [by,bz]=P.up(0,11), [hy,hz]=P.up(0.8,29.2);
   return {body:V([0,by,bz]),head:V([0,hy,hz]),armL:V(P.AL.sh),armR:V(P.AR.sh),elbowL:V(P.AL.el),elbowR:V(P.AR.el),handL:V(P.AL.ha),handR:V(P.AR.ha),
     legL:V(hip(-1)),legR:V(hip(1)),kneeL:V(P.L.knee),kneeR:V(P.R.knee),footL:V(P.L.ank),footR:V(P.R.ank),toeL:V(P.L.toe),toeR:V(P.R.toe),tool:V(P.AR.ha)};
 }
 function prBuild(pal,d,mode,f,look,expr){
-  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(save.pencil?'l':'')+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
+  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(save.pencil?'l':'')+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||'')+prCamK; if(prCache[key]) return prCache[key];
   const P=prPose(mode,mode?f/8:0,mode?0:f,prGen(pal),poseD(mode,f)), h=d/16*Math.PI*2, {O,shadow}=pal.solo?prToolParts():prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
   prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
     const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
     for(let i=0;i<=n;i++){
       const k=i/n, lx=p.a[0]+dx*k, ly=p.a[1]+dy*k, lz=p.a[2]+dz*k, r=p.ra+(p.rb-p.ra)*k, rr=r*S, wx=lx*c+ly*s, wy=-lx*s+ly*c;
-      const vx=(PR_OX+wx)*S, vy=(PR_OY+wy*PR_SE-lz*PR_CE)*S, vz=(wy*PR_CE+lz*PR_SE)*S;
+      const vx=(PR_OX+wx)*S, vy=(PR_OY+wy*prCamSE-lz*prCamCE)*S, vz=(wy*prCamCE+lz*prCamSE)*S;
       const x0=Math.max(0,Math.floor(vx-rr)), x1=Math.min(BW-1,Math.ceil(vx+rr)), y0=Math.max(0,Math.floor(vy-rr)), y1=Math.min(BH-1,Math.ceil(vy+rr));
       for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
         const ax=x+0.5-vx, ay=y+0.5-vy, d2=ax*ax+ay*ay; if(d2>=rr*rr) continue;
         const nz=Math.sqrt(rr*rr-d2), z=vz+nz, q=y*BW+x; if(z<=prZ[q]) continue;
-        const nwx=ax/rr, nwy=(ay*PR_SE+nz*PR_CE)/rr, nwz=(nz*PR_SE-ay*PR_CE)/rr;
+        const nwx=ax/rr, nwy=(ay*prCamSE+nz*prCamCE)/rr, nwz=(nz*prCamSE-ay*prCamCE)/rr;
         prZ[q]=z; prNX[q]=nwx; prNY[q]=nwy; prNZ[q]=nwz;
         let m=p.m;
         if(p.f){ const px=wx+r*nwx, py=wy+r*nwy; m=p.f(px*c-py*s,px*s+py*c,lz+r*nwz,k)||p.m; }
@@ -12186,7 +12198,7 @@ function prLight(u){
       const n=nightAmt(); if(n>0.08) for(const [c,r] of homeLamps) add(c*TILE+15,r*TILE-4,52,1.2*n,0.96*n,0.62*n,130);
     }
   }
-  const hx=L.s[0], hy=L.s[1]+PR_CE, hz=L.s[2]+PR_SE, hl=Math.hypot(hx,hy,hz)||1; L.h=[hx/hl,hy/hl,hz/hl];
+  const hx=L.s[0], hy=L.s[1]+prCamCE, hz=L.s[2]+prCamSE, hl=Math.hypot(hx,hy,hz)||1; L.h=[hx/hl,hy/hl,hz/hl];
   return L;
 }
 /* Colorea la pose con la luz de ahora */
@@ -12254,13 +12266,13 @@ function drawHuman(u,pal){
   const [mode,f,look,expr]=prStep(u), d=((Math.round(u.face/(Math.PI/8))%16)+16)%16, x=Math.round(u.x), y=Math.round(u.y), B=prBuild(pal,d,mode,f,look,pal.key?expr:'');
   u.prB=B;
   const L=prLight(u), blink=(t+(x&127))%211<6;
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,11,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,11,Math.max(0.5,4*prCamSE/PR_SE),0,0,Math.PI*2); ctx.fill();
   ctx.drawImage(prRender(B,pal,L,blink),x-PR_OX,y-PR_OY,PR_W,PR_H);
 }
 /* Su sombra sale de sus huesos: cada hueso se tumba en el suelo desde sus dos puntas, así copia la pose de verdad */
 function shPerson(u){
   const B=u.prB; if(!B) return;
-  const s=shS, L=Math.min(s.len,SHADOW_STAND)*0.8, G=ctx, X=(q)=>u.x+q[0]+s.dx*q[2]*L, Y=(q)=>u.y+q[1]*PR_SE+s.dy*q[2]*L;
+  const s=shS, L=Math.min(s.len,SHADOW_STAND)*0.8, G=ctx, X=(q)=>u.x+q[0]+s.dx*q[2]*L, Y=(q)=>u.y+(q[1]+s.dy*q[2]*L/PR_SE)*prCamSE;
   G.lineCap='round'; G.strokeStyle='#000';
   for(const [a,b,r] of B.bones){ G.lineWidth=r*2; G.beginPath(); G.moveTo(X(a),Y(a)); G.lineTo(X(b),Y(b)); G.stroke(); }
   G.lineCap='butt';
@@ -12268,7 +12280,8 @@ function shPerson(u){
 /* ===================== TU PILOTO =====================
    Pantalla para elegir el aspecto del piloto antes de entrar a la partida: sale sola la primera vez (y tras NUEVA PARTIDA) y
    luego se abre con PERSONAJE en el menú. La vista previa es el mismo muñeco 3D del juego (p9r_person.js), así que se ve
-   exactamente como será, y se puede girar, poner a andar o correr y probar con la luz del día, el atardecer o la noche.
+   exactamente como será, y se puede girar y mirar desde otra altura (arrastrando, o con las vistas de FRENTE, PERFIL, ESPALDA
+   y ARRIBA), poner a andar o correr y probar con la luz del día, el atardecer o la noche.
    Lo elegido se guarda en save.look; PILOT_PAL lleva siempre el aspecto activo y .key separa las formas distintas del muñeco. */
 const LOOK_DEF={gender:'m',suit:'#ff8c2a',helm:'#3d5a2e',skin:'#ffd0a0',hair:'#3a2414',head:'casco',goggles:true,beard:false,build:1};
 const LOOK_YESNO=[[true,'SÍ'],[false,'NO']];
@@ -12287,7 +12300,9 @@ const LOOK_SKY=[['DÍA',{sun:{alt:52,az:-30},moon:{alt:-20,az:0}}],['ATARDECER',
 const LOOK_POSE=['PARADO','ANDAR','CORRER'], LOOK_ZOOM=8, LOOK_RES=4;
 const LOOK_FACE=[['normal','NORMAL'],['feliz','FELIZ'],['risa','RISA'],['sorpresa','SORPRESA'],['enfado','ENFADO'],['triste','TRISTE'],['cansado','CANSADO'],['guino','GUIÑO'],['sueno','SUEÑO']];
 const lookU={x:0,y:0,vx:0,vy:0,dir:'down',walk:0,face:0.5,radius:8,moodFix:'normal'};
-let lookOn=false, lookW=null, lookDone=null, lookPose=0, lookSky=0, lookSpin=true, lookA=0.5, lookDrag=null, lookShCv=null;
+let lookOn=false, lookW=null, lookDone=null, lookPose=0, lookSky=0, lookSpin=true, lookA=0.5, lookDrag=null, lookShCv=null, lookE=35;
+// vistas de cámara: [nombre, altura en grados, hacia dónde mira el piloto (null = no se toca)]
+const LOOK_CAM=[['JUEGO',35,null],['FRENTE',0,0],['PERFIL',0,Math.PI/2],['ESPALDA',10,Math.PI],['ARRIBA',90,null]];
 
 function applyLook(L){
   const k=Object.assign({},LOOK_DEF,L), key='p'+k.gender+k.head+(+k.goggles)+(+k.beard)+k.build;
@@ -12308,10 +12323,11 @@ function renderLook(){
   const chips=(L,cur,attr)=>L.map((t,i)=>'<button class="lkChip'+(i===cur?' on':'')+'" '+attr+'="'+i+'">'+t+'</button>').join('');
   document.getElementById('lookPose').innerHTML=chips(LOOK_POSE,lookPose,'data-pose')+'<i></i>'+chips(LOOK_SKY.map(s=>s[0]),lookSky,'data-sky');
   document.getElementById('lookFace').innerHTML=chips(LOOK_FACE.map(f=>f[1]),LOOK_FACE.findIndex(f=>f[0]===lookU.moodFix),'data-face');
+  document.getElementById('lookCam').innerHTML='<b>CÁMARA '+lookE+'°</b>'+chips(LOOK_CAM.map(c=>c[0]),LOOK_CAM.findIndex(c=>c[1]===lookE&&(c[2]==null||Math.abs(angDiff(c[2],lookA))<0.2)),'data-cam')+'<em>arrastra: ↔ girar · ↕ subir o bajar la cámara</em>';
 }
 function openLook(done){
   arcadeSuits();
-  lookW=Object.assign({},LOOK_DEF,save.look); lookDone=done; lookPose=0; lookSky=0; lookSpin=true; lookU.moodFix='normal';
+  lookW=Object.assign({},LOOK_DEF,save.look); lookDone=done; lookPose=0; lookSky=0; lookSpin=true; lookE=35; lookU.moodFix='normal';
   lookU.vx=lookU.vy=0; lookU.sc=null; lookU.prFr=null;
   applyLook(lookW); renderLook(); showOnly('scrLook');
   if(!lookOn){ lookOn=true; requestAnimationFrame(lookFrame); }
@@ -12331,9 +12347,11 @@ function lookFrame(){
   u.idle=0;   // aquí no mira a los lados: la cara tiene que verse
   if(!lookShCv) lookShCv=mkCanvas(cv.width,cv.height);
   const sg=lookShCv.getContext('2d'), src=sky.sun.alt>0?sky.sun:sky.moon, A=src.az/DEG, c0=ctx;
-  const r0=prRes, at=q=>{ ctx=q; ctx.imageSmoothingEnabled=false; ctx.save(); ctx.scale(k,k); ctx.translate(Math.round(cv.width/2/k)-Math.round(u.x),Math.round((cv.height-130)/k)-Math.round(u.y)); };
+  const r0=prRes, at=q=>{ ctx=q; ctx.imageSmoothingEnabled=false; ctx.save(); ctx.scale(k,k); ctx.translate(Math.round(cv.width/2/k)-Math.round(u.x),Math.round(fy/k)-Math.round(u.y)); };
   g.clearRect(0,0,cv.width,cv.height);
-  g.fillStyle=['#2c3b4e','#3a2f44','#141c2c'][lookSky]; g.beginPath(); g.ellipse(cv.width/2,cv.height-130,219,78,0,0,Math.PI*2); g.fill();
+  prCamera(lookE===35?null:lookE);   // 35° es la cámara del juego: comparte las poses ya hechas
+  const fy=Math.max(cv.height-130,36+k*62*prCamCE);   // con la cámara baja se ve más alto: los pies bajan para que quepa la cabeza
+  g.fillStyle=['#2c3b4e','#3a2f44','#141c2c'][lookSky]; g.beginPath(); g.ellipse(cv.width/2,fy,219,Math.max(2,78*prCamSE/PR_SE),0,0,Math.PI*2); g.fill();
   g.strokeStyle='#ffffff14'; g.lineWidth=3; g.stroke();
   prRes=LOOK_RES; prSkyFix=sky; shS={dx:Math.sin(A),dy:-Math.cos(A),len:Math.min(SHADOW_MAXLEN,1/Math.tan(Math.max(3,src.alt)/DEG))};
   sg.clearRect(0,0,cv.width,cv.height);
@@ -12341,17 +12359,20 @@ function lookFrame(){
     at(sg); shPerson(u); ctx.restore();
     g.globalAlpha=sky.sun.alt>0?0.4:0.22; g.drawImage(lookShCv,0,0); g.globalAlpha=1;
     at(g); drawHuman(u,PILOT_PAL); ctx.restore();
-  } finally { ctx=c0; prSkyFix=null; prRes=r0; }
+  } finally { ctx=c0; prSkyFix=null; prRes=r0; prCamera(null); }
   requestAnimationFrame(lookFrame);
 }
 function lookKey(k){
   if(k==='arrowleft'||k==='a'){ lookA-=0.4; lookSpin=false; }
   else if(k==='arrowright'||k==='d'){ lookA+=0.4; lookSpin=false; }
+  else if(k==='arrowup'||k==='w') lookCam(lookE+5);
+  else if(k==='arrowdown'||k==='s') lookCam(lookE-5);
   else if(k==='enter') closeLook(true);
   else if(k==='escape') closeLook(false);
   else return false;
   S.tick(); return true;
 }
+function lookCam(e){ const v=clamp(Math.round(e/5)*5,0,90); if(v!==lookE){ lookE=v; renderLook(); } }   // de 5 en 5: cada altura hace sus poses
 (function(){
   const opts=document.getElementById('lookOpts'), pose=document.getElementById('lookPose'), face=document.getElementById('lookFace'), cv=document.getElementById('lookCv');
   opts.addEventListener('click',e=>{
@@ -12368,8 +12389,12 @@ function lookKey(k){
     const b=e.target.closest('button'); if(!b) return;
     lookU.moodFix=LOOK_FACE[+b.dataset.face][0]; lookA=0.15; lookSpin=false; lookPose=0; renderLook(); S.tick();   // de frente, para ver la cara
   });
-  cv.addEventListener('pointerdown',e=>{ lookDrag=e.clientX; lookSpin=false; cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove',e=>{ if(lookDrag==null) return; lookA+=(e.clientX-lookDrag)*0.015; lookDrag=e.clientX; });
+  document.getElementById('lookCam').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    const [,el,a]=LOOK_CAM[+b.dataset.cam]; if(a!=null){ lookA=a; lookSpin=false; } lookE=-1; lookCam(el); S.tick();
+  });
+  cv.addEventListener('pointerdown',e=>{ lookDrag={x:e.clientX,y:e.clientY,e:lookE}; lookSpin=false; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove',e=>{ if(lookDrag==null) return; lookA+=(e.clientX-lookDrag.x)*0.015; lookDrag.x=e.clientX; lookCam(lookDrag.e-(e.clientY-lookDrag.y)*0.4); });   // arriba = cámara más alta
   cv.addEventListener('pointerup',()=>{ lookDrag=null; });
   document.getElementById('btnLookOk').onclick=()=>{ S.upgrade(); closeLook(true); };
   document.getElementById('btnLookBack').onclick=()=>{ S.pickup(); closeLook(false); };
@@ -12775,7 +12800,8 @@ function drawZonaFalls(){
    fotograma y desde cualquier lado. Tiene su propio estado: lo de detrás se queda congelado y vuelve igual al cerrar. */
 const DEV_ANIM=[['PARADO',0,2,2/88],['ANDAR',1,8,8/19.2],['CORRER',2,8,8/20.6],['TALAR',3,8,8/PR_SWING]];   // nombre, modo, fotogramas y fotogramas por tick
 const DEV_SPEED=[0.1,0.25,0.5,1,2];
-let devPrev='menu', devAnim=3, devF=0, devPlay=true, devSpeed=2, devDir=4, devPal=null, devLast=0;
+let devPrev='menu', devAnim=3, devF=0, devPlay=true, devSpeed=2, devDir=4, devCam=35, devPal=null, devLast=0;
+const devCamDo=fn=>{ prCamera(devCam===35?null:devCam); try{ return fn(); } finally { prCamera(null); } };   // la cámara elegida solo vale aquí dentro
 const devEl=id=>document.getElementById(id);
 const devPhase=f=>f<4?'SUBE':f<6?'BAJA':f===6?'IMPACTO':'VUELVE';
 function toggleDev(){ if(state==='dev') closeDev(); else openDev(); }
@@ -12793,7 +12819,7 @@ function devPose(g,f,S0){
   const r0=prRes, m=DEV_ANIM[devAnim][1];
   prRes=S0; prSkyFix=LOOK_SKY[0][1];
   try{
-    const c=prRender(prBuild(devPal,devDir,m,f,0,m===3?'enfado':'normal'),devPal,prLight(toolU),false);
+    const c=devCamDo(()=>prRender(prBuild(devPal,devDir,m,f,0,m===3?'enfado':'normal'),devPal,prLight(toolU),false));
     g.clearRect(0,0,g.canvas.width,g.canvas.height); g.imageSmoothingEnabled=false; g.drawImage(c,0,0,g.canvas.width,g.canvas.height);
   } finally { prRes=r0; prSkyFix=null; }
 }
@@ -12810,7 +12836,7 @@ function renderDev(){
   devEl('devAnims').innerHTML=DEV_ANIM.map((a,i)=>chip(a[0],i===devAnim,'a',i)).join('');
   devEl('devCtl').innerHTML=chip('◀ FOTOGRAMA',false,'s',-1)+chip(devPlay?'⏸ PAUSA':'▶ PLAY',devPlay,'p',1)+chip('FOTOGRAMA ▶',false,'s',1);
   devEl('devSpeeds').innerHTML=DEV_SPEED.map((v,i)=>chip('×'+v,i===devSpeed,'v',i)).join('');
-  devEl('devDir').value=devDir;
+  devEl('devDir').value=devDir; devEl('devCam').value=devCam; devEl('devCamV').textContent=devCam+'°';
   devEl('devLook').innerHTML=chip('✏️ LÁPIZ: '+(save.pencil?'SÍ':'NO'),save.pencil,'l',1);
   if(!devEl('devGrip').children.length) devEl('devGrip').innerHTML=devGripHtml();
   const st=devEl('devStrip');
@@ -12821,6 +12847,7 @@ function renderDev(){
 function devStep(s){ const n=DEV_ANIM[devAnim][2]; devPlay=false; devF=(Math.floor(devF)+s+n)%n; S.tick(); renderDev(); }
 function devSetAnim(i){ devAnim=i; devF=0; renderDev(); }
 function devTurn(s){ devDir=(devDir+s+16)%16; renderDev(); }
+function devCamSet(v){ devCam=clamp(v,0,90); renderDev(); }
 function devFrame(now){
   if(state!=='dev') return;
   if(devDirty){ devDirty=false; renderDev(); }
@@ -12839,6 +12866,8 @@ function devKey(k){
   else if(k==='arrowright') devStep(1);
   else if(k==='a') devTurn(-1);
   else if(k==='d') devTurn(1);
+  else if(k==='w') devCamSet(devCam+5);
+  else if(k==='s') devCamSet(devCam-5);
   else if(k>='1'&&k<='4') devSetAnim(+k-1);
 }
 devEl('devMenu').addEventListener('click',e=>{
@@ -12852,6 +12881,7 @@ devEl('devMenu').addEventListener('click',e=>{
   else if(d.f!=null){ devPlay=false; devF=+d.f; renderDev(); }
 });
 devEl('devDir').addEventListener('input',e=>{ devDir=+e.target.value; renderDev(); });
+devEl('devCam').addEventListener('input',e=>devCamSet(+e.target.value));
 devEl('btnToolDev').onclick=()=>{ S.pickup(); openDev(); };
 
 /* EDITAR CÓMO LLEVA EL HACHA: cada barra cambia un valor de toolGrip (p9r_person.js); se ve en vivo y se guarda */
@@ -12910,7 +12940,7 @@ function renderPoseEd(){
 }
 /* Los huesos y los puntos encima del muñeco grande */
 function devDrawJoints(){
-  const g=devEl('devCv').getContext('2d'), J=prJoints(devPal,devDir,devMode(),devFr(),4);
+  const g=devEl('devCv').getContext('2d'), J=devCamDo(()=>prJoints(devPal,devDir,devMode(),devFr(),4));
   g.save(); g.lineWidth=2; g.strokeStyle='rgba(62,230,230,.55)';
   for(const [a,b] of DEV_BONES){ g.beginPath(); g.moveTo(...J[a]); g.lineTo(...J[b]); g.stroke(); }
   for(const [id] of DEV_JOINTS){ const [x,y]=J[id], on=id===devJoint; g.fillStyle=on?'#f5c518':'#e8f6ff'; g.strokeStyle='#05070c'; g.beginPath(); g.arc(x,y,on?7:5,0,Math.PI*2); g.fill(); g.stroke(); }
@@ -12918,7 +12948,7 @@ function devDrawJoints(){
 }
 function devCvPos(e){ const c=devEl('devCv'), r=c.getBoundingClientRect(); return [(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]; }
 devEl('devCv').addEventListener('pointerdown',e=>{
-  const [x,y]=devCvPos(e), J=prJoints(devPal,devDir,devMode(),devFr(),4); let best=null, bd=26;
+  const [x,y]=devCvPos(e), J=devCamDo(()=>prJoints(devPal,devDir,devMode(),devFr(),4)); let best=null, bd=26;
   for(const [id] of DEV_JOINTS){ const d=Math.hypot(J[id][0]-x,J[id][1]-y); if(d<bd){ bd=d; best=id; } }
   if(best) devJoint=best;
   devPlay=false; devDrag={x,y}; devEl('devCv').setPointerCapture(e.pointerId); S.tick(); renderDev();
