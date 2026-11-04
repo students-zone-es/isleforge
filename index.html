@@ -120,17 +120,22 @@
   .lookPose{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
   .lookPose i{ width:8px; }
   .lookOpts{ display:flex; flex-direction:column; gap:6px; text-align:left; }
-  #devMenu{ position:absolute; inset:0; z-index:40; display:flex; flex-direction:column; gap:8px; padding:12px 16px; pointer-events:auto; color:#cfd6df; background:#0a1019; font-family:var(--font-body); }
+  #devMenu{ position:absolute; inset:0; z-index:40; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:12px 16px; pointer-events:auto; color:#cfd6df; background:#0a1019; font-family:var(--font-body); }
   .devHead{ display:flex; align-items:center; justify-content:space-between; font-family:var(--font-head); font-size:27px; color:var(--gold); }
   .devHead b{ font-weight:400; }
-  .devBody{ flex:1; min-height:0; display:flex; gap:16px; align-items:center; justify-content:center; }
-  #devCv{ height:100%; max-height:400px; aspect-ratio:368/416; image-rendering:pixelated; background:radial-gradient(#2c3b4e,#101722); border:1px solid var(--border); border-radius:8px; }
-  .devSide{ display:flex; flex-direction:column; gap:10px; max-width:400px; }
+  .devBody{ flex:1; min-height:0; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:center; }
+  #devCv{ height:100%; max-height:330px; aspect-ratio:368/416; image-rendering:pixelated; background:radial-gradient(#2c3b4e,#101722); border:1px solid var(--border); border-radius:8px; }
+  .devSide{ display:flex; flex-direction:column; gap:10px; max-width:300px; }
   #devInfo{ font-family:var(--font-head); font-size:29px; color:#fff; }
   #devInfo i{ font-style:normal; color:#ff8a3a; }
   .devSide .lookPose{ justify-content:flex-start; }
   .devDir{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:14px; color:var(--text-dim); }
   .devDir input{ flex:1; accent-color:#f5c518; }
+  .devEdit{ display:flex; flex-direction:column; gap:5px; width:250px; flex:0 0 auto; }
+  .devEdit b{ font-family:var(--font-head); font-weight:400; font-size:22px; color:var(--gold); }
+  .devEdit label{ display:grid; grid-template-columns:92px 1fr 40px; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-dim); }
+  .devEdit input{ accent-color:#3ee6e6; }
+  .devEdit output{ text-align:right; color:#fff; }
   .devHelp{ font-size:14px; font-weight:700; color:var(--text-dim); }
   .devStrip{ display:flex; gap:6px; justify-content:center; }
   .devStrip canvas{ width:84px; height:95px; image-rendering:pixelated; cursor:pointer; background:#101722; border:2px solid var(--border); border-radius:6px; }
@@ -523,8 +528,10 @@
           <div class="lookPose" id="devCtl"></div>
           <div class="lookPose" id="devSpeeds"></div>
           <label class="devDir">GIRAR <input type="range" id="devDir" min="0" max="15" step="1"></label>
+          <div class="lookPose" id="devLook"></div>
           <div class="devHelp">Espacio: pausa · ← →: fotograma · A D: girar · 1 a 4: animación · Esc: cerrar</div>
         </div>
+        <div class="devEdit"><b>EDITAR CÓMO LLEVA EL HACHA</b><div id="devGrip"></div><div class="lookPose"><button class="lkChip" data-g="reset">↺ RESTABLECER</button><button class="lkChip" data-g="copy">📋 COPIAR VALORES</button></div></div>
       </div>
       <div class="devStrip" id="devStrip"></div>
     </div>
@@ -704,7 +711,7 @@ function loadSave(){
     const p=JSON.parse(raw);
     return normalizeSave({ look:p.look, work:p.work||0, bestScore:p.bestScore||0, bestWave:p.bestWave||1, sound:p.sound!==false,
       up:Object.assign(blankUp(),p.up||{}), sel:Object.assign({},DEFAULT_SEL,p.sel||{}),
-      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, sectorBest:p.sectorBest, arcade:p.arcade, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
+      home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, sectorBest:p.sectorBest, arcade:p.arcade, pencil:!!p.pencil, toolGrip:p.toolGrip, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
   }catch(e){ return fresh; }
 }
 function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
@@ -1204,10 +1211,18 @@ const DIRT_PAL=["#5c3520", "#683e28", "#71462f", "#794e36", "#82563c", "#b18f75"
 const DIRT_STONES=[["..44","....","34.."],["22","14"],[".44.",".5.4","4.5.",".421"],["52","32"],[".3","25","31"],["..434","..554","43551",".2114"],["4.5..",".3553","..003"],["..4.","..55","1555",".2.3"],[".454.","25554","15551","4442."],[".2","04","3."],["54","12"],["..5..","3555.","21553","..303"],["34...",".....","..453","...33"],["..5..",".5553","3552.","3224."],[".455.","34552","...3."],["..5","355","131"]];
 const ARTCH='0123456789abcdefghijklmnop';
 function artSprite(key,rows,pal,flip){
-  const ck='art|'+GRASS_PX+'|'+key+(flip?'|f':'');
+  const ck='art|'+GRASS_PX+'|'+key+(flip?'|f':'')+(save.pencil?'|l':'');
   if(tileCache[ck]) return tileCache[ck];
   const S=GRASS_PX, w=Math.max(...rows.map(r=>r.length)), h=rows.length, c=mkCanvas(w*S,h*S), g=c.getContext('2d');
   rows.forEach((row,y)=>{ for(let x=0;x<row.length;x++){ const ch=row[x]; if(ch==='.') continue; g.fillStyle=pal[ARTCH.indexOf(ch)]; g.fillRect((flip?w-1-x:x)*S,y*S,S,S); } });
+  if(save.pencil){   // ESTILO LÁPIZ: el borde se repasa con grafito encima del color, con el trazo irregular de un lápiz
+    const on=(x,y)=>y>=0&&y<h&&x>=0&&x<(rows[y]||'').length&&rows[y][x]!=='.';
+    for(let y=0;y<h;y++) for(let x=0;x<rows[y].length;x++){
+      if(!on(x,y)||(on(x-1,y)&&on(x+1,y)&&on(x,y-1)&&on(x,y+1))) continue;
+      const n=hash2(x*7+key.length,y*13); if(n<0.08) continue;
+      g.fillStyle='rgba(38,32,28,'+(0.55+n*0.35).toFixed(2)+')'; g.fillRect((flip?w-1-x:x)*S,y*S,S,S);
+    }
+  }
   return tileCache[ck]=c;
 }
 /* Tocones: casillas donde cayó un árbol (se olvidan al cambiar de mapa) */
@@ -11819,6 +11834,9 @@ const PR_STEP=[9.2,14.8];   // cuánto crece u.walk en una vuelta de piernas, an
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
 const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27,wood:28,edge:29,steel:30};
 const PR_SWING=48;   // lo que dura un golpe de herramienta
+/* Cómo lleva la herramienta: se edita a mano en el MENÚ DEV (p9v_tools.js) y se guarda en save.toolGrip. Ángulos en radianes */
+const TOOL_GRIP_DEF={grip:0,size:1,twist:0,lat:0,rest:0.4,up:1.25,hit:0.1,armUp:2.9,armHit:1.1};
+const toolGrip=Object.assign({},TOOL_GRIP_DEF);
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle,PM.edge]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
 const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
@@ -11851,7 +11869,7 @@ function prPose(mode,ph,br,g){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const chop=mode===3&&s>0, a=chop?(ph<0.45?lerp(0.3,2.9,ph/0.45):ph<0.7?lerp(2.9,1.1,(ph-0.45)/0.25):lerp(1.1,0.3,(ph-0.7)/0.3)):lean*0.5-B*Math.sin(p);   // sube, baja de golpe y vuelve
+    const chop=mode===3&&s>0, G=toolGrip, a=chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5-B*Math.sin(p);   // sube, baja de golpe y vuelve
     const e=chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16, [sy,sz]=up(0,15.8+br*0.4);
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow,sy+Math.sin(a)*UA,sz-Math.cos(a)*UA], c=a+e, q=g.arm;
     const ha=[el[0]-s*(run?1.8:0),el[1]+Math.sin(c)*FA,el[2]-Math.cos(c)*FA];
@@ -11861,7 +11879,7 @@ function prPose(mode,ph,br,g){
     return {sh,el,ha,c};
   };
   // el mango respecto al antebrazo, y hacia qué lado va el filo: al golpear baja por delante, con el filo en cabeza; en reposo cuelga
-  const tk=mode===3?(ph<0.45?1.25:ph<0.7?lerp(1.25,0.1,(ph-0.45)/0.25):lerp(0.1,1.25,(ph-0.7)/0.3)):0.4;
+  const G=toolGrip, tk=mode===3?(ph<0.45?G.up:ph<0.7?lerp(G.up,G.hit,(ph-0.45)/0.25):lerp(G.hit,G.up,(ph-0.7)/0.3)):G.rest;
   return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br,tk,ts:mode===3?-1:1};
 }
 /* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
@@ -11986,7 +12004,13 @@ function prParts(pal,P,yaw,expr,h){
     cap(H.ha,[H.ha[0],H.ha[1],H.ha[2]-1.8],g.hand,g.hand*0.82,PM.glove);
     cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
   }
-  if(pal.tool){ grp=5; const c=AR.c+P.tk, q=P.ts; prAxe(cap,AR.ha,[0,Math.sin(c),-Math.cos(c)],[0,q*Math.cos(c),q*Math.sin(c)],1); }
+  if(pal.tool){   // el mango sale de la mano según el antebrazo; lat lo inclina a un lado, twist gira el filo sobre el mango, grip corre la mano por el mango
+    grp=5; const G=toolGrip, c=AR.c+P.tk, q=P.ts, cl=Math.cos(G.lat), sl=Math.sin(G.lat)*(AR.sh[0]<0?-1:1);
+    const dir=[sl,Math.sin(c)*cl,-Math.cos(c)*cl], s0=[0,q*Math.cos(c),q*Math.sin(c)];
+    const x=[dir[1]*s0[2]-dir[2]*s0[1],dir[2]*s0[0]-dir[0]*s0[2],dir[0]*s0[1]-dir[1]*s0[0]], ct=Math.cos(G.twist), st=Math.sin(G.twist);
+    const side=[0,1,2].map(i=>s0[i]*ct+x[i]*st), base=[0,1,2].map(i=>AR.ha[i]-dir[i]*G.grip*G.size);
+    prAxe(cap,base,dir,side,G.size);
+  }
   grp=1;
   // cuello y solapas del traje, abiertas por delante
   const n=pt(0,0,18.4+br*0.3), nr=g.nk+0.7;
@@ -12060,7 +12084,7 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 }
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 function prBuild(pal,d,mode,f,look,expr){
-  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
+  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(save.pencil?'l':'')+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||''); if(prCache[key]) return prCache[key];
   const P=prPose(mode,mode?f/8:0,mode?0:f,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=pal.solo?prToolParts():prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
   prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
@@ -12081,7 +12105,7 @@ function prBuild(pal,d,mode,f,look,expr){
     }
   }
   prSmooth(BW,BH,2*S,1,0,1.4*S); prSmooth(BW,BH,2*S,0,1,1.4*S);
-  const I=[], NX=[], NY=[], NZ=[], M=[], F=[], R=Math.max(1,S>>1);   // el contorno engorda con la resolución para no quedarse en un hilo
+  const I=[], NX=[], NY=[], NZ=[], M=[], F=[], R=Math.max(1,S>>1)+(save.pencil?1:0);   // el contorno engorda con la resolución para no quedarse en un hilo
   for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
     const q=y*BW+x, nb=[];
     for(let j=1;j<=R;j++) nb.push(y>=j?q-BW*j:-1,y<BH-j?q+BW*j:-1,x>=j?q-j:-1,x<BW-j?q+j:-1);
@@ -12145,7 +12169,10 @@ function prRender(B,pal,L,blink){
   D.fill(0);
   for(let i=0;i<n;i++){
     const p=B.I[i]*4, f=B.F[i]; let m=B.M[i];
-    if(f===2){ const c=R[m][0]; D[p]=c[0]*0.5; D[p+1]=c[1]*0.5; D[p+2]=c[2]*0.5; D[p+3]=255; continue; }
+    if(f===2){
+      if(save.pencil){ const n=(Math.imul(B.I[i],2654435761)>>>0)%100; if(n<10) continue; const v=40+n%26; D[p]=v; D[p+1]=v*0.88; D[p+2]=v*0.8; D[p+3]=255; continue; }   // trazo de grafito, irregular pero fijo
+      const c=R[m][0]; D[p]=c[0]*0.5; D[p+1]=c[1]*0.5; D[p+2]=c[2]*0.5; D[p+3]=255; continue;
+    }
     if(PR_GLOW.has(m)||(m===PM.eye&&!pal.key&&!blink)){ const c=R[m][m===PM.led&&led?1:4]; D[p]=c[0]; D[p+1]=c[1]; D[p+2]=c[2]; D[p+3]=255; continue; }
     if(blink){ if(m===PM.eye) m=PM.mouth; else if(m===PM.eyeW) m=PM.skin; }
     const nx=B.NX[i]/127, ny=B.NY[i]/127, nz=B.NZ[i]/127, ds=Math.max(0,nx*sx+ny*sy+nz*sz)*L.k, T=L.a*(0.72+0.28*nz)+ds;
@@ -12155,6 +12182,10 @@ function prRender(B,pal,L,blink){
     if(PR_GLOSS.has(m)&&L.k>0.2&&nx*hx+ny*hy+nz*hz>0.95) lv=4;
     const c=R[m][lv], b=R[m][2], tn=ds>0.14?L.sun:L.amb;
     let r=c[0]*tn[0], g=c[1]*tn[1], bl=c[2]*tn[2];
+    if(save.pencil&&(f===1||lv<=1)){   // lápiz: las líneas de dentro y las sombras se rayan en diagonal con grafito, sin tapar el color
+      const q=B.I[i], W2=PR_W*B.S, x=q%W2, y=(q/W2)|0, hatch=f===1||((x+y)%(B.S*2)===0)||(lv===0&&((x-y+W2)%(B.S*2)===0));
+      if(hatch){ const k=f===1?0.75:0.55; r=lerp(r,44,k); g=lerp(g,38,k); bl=lerp(bl,34,k); }
+    }
     for(const q of L.pts){ const d=Math.max(0,nx*q[0]+ny*q[1]+nz*q[2]); if(d>0){ r+=b[0]*q[3]*d; g+=b[1]*q[4]*d; bl+=b[2]*q[5]*d; } }
     D[p]=Math.min(255,r); D[p+1]=Math.min(255,g); D[p+2]=Math.min(255,bl); D[p+3]=255;
   }
@@ -12750,6 +12781,8 @@ function renderDev(){
   devEl('devCtl').innerHTML=chip('◀ FOTOGRAMA',false,'s',-1)+chip(devPlay?'⏸ PAUSA':'▶ PLAY',devPlay,'p',1)+chip('FOTOGRAMA ▶',false,'s',1);
   devEl('devSpeeds').innerHTML=DEV_SPEED.map((v,i)=>chip('×'+v,i===devSpeed,'v',i)).join('');
   devEl('devDir').value=devDir;
+  devEl('devLook').innerHTML=chip('✏️ LÁPIZ: '+(save.pencil?'SÍ':'NO'),save.pencil,'l',1);
+  if(!devEl('devGrip').children.length) devEl('devGrip').innerHTML=devGripHtml();
   const st=devEl('devStrip');
   st.innerHTML=Array.from({length:n},(_,i)=>'<canvas width="184" height="208" data-f="'+i+'"></canvas>').join('');
   [...st.children].forEach((c,i)=>devPose(c.getContext('2d'),i,2));
@@ -12760,6 +12793,7 @@ function devSetAnim(i){ devAnim=i; devF=0; renderDev(); }
 function devTurn(s){ devDir=(devDir+s+16)%16; renderDev(); }
 function devFrame(now){
   if(state!=='dev') return;
+  if(devDirty){ devDirty=false; renderDev(); }
   const dt=Math.min(3,(now-devLast)/16.667); devLast=now;
   if(devPlay){
     const a=DEV_ANIM[devAnim], f0=Math.floor(devF);
@@ -12789,6 +12823,29 @@ devEl('devMenu').addEventListener('click',e=>{
 });
 devEl('devDir').addEventListener('input',e=>{ devDir=+e.target.value; renderDev(); });
 devEl('btnToolDev').onclick=()=>{ S.pickup(); openDev(); };
+
+/* EDITAR CÓMO LLEVA EL HACHA: cada barra cambia un valor de toolGrip (p9r_person.js); se ve en vivo y se guarda */
+const DEV_GRIP=[['grip','Agarre en el mango',-4,14,0.5,1],['size','Tamaño',0.6,1.6,0.05,1],['twist','Giro del filo',-180,180,5,0],['lat','Inclinación lateral',-60,60,5,0],
+  ['rest','Ángulo en reposo',-60,120,5,0],['up','Ángulo al subir',-30,150,5,0],['hit','Ángulo al golpear',-60,90,5,0],['armUp','Brazo arriba',90,200,5,0],['armHit','Brazo al golpear',20,140,5,0]];   // clave, nombre, mín, máx, paso, 1 = sin grados
+let devDirty=false;
+Object.assign(toolGrip,save.toolGrip||{});
+function devGripHtml(){
+  return DEV_GRIP.map(([k,t,a,b,s,raw])=>{ const v=raw?toolGrip[k]:Math.round(toolGrip[k]*180/Math.PI);
+    return '<label>'+t+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'"><output>'+v+(raw?'':'°')+'</output></label>'; }).join('');
+}
+function devGripChanged(){ for(const q in prCache) delete prCache[q]; save.toolGrip=Object.assign({},toolGrip); saveSave(); devDirty=true; }
+devEl('devGrip').addEventListener('input',e=>{
+  const k=e.target.dataset.k; if(!k) return;
+  const raw=DEV_GRIP.find(d=>d[0]===k)[5], v=+e.target.value;
+  toolGrip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°');
+  devGripChanged();
+});
+devEl('devMenu').addEventListener('click',e=>{
+  const b=e.target.closest('[data-g],[data-l]'); if(!b) return;
+  if(b.dataset.l){ save.pencil=!save.pencil; saveSave(); devDirty=true; return; }
+  if(b.dataset.g==='reset'){ Object.assign(toolGrip,TOOL_GRIP_DEF); devGripChanged(); devEl('devGrip').innerHTML=devGripHtml(); }
+  else { const txt=JSON.stringify(toolGrip,(k,v)=>typeof v==='number'?+v.toFixed(3):v); try{ navigator.clipboard.writeText(txt); }catch(err){} b.textContent='✔ COPIADO'; setTimeout(()=>{ b.textContent='📋 COPIAR VALORES'; },1500); }
+});
 
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
@@ -12820,6 +12877,7 @@ function menuBuildItems(){
     {id:'opt_mira',label:'MIRA',val:['NORMAL','GRANDE','ENORME'][save.mira],sub:'Tamaño del puntero al apuntar'},
     {id:'opt_miraEst',label:'COLOR MIRA',val:['ADAPTATIVA','CLARA','OSCURA'][save.miraEst],sub:'Adaptativa: cambia sola para verse sobre niebla, arena o suelo oscuro'},
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
+    {id:'opt_pencil',label:'ESTILO LÁPIZ',val:save.pencil?'SÍ':'NO',sub:'Prueba: bordes de grafito en el piloto, los pinos y las rocas'},
     {id:'opt_dev',label:'MENÚ DEV',sub:'Ver las animaciones fotograma a fotograma (también con F2)'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
     {id:'back',label:'← VOLVER'}];
@@ -12918,6 +12976,7 @@ function menuActivate(){
     case 'options': S.pickup(); menuView='options'; menuIdx=0; renderMainMenu(); break;
     case 'back': { const from=menuView; S.pickup(); menuView='main'; menuItems=menuBuildItems(); menuIdx=Math.max(0,menuItems.findIndex(x=>x.id===(from==='confirm'?'new':from))); renderMainMenu(); break; }
     case 'opt_dev': S.pickup(); openDev(); break;
+    case 'opt_pencil': save.pencil=!save.pencil; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_sound': save.sound=!save.sound; saveSave(); updateSoundBtn(); S.pickup(); renderMainMenu(); break;
     case 'opt_vol': menuOption(1,true); break;
     case 'opt_miraEst': save.miraEst=(save.miraEst+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
