@@ -448,7 +448,7 @@
       <div class="mPress">PULSA CUALQUIER TECLA</div>
       <div class="mList" id="mList"></div>
       <div class="mCard" id="mCard"></div>
-      <div class="mFoot"><span>↑ ↓ elegir · INTRO aceptar · ESC volver · también con el ratón</span><span>v0.9 (prototipo) · 5 mundos · supervivencia</span></div>
+      <div class="mFoot"><span>↑ ↓ elegir · INTRO aceptar · ESC volver · T ciclo del día · también con el ratón</span><span>v0.9 (prototipo) · 5 mundos · supervivencia</span></div>
     </div>
 
     <div id="scrLook" class="overlay hidden">
@@ -586,7 +586,7 @@ const ASSETS={"pulso_hadal": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggA
 (function(){
 "use strict";
 const DEBUG = /[?&]debug/.test(location.search);
-let arcadeRun=false, arcDemo=false, zonaOn=false;   // partida en la máquina recreativa, su demostración (p9u_arcade.js) y la zona de pruebas (p9v_tools.js)
+let arcadeRun=false, arcDemo=false, zonaOn=false, menuLapseBak=null;   // partida en la máquina recreativa, su demostración (p9u_arcade.js) y la zona de pruebas (p9v_tools.js)
 
 /* ===================== PERSISTENCIA ===================== */
 const SAVE_KEY='omnialoya_save_v4', OLD_SAVE_KEY='omnialoya_save_v3';   // se mantienen para no perder la partida guardada
@@ -726,7 +726,7 @@ function loadSave(){
       home:p.home, worlds:p.worlds, rescuedTotal:p.rescuedTotal, sectorBest:p.sectorBest, arcade:p.arcade, pencil:!!p.pencil, toolGrip:p.toolGrip, poseEdits:p.poseEdits, loreSeen:p.loreSeen, archPlayed:!!p.archPlayed, mapSeen:p.mapSeen||null, vol:p.vol, shake:p.shake, mira:p.mira, miraEst:p.miraEst, minerals:p.minerals, jinete:!!p.jinete, builder:!!p.builder, clock:p.clock, upV:p.upV, vtier:p.vtier, forge:p.forge, infl:p.infl, day:p.day, moon0:p.moon0 });
   }catch(e){ return fresh; }
 }
-function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
+function saveSave(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(menuLapseBak?Object.assign({},save,menuLapseBak):save)); }catch(e){} }   // con el ciclo acelerado se guarda la hora de verdad
 let save=loadSave();
 
 /* ===================== AUDIO ===================== */
@@ -12982,6 +12982,7 @@ function menuBuildItems(){
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
     {id:'opt_pencil',label:'ESTILO LÁPIZ',val:save.pencil?'SÍ':'NO',sub:'Prueba: bordes de grafito en el piloto, los pinos y las rocas'},
     {id:'opt_dev',label:'MENÚ DEV',sub:'Ver las animaciones fotograma a fotograma (también con F2)'},
+    {id:'opt_lapse',label:'CICLO DEL DÍA',val:menuLapseBak?'ACELERADO':'NORMAL',sub:'Míralo pasar: un día entero en 20 segundos (también con T). Al pararlo vuelve tu hora'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
     {id:'back',label:'← VOLVER'}];
   if(menuView==='controls') return [{id:'back',label:'← VOLVER'}];
@@ -13062,7 +13063,7 @@ function menuPressStart(){
   ensureAudio(); S.respawn();
   menuPhase='main'; renderMainMenu();
 }
-function menuLeave(){ showOnly(null); }
+function menuLeave(){ menuLapse(false); showOnly(null); }
 function menuPlay(){ menuLeave(); if(inHome&&map){ state='home'; setHomeHud(true); } else enterHome(); }
 function menuActivate(){
   const it=menuItems[menuIdx]; if(!it) return;
@@ -13085,6 +13086,7 @@ function menuActivate(){
     case 'opt_miraEst': save.miraEst=(save.miraEst+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_mira': save.mira=(save.mira+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_shake': save.shake=save.shake===false; saveSave(); S.pickup(); renderMainMenu(); break;
+    case 'opt_lapse': menuLapse(!menuLapseBak); S.pickup(); renderMainMenu(); break;
     case 'opt_full':
       try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }catch(e){}
       setTimeout(()=>{ if(state==='menu') renderMainMenu(); },250);
@@ -13120,6 +13122,7 @@ function menuKey(k){
   else if(k==='arrowleft'||k==='a') menuOption(-1);
   else if(k==='arrowright'||k==='d') menuOption(1);
   else if(k==='enter'||k===' ') menuActivate();
+  else if(k==='t'){ menuLapse(!menuLapseBak); S.tick(); if(menuView==='options') renderMainMenu(); }
   else if(k==='escape'){
     if(menuView!=='main'){ menuIdx=menuItems.findIndex(x=>x.id==='back'); menuActivate(); }
     else if(inHome&&map){ menuIdx=0; menuActivate(); }   // ESC en el menú vuelve a la base
@@ -13260,7 +13263,7 @@ function menuMoonCv(M,phase){   // la luna de esta fase, ya dibujada (y su versi
 function menuSky(g,M,ts,Dia){
   const S=skyNow(), HOR=M.HOR, SW=M.SW;
   const [sx,sy]=menuSkyXY(M,S.sun), [mx,my]=menuSkyXY(M,S.moon), [ax,ay]=menuSkyXY(M,S.mars);
-  M.sunX=sx; M.sunUp=S.sun.alt>-1&&sx>-20&&sx<SW+20;
+  M.sunX=sx; M.sunSX=sx; M.sunSY=sy; M.sunUp=S.sun.alt>-1&&sx>-20&&sx<SW+20;
   M.moonX=mx; M.moonY=my; M.moonUp=S.moon.alt>-1&&mx>-20&&mx<SW+20;
   M.marsX=Math.round(ax); M.marsY=Math.round(ay); M.marsUp=S.mars.alt>1&&ax>0&&ax<SW;
   const lit=(1-Math.cos(S.phase*Math.PI*2))/2; M.moonLit=M.moonUp?lit*clamp(S.moon.alt/6,0,1):0;
@@ -13274,6 +13277,9 @@ function menuSky(g,M,ts,Dia){
   }
   // estrellas: giran con la Tierra alrededor de la Polar
   if(M.night>0.05){
+    g.globalAlpha=M.night*0.55*(1-M.moonLit*0.7);   // la Vía Láctea: la luna llena la borra
+    for(const [ra,dec,b] of M.milky){ const p=skyHoriz(ra,dec,S.lst); if(p.alt<2) continue; const [x,y]=menuSkyXY(M,p); if(x<0||x>=SW) continue;
+      g.fillStyle=b>0.75?'#6a70a8':b>0.4?'#4a4f82':'#33375e'; g.fillRect(Math.round(x),Math.round(y),1,1); }
     g.globalAlpha=M.night;
     for(const [ra,dec,ph,b] of M.stars){
       const p=skyHoriz(ra,dec,S.lst); if(p.alt<1) continue;
@@ -13310,24 +13316,7 @@ function menuSky(g,M,ts,Dia){
 function menuBuildScene(){
   const SW=Math.round(W/3), SH=Math.round(H/3), H0=128;
   const HOR=Math.round(H0+(SH-200)*0.55), OX=Math.round((SW-300)/2), OY=HOR-H0, RX=SW-300, FX=SW/300;
-  // cielo y mar degradados con trama: uno de noche (bg) y otro de día (bgDay); según la hora se mezclan
-  const skyCv=(SKY,SEA)=>{ const c=mkCanvas(SW,SH), q=c.getContext('2d'), img=q.createImageData(SW,SH), D=img.data;
-    for(let y=0;y<SH;y++) for(let x=0;x<SW;x++){
-      const th=BAYER4[(y&3)*4+(x&3)]/16;
-      let pal, f;
-      if(y<HOR){ pal=SKY; f=Math.pow(y/HOR,1.5)*(pal.length-1); }
-      else { pal=SEA; f=Math.pow((y-HOR)/(SH-HOR),0.7)*(pal.length-1); }
-      const i=Math.floor(f), cc=pal[Math.min(pal.length-1,i+((f-i)>th?1:0))], o=(y*SW+x)*4;
-      D[o]=cc[0]; D[o+1]=cc[1]; D[o+2]=cc[2]; D[o+3]=255;
-    }
-    q.putImageData(img,0,0); return c; };
-  let bg0=skyCv(['#070a1c','#0a0d24','#0e112c','#121533','#17193b','#1c1d42','#232349','#2b2a50','#353157'].map(menuHex),   // noche: el naranja del horizonte lo pone el sol (menuSky)
-                 ['#3a2350','#2a2150','#1e2148','#181c3e','#131833','#0f1329','#0b0f22'].map(menuHex)), bg=bg0;
-  let g=bg.getContext('2d');
-  const bgDusk=skyCv(['#141a40','#1c2150','#2a2a5e','#3d3266','#58396a','#7c4468','#a5546a','#cf6c62','#f0915a'].map(menuHex),
-                     ['#8a5266','#6a4064','#4a3460','#332a52','#252246','#1c1b3a','#15152e'].map(menuHex));
-  const bgDay=skyCv(['#2b5d9e','#3468ad','#3f76bb','#4b84c6','#5b93cf','#6da2d6','#82b2dc','#9cc3e2','#bcd6e6'].map(menuHex),
-                    ['#6a9cc2','#5a8fb8','#4a80ac','#3d729f','#326590','#28597f','#1f4c6e'].map(menuHex)), gd=bgDay.getContext('2d');
+  let g=null;
   // el sol, la luna, Marte y las estrellas ya no están pintados en el cielo: se mueven (menuSky). Las islas lejanas van en
   // capas aparte (de noche y de día) para que el sol y la luna se escondan DETRÁS de ellas al ponerse
   const islN=mkCanvas(SW,SH), islD=mkCanvas(SW,SH), gBg=g; g=islN.getContext('2d');
@@ -13338,7 +13327,6 @@ function menuBuildScene(){
   isle(30,60,4,'#1d1128','#3a1d3c',4);
   g=islD.getContext('2d');   // las mismas islas lejanas, de día (azuladas por la distancia)
   isle(6,78,9,'#6a86a0','#87a2b8',1); isle(206,262,6,'#6a86a0','#87a2b8',2); isle(266,299,4,'#6a86a0','#87a2b8',3); isle(30,60,4,'#7d97ae','#94acc0',4);
-  g=gBg;
   // tu base: isla de meseta (suelo plano en y=120) con hangar, forja, radar, grúa y faro APOYADOS en el suelo.
   // Se dibuja en una capa aparte (coordenadas de diseño) para poder reflejarla en el agua.
   const SIL='#120c1c', RIM='#2c1a32', GY=120, sil=mkCanvas(300,H0), b=sil.getContext('2d');
@@ -13369,7 +13357,6 @@ function menuBuildScene(){
   b.fillRect(183,87,7,1); b.fillRect(184,86,5,1); b.fillRect(185,85,3,1); b.fillRect(186,82,1,3);   // cúpula y pararrayos
   b.fillRect(96,124,14,1); b.fillRect(98,125,1,3); b.fillRect(103,125,1,3); b.fillRect(108,125,1,3);  // muelle
   b.fillStyle=RIM; b.fillRect(140,92,1,28); b.fillRect(112,108,1,12); b.fillRect(184,96,1,24); b.fillRect(96,124,14,1);
-  g.drawImage(sil,OX,OY);
   // máscara que tapa los haces del faro: los edificios sí, pero no el propio faro ni el suelo (para que el haz llegue al mar)
   const bmask=mkCanvas(300,H0), mq=bmask.getContext('2d'); mq.drawImage(sil,0,0); mq.clearRect(178,80,16,48); mq.clearRect(0,119,300,10);
   const silR=mkCanvas(300,H0), rq=silR.getContext('2d'); rq.drawImage(sil,0,0);   // reflejo: la torre de colores no debe pintar manchas en el agua
@@ -13379,7 +13366,8 @@ function menuBuildScene(){
   const lhG=mkCanvas(300,H0), lg=lhG.getContext('2d'); lg.drawImage(sil,176,80,20,48,176,80,20,48);
   lg.globalCompositeOperation='source-in'; lg.fillStyle='#6a5470'; lg.fillRect(176,80,20,48);   // el mismo tono que el resto de la isla (litC)
   lg.globalCompositeOperation='source-over'; lg.fillStyle='#5d5650'; for(let x=176;x<196;x++){ for(let y=80;y<128;y++){ if(lg.getImageData(x,y,1,1).data[3]){ lg.fillRect(x,y,1,1); break; } } }
-  menuScene={moonLit:0,dusk:0,bgDusk,islN,islD,moonCv:{},silR,bgDay,lhG,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
+  menuScene={moonLit:0,dusk:0,skyKey:null,skyC:mkCanvas(SW,SH),skyImg:new ImageData(SW,SH),cloudC:mkCanvas(SW,HOR),cloudImg:new ImageData(SW,HOR),
+    clouds:Array.from({length:6},(_,i)=>menuCloudSpr(i)),milky:menuMilky(),islN,islD,moonCv:{},silR,lhG,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
     stars:Array.from({length:Math.round(420*FX)},(_,i)=>[opsHash(i,1,5)*Math.PI*2,Math.asin(opsHash(i,2,5)*1.55-0.55),opsHash(i,3,5)*6.28,opsHash(i,4,5)]),   // [ascensión recta, declinación, parpadeo, brillo]
     wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
     smoke:[], lastPuff:-1, embers:[], bubbles:[]};
@@ -13454,7 +13442,8 @@ function menuIslandLights(M,ts,beams,LX,LY,flash,H0){
   const fl=0.6+Math.sin(ts*9)*0.2+Math.sin(ts*23)*0.1;
   q.fillStyle='rgba(255,138,42,'+fl.toFixed(2)+')'; q.fillRect(142,104,6,6);
   q.fillStyle='rgba(255,215,110,'+(fl*0.9).toFixed(2)+')'; q.fillRect(143,106,4,3);
-  if((M.night??1)>0.3) M.wins.forEach(([x,y],i)=>{ if(Math.sin(ts*0.7+i*1.9)>-0.6){ q.fillStyle=i%3?'#ffcf6b':'#ffe9a8'; q.fillRect(x,y,2,2); } });
+  M.wins.forEach(([x,y],i)=>{ if((M.night??1)>0.12+opsHash(i,5,3)*0.6&&Math.sin(ts*0.7+i*1.9)>-0.6){   // al anochecer se encienden una a una
+    q.fillStyle=i%3?'#ffcf6b':'#ffe9a8'; q.fillRect(x,y,2,2); } });
   q.fillStyle=Math.floor(ts*1.2)%2?'#ff3b3b':'#4a1218'; q.fillRect(150,76,1,1);   // luz de aviso de la chimenea
   const rw=Math.round(Math.abs(Math.cos(ts*1.6))*5)+1; q.fillStyle=menuMix('#9aa0a8','#120c1c',M.night??1); q.fillRect(164-rw,98,rw*2,3);   // radar girando
   q.fillStyle=Math.floor(ts*1.5)%2?'#ff4757':'#5a1a24'; q.fillRect(163,96,2,2);
@@ -13512,14 +13501,13 @@ function drawMenuScene(){
   g.imageSmoothingEnabled=false;
   // DÍA Y NOCHE: la escena sigue la hora de tu partida (p9m_daynight.js). Dia = 1 a pleno día; lamp = el faro
   // encendido (se enciende al anochecer, hacia las 19:30, y se apaga al amanecer: de día no hace falta)
-  const now=performance.now(); advanceClock(Math.min(4,(now-(M.lastT||now))/16.67)); M.lastT=now;   // en el menú el cielo sigue girando
+  const now=performance.now(); advanceClock(Math.min(4,(now-(M.lastT||now))/16.67)*(menuLapseBak?MENU_LAPSE:1)); M.lastT=now;   // en el menú el cielo sigue girando
   // la luz sale de la altura del sol: de día pleno (3° o más) a noche cerrada (−7°) pasando por el crepúsculo; el faro se
   // enciende cuando el sol baja de 4° y se apaga al amanecer. gold = la hora dorada, con el sol bajo
-  const sa=skyNow().sun.alt, Dia=menuSmooth(-7,3,sa), lamp=menuSmooth(4,-2,sa), dusk=clamp(1-Math.abs(sa+1.5)/9,0,1), gold=clamp(1-sa/16,0,1)*Dia;
+  const SK=skyNow(), sa=SK.sun.alt, lamp0=menuSmooth(4,-2,sa), lamp=lamp0>0.02&&lamp0<0.98&&opsHash(Math.floor(ts*12),1,4)<0.3?lamp0*0.3:lamp0, Dia=menuSmooth(-7,3,sa), dusk=clamp(1-Math.abs(sa+1.5)/9,0,1), gold=clamp(1-sa/16,0,1)*Dia;
   M.night=1-Dia; M.lamp=lamp; M.dusk=dusk;
-  g.drawImage(M.bg,0,0);
-  if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.bgDay,0,0); g.globalAlpha=1; }
-  if(dusk>0.01){ g.globalAlpha=dusk*0.9; g.drawImage(M.bgDusk,0,0); g.globalAlpha=1; }
+  const moonK=SK.moon.alt>0?(1-Math.cos(SK.phase*Math.PI*2))/2*clamp(SK.moon.alt/6,0,1):0;
+  g.drawImage(menuSkyPaint(M,SK,moonK),0,0);   // cielo y mar, pintados según dónde está el sol
   menuSky(g,M,ts,Dia);   // amanecer/atardecer, estrellas, sol, luna y Marte en su sitio de verdad
   g.drawImage(M.islN,0,0); if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.islD,0,0); g.globalAlpha=1; }
   // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos y HORIZONTALES (barren el horizonte,
@@ -13551,20 +13539,10 @@ function drawMenuScene(){
   }
   g.globalAlpha=1;
   g.restore();
-  // nubes en capas BAJO la luna: panza iluminada por el atardecer; cerca de la luna se aclaran y brillan en plata
-  for(let i=0;i<6;i++){
-    const far=i<3, wd=34+(i*17)%30, y=far?HOR-36+i*7:HOR-62+(i-3)*9, x=Math.round(((ts*(far?1.2:2.4)+i*97)%(SW+60+wd))-wd-30);
-    const dm=M.moonUp?Math.hypot(x+wd/2-M.moonX,y-M.moonY):99;
-    g.globalAlpha=clamp((dm-30)/30,0.25,1)*(far?0.75:0.9);
-    const cl=()=>{ g.fillRect(x,y,wd,3); g.fillRect(x+4,y-2,wd-10,2); g.fillRect(x+10,y-3,Math.round(wd*0.4),1); };
-    g.fillStyle=menuMix(far?'#3a2048':'#2c1a3e',far?'#dfe8f2':'#f2f6fb',Dia); cl();
-    g.fillStyle=menuMix(far?'#4a3a62':'#3a2c52','#b8c8da',Dia); g.fillRect(x+2,y+3,wd-4,1);
-    if(M.dusk>0.05){ const a0=g.globalAlpha; g.globalAlpha=a0*M.dusk*0.6; g.fillStyle='#f4a27a'; cl(); g.fillStyle=far?'#c45a50':'#8a3c5a'; g.globalAlpha=a0*M.dusk; g.fillRect(x+2,y+3,wd-4,1); g.globalAlpha=a0; }   // panza roja al amanecer y al atardecer
-    if(Dia<0.5&&dm<48&&M.moonLit>0.25){ g.fillStyle='#e8e0cc'; g.fillRect(x+4,y-2,wd-10,1); }
-  }
-  g.globalAlpha=1;
+  menuDrawClouds(g,M,ts,SK,Dia,moonK);   // nubes con volumen, iluminadas desde el sol o la luna
   g.drawImage(M.sil,OX,OY);   // la isla queda delante de las nubes bajas
   if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.litC,OX,OY); menuLighthouseDay(g,OX,OY,M); g.globalAlpha=1; }   // de día los edificios y el faro se ven con su color
+  menuDrawMist(g,M,ts,SK);   // bruma del amanecer, delante del pie de la isla
   // portal de la Luna: una lucecita en su superficie; cada 9 s un destello viaja hasta Marte (el salto cuántico)
   const pp=(0.5+0.5*Math.sin(ts*2.2))*M.night;
   if(M.moonUp){
@@ -13582,6 +13560,7 @@ function drawMenuScene(){
     if(Dia>0.01){ g.globalAlpha=Dia; menuSpr(g,MENU_HELI_DAY,hx,hy,MENU_HELI_COLS); }
     g.globalAlpha=Math.floor(ts*12)%2?1:0.4; g.fillStyle=hk; g.fillRect(hx-2,hy,14,1); g.globalAlpha=1;
     if(Math.floor(ts*2)%2){ g.fillStyle='#ff4757'; g.fillRect(hx+9,hy+3,1,1); } }
+  menuDrawGulls(g,M,ts,Dia);
   menuWeatherSky(g,M,ts);   // nubarrones u oscuridad según el clima de tu base
   // --- la isla (coordenadas de diseño) ---
   g.save(); g.translate(OX,OY);
@@ -13760,6 +13739,149 @@ function drawMenuScene(){
   ctx.imageSmoothingEnabled=false;
   ctx.drawImage(M.c,0,0,W,H);
   ctx.drawImage(M.over,0,0);
+  if(menuLapseBak){ ctx.font='20px "Jersey 15", monospace'; ctx.textAlign='right'; ctx.fillStyle='#000'; ctx.fillText('⏩ '+clockHHMM()+' · CICLO ACELERADO · T: parar',W-14,H-14); ctx.fillStyle='#ffd76e'; ctx.fillText('⏩ '+clockHHMM()+' · CICLO ACELERADO · T: parar',W-15,H-15); ctx.textAlign='left'; }
+}
+
+/* ===================== EL CIELO PINTADO PUNTO A PUNTO =====================
+   Cada píxel del cielo sale de dónde está el sol, como el cielo de verdad:
+   · el color del aire en el cenit y en el horizonte cambia con la altura del sol (MENU_SKYK);
+   · el horizonte solo se calienta del lado del sol: el contrario se queda frío y azulado;
+   · alrededor del sol hay un resplandor que crece y se vuelve naranja al acercarse al horizonte, y que sigue
+     asomando por el horizonte un rato después de ponerse;
+   · en el crepúsculo, en el lado contrario al sol, sube la SOMBRA DE LA TIERRA (banda azul oscura) y encima el
+     CINTURÓN DE VENUS (franja rosa), como se ve de verdad al anochecer;
+   · el mar refleja ese cielo: cerca del horizonte, casi espejo; hacia ti, más color de agua.
+   Con trama 4x4, como el resto del pixel art. Solo se rehace cuando el sol (o la luz de la luna) ha cambiado. */
+const MENU_SKYK=[[-90,'#06070f','#1a1838','#06070f'],[-18,'#080a18','#211e44','#080a16'],[-12,'#0a0e24','#2a2652','#0a0c1e'],[-8,'#0b1230','#2c2752','#0c0f26'],
+  [-4,'#16244f','#7a4a6c','#1a1a38'],[-1,'#25386e','#d0705c','#2a2444'],[2,'#33558f','#efa06c','#2e3a5a'],[6,'#3a64a8','#f2c28c','#2d5878'],
+  [12,'#3a6cb4','#c2d6e2','#245a82'],[25,'#2f63ad','#a9cbe6','#1f5a86'],[90,'#2459a4','#9cc3e2','#1c5684']].map(([a,z,h,w])=>[a,menuHex(z),menuHex(h),menuHex(w)]);   // [altura del sol, cenit, horizonte, agua]
+function menuSkyKey(a){
+  const K=MENU_SKYK; let i=0; while(i<K.length-2&&a>K[i+1][0]) i++;
+  const u=clamp((a-K[i][0])/(K[i+1][0]-K[i][0]),0,1), m=(p,q)=>p.map((v,j)=>v+(q[j]-v)*u);
+  return [m(K[i][1],K[i+1][1]),m(K[i][2],K[i+1][2]),m(K[i][3],K[i+1][3])];
+}
+function menuSkyPaint(M,S,moonK){
+  const sa=S.sun.alt, q=menuLapseBak?1.2:4, key=Math.round(sa*q)+'|'+Math.round(S.sun.az*q/2)+'|'+Math.round(moonK*8);   // acelerado: se repinta menos a menudo
+  if(M.skyKey===key) return M.skyC;
+  M.skyKey=key;
+  const SW=M.SW, SH=M.SH, HOR=M.HOR, D=M.skyImg.data, RD=Math.PI/180, [Z,HC,WT]=menuSkyKey(sa);
+  const sS=Math.sin(sa*RD), cS=Math.cos(sa*RD), warmK=clamp(1-Math.abs(sa-2)/14,0,1);
+  const belt=clamp(1-Math.abs(sa+2.5)/5.5,0,1), hs=clamp(2-sa*1.1,1,11);
+  const gK=sa<-8?0:sa<-2?lerp(0,0.6,(sa+8)/6):sa<6?0.7:lerp(0.7,0.32,clamp((sa-6)/24,0,1));
+  const gC=sa<-2?[224,112,90]:sa<8?[255,176,112]:sa<20?[255,224,176]:[255,246,224], sig=lerp(26,13,clamp(sa/40,0,1));
+  const cool=Z.map(v=>Math.min(255,v*1.35+22)), mA=moonK*0.07;
+  const cosD=new Float32Array(SW), opp=new Float32Array(SW);
+  for(let x=0;x<SW;x++){ const az=(x-SW/2)/(SW/2)*135; cosD[x]=Math.cos((az-S.sun.az)*RD); opp[x]=(1-cosD[x])/2; }
+  const c=[0,0,0];
+  const at=(x,alt)=>{   // color del cielo en esa columna y altura (grados), en c
+    const t=Math.pow(Math.max(0,alt)/90,0.42), op=opp[x]*warmK*0.75, sA=Math.sin(alt*RD), cA=Math.cos(alt*RD);
+    const g=Math.acos(clamp(sA*sS+cA*cS*cosD[x],-1,1))/RD;
+    let gl=gK*(Math.exp(-g/sig)+0.6*Math.exp(-g/4)); if(sa<0) gl*=lerp(1,Math.exp(-alt/10),clamp(-sa/4,0,1)); gl=Math.min(1,gl);
+    const ob=opp[x]*opp[x]*belt, d=(alt-hs)/7, sh=alt<hs?0.55*ob:0, pk=alt>=hs&&d<1.6?0.45*ob*Math.sin(Math.PI*d/1.6):0;
+    for(let j=0;j<3;j++){
+      const hz=HC[j]+(cool[j]-HC[j])*op; let v=hz+(Z[j]-hz)*t;
+      v+=(gC[j]-v)*gl;
+      if(sh) v+=([38,48,92][j]-v)*sh; else if(pk>0) v+=([233,163,184][j]-v)*pk;
+      c[j]=v+mA*[60,70,110][j];
+    }
+  };
+  for(let y=0;y<SH;y++){
+    const sea=y>=HOR, v=sea?(y-HOR)/Math.max(1,SH-HOR):0, alt=sea?2+v*32:(HOR-y)/(HOR-4)*90, F=sea?0.3+0.6*Math.pow(v,0.7):0;
+    for(let x=0;x<SW;x++){
+      at(x,alt);
+      const th=BAYER4[(y&3)*4+(x&3)]/16, o=(y*SW+x)*4;
+      for(let j=0;j<3;j++){ let q=sea?c[j]*0.85+(WT[j]-c[j]*0.85)*F:c[j]; q=clamp(q,0,255); D[o+j]=Math.min(255,Math.floor(q/255*15+th)/15*255); }
+      D[o+3]=255;
+    }
+  }
+  M.skyC.getContext('2d').putImageData(M.skyImg,0,0);
+  M.hor=HC; M.zen=Z;
+  return M.skyC;
+}
+/* NUBES CON VOLUMEN: cada nube es un montón de bolas de algodón (con su normal guardada) y se ilumina desde donde está la
+   luz: el sol de día; al atardecer, con el sol ya bajo el horizonte, les da desde abajo y se les encienden las panzas;
+   de noche, la luna en plata. Cuatro tonos, como pixel art. */
+function menuCloudSpr(i){
+  // forma: una base plana y alargada con cúpulas encima que se solapan (más altas en el centro)
+  const far=i<3, R=mulberry32(91+i*7), w=Math.round(far?24+R()*18:40+R()*30), h=Math.round(far?7+R()*3:11+R()*6), n=far?4:5+Math.floor(R()*3);
+  const P=[]; for(let k=0;k<n;k++){ const u=0.14+0.72*(k+R()*0.6)/n, r=h*(0.42+0.5*Math.sin(u*Math.PI))*(0.8+0.35*R()); P.push([u*w,h-r*0.82,r]); }
+  const top=Math.floor(Math.min(...P.map(p=>p[1]-p[2])))-2, Wd=w+4, Ht=h-top+3, Mk=new Float32Array(Wd*Ht);   // el recuadro llega hasta la cúpula más alta
+  for(let y=0;y<Ht;y++) for(let x=0;x<Wd;x++){ const X=x-2+0.5, Y=y+top+0.5;
+    let on=Y<=h&&Y>=h*0.62&&X>=w*0.06&&X<=w*0.94;   // la base
+    for(const [cx,cy,r] of P) if(Math.hypot(X-cx,(Y-cy)*1.1)<r) on=true;
+    if(Y>h) on=false;
+    Mk[y*Wd+x]=on?1:0; }
+  // la luz se calcula sobre la silueta entera (máscara suavizada), no bola a bola: así parece una sola nube
+  const B=Mk.slice(), T=new Float32Array(Wd*Ht);
+  for(let pass=0;pass<2;pass++){
+    for(let y=0;y<Ht;y++) for(let x=0;x<Wd;x++){ let a=0,c=0; for(let d=-2;d<=2;d++){ const xx=x+d; if(xx>=0&&xx<Wd){ a+=B[y*Wd+xx]; c++; } } T[y*Wd+x]=a/c; }
+    for(let y=0;y<Ht;y++) for(let x=0;x<Wd;x++){ let a=0,c=0; for(let d=-2;d<=2;d++){ const yy=y+d; if(yy>=0&&yy<Ht){ a+=T[yy*Wd+x]; c++; } } B[y*Wd+x]=a/c; }
+  }
+  const px=[], at=(x,y)=>x<0||y<0||x>=Wd||y>=Ht?0:B[y*Wd+x];
+  for(let y=0;y<Ht;y++) for(let x=0;x<Wd;x++){
+    if(!Mk[y*Wd+x]) continue;
+    const gx=at(x+1,y)-at(x-1,y), gy=at(x,y+1)-at(x,y-1), edge=!Mk[(y-1)*Wd+x]||!Mk[y*Wd+x-1]||!Mk[y*Wd+x+1];
+    px.push([x-2,y+top,-gx*3.4,-gy*3.4,edge,(y+top)/h]);
+  }
+  return {w,h,px,far};
+}
+function menuDrawClouds(g,M,ts,S,Dia,moonK){
+  const SW=M.SW, HOR=M.HOR, D=M.cloudImg.data; D.fill(0);
+  const sa=S.sun.alt, sunK=menuSmooth(-9,-3,sa);
+  const sunCol=sa>12?[255,255,255]:sa>2?[255,lerp(216,255,(sa-2)/10),lerp(168,255,(sa-2)/10)]:sa>-2?[255,178,122]:[240,138,138];
+  const nightCol=M.moonUp?[184*moonK+40,194*moonK+40,220*moonK+66]:[36,36,68];
+  const lit=nightCol.map((v,j)=>v+(sunCol[j]-v)*sunK);
+  const shN=[21,21,43], shDk=[94,74,120], shD=[163,182,204], shade=shN.map((v,j)=>{ const a=v+(shDk[j]-v)*sunK; return a+(shD[j]-a)*Dia; });
+  const lx=sunK>0.05?M.sunSX:M.moonX, ly=sunK>0.05?M.sunSY:M.moonY;
+  for(let i=0;i<M.clouds.length;i++){
+    const C=M.clouds[i], far=C.far, y0=far?HOR-36+i*7:HOR-62+(i-3)*9, x0=Math.round(((ts*(far?1.2:2.4)+i*97)%(SW+60+C.w))-C.w-30);
+    let Lx=lx-(x0+C.w/2), Ly=ly-(y0+C.h/2); const Ll=Math.hypot(Lx,Ly)||1; Lx/=Ll; Ly/=Ll;
+    const dm=M.moonUp?Math.hypot(x0+C.w/2-M.moonX,y0-M.moonY):99, al=Math.round(255*clamp((dm-30)/30,0.3,1)*(far?0.78:0.92));
+    const up=clamp(-Ly,-1,1);   // luz desde arriba (día) o desde abajo (sol ya puesto)
+    for(const [x,y,nx,ny,edge,v] of C.px){
+      const X=x0+x, Y=y0+y; if(X<0||X>=SW||Y<0||Y>=HOR) continue;
+      const tt=0.5+0.5*clamp(nx*Lx+ny*Ly,-1,1)+(0.5-v)*0.45*up, b=tt>0.8?1:tt>0.6?0.74:tt>0.4?0.46:tt>0.22?0.24:0.08, k=edge&&b>0.6?Math.min(1,b+0.2):b, o=(Y*SW+X)*4;
+      for(let j=0;j<3;j++) D[o+j]=Math.min(255,shade[j]+(lit[j]-shade[j])*k);
+      D[o+3]=al;
+    }
+  }
+  M.cloudC.getContext('2d').putImageData(M.cloudImg,0,0);
+  g.drawImage(M.cloudC,0,0);
+}
+/* Bruma del amanecer sobre el mar: aparece con las primeras luces y se la lleva el sol a media mañana (al atardecer, muy poca) */
+function menuDrawMist(g,M,ts,S){
+  const sa=S.sun.alt, k=menuSmooth(-6,0,sa)*(1-menuSmooth(5,13,sa))*(S.sun.az<0?1:0.3); if(k<0.02||!M.hor) return;
+  const H=M.hor, col='rgba('+H.map(v=>Math.round(v+(255-v)*0.45)).join(',')+',';
+  for(let j=0;j<8;j++){ const y=M.HOR-5+j*2, a=k*0.3*(1-Math.abs(j-3)/5); if(a<=0) continue;
+    for(let s=0;s<5;s++){ const w=50+((s*37+j*11)%40), x=((ts*(1.5+j*0.3)+s*97+j*31)%(M.SW+120))-60;
+      g.fillStyle=col+a.toFixed(3)+')'; g.fillRect(Math.round(x),y,w,2); g.fillRect(Math.round(x)+6,y-1,w-12,1); } }
+}
+/* Gaviotas: de día cruzan el cielo batiendo las alas; al atardecer vuelven a la isla y de noche no hay */
+function menuDrawGulls(g,M,ts,Dia){
+  if(Dia<0.05) return;
+  g.globalAlpha=Dia;
+  for(let i=0;i<5;i++){
+    const v=6+i*1.7, x=Math.round(M.SW+20-((ts*v+i*73)%(M.SW+60))), y=Math.round(34+i*6+Math.sin(ts*0.8+i*2)*4), up=Math.floor(ts*(5+i*0.7)+i)%2;
+    g.fillStyle=i%2?'#3a4250':'#4c5664';
+    if(up){ g.fillRect(x,y,1,1); g.fillRect(x+1,y+1,1,1); g.fillRect(x+2,y,1,1); } else { g.fillRect(x,y+1,1,1); g.fillRect(x+1,y,1,1); g.fillRect(x+2,y+1,1,1); }
+  }
+  g.globalAlpha=1;
+}
+/* La Vía Láctea: una banda de estrellas muy tenues sobre un círculo del cielo, que gira con todas las demás */
+function menuMilky(){
+  const I=63*Math.PI/180, R=mulberry32(4711), L=[];
+  for(let n=0;n<900;n++){
+    const t=R()*Math.PI*2, s=(R()+R()+R()-1.5)*0.2, x=Math.cos(t), y=Math.sin(t)*Math.cos(I)-s*Math.sin(I), z=Math.sin(t)*Math.sin(I)+s*Math.cos(I), l=Math.hypot(x,y,z);
+    L.push([Math.atan2(y,x),Math.asin(z/l),1-Math.abs(s)/0.3]);
+  }
+  return L;
+}
+/* CICLO ACELERADO (tecla T u Opciones): un día entero en 20 segundos para verlo; al pararlo la hora vuelve a ser la de tu partida
+   (menuLapseBak en p2_core.js hace que mientras tanto se guarde la hora de verdad) */
+const MENU_LAPSE=60;
+function menuLapse(on){
+  if(on&&!menuLapseBak) menuLapseBak={clock:save.clock,day:save.day};
+  else if(!on&&menuLapseBak){ save.clock=menuLapseBak.clock; save.day=menuLapseBak.day; menuLapseBak=null; }
 }
 
 /* ===================== FLUJO DE PARTIDA ===================== */
