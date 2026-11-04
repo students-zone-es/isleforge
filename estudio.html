@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estudio de animación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jersey+15&family=Rajdhani:wght@500;700&display=swap">
+<style>
+  :root{ color-scheme:dark; --bg:#05070c; --side:#0a0f18; --border:#2a3a52; --gold:#f5c518; --cyan:#3ee6e6; --text:#e8edf5; --text-dim:#8ea0b8;
+    --font-head:'Jersey 15', monospace; --font-body:'Rajdhani', sans-serif; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--text); font-family:var(--font-body); font-synthesis-weight:none; overflow:hidden; }
+  body{ display:grid; grid-template-rows:auto 1fr auto; grid-template-columns:230px 1fr 290px; grid-template-areas:"top top top" "left view right" "time time time"; }
+  #stTop{ grid-area:top; display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--side); border-bottom:1px solid var(--border); }
+  #stTop b{ font-family:var(--font-head); font-weight:400; font-size:28px; color:var(--gold); letter-spacing:1px; margin-right:6px; }
+  #stTop .sp{ flex:1; }
+  #stSaved{ font-size:13px; color:var(--text-dim); }
+  aside{ overflow-y:auto; padding:10px 12px; background:var(--side); }
+  #stLeft{ grid-area:left; border-right:1px solid var(--border); }
+  #stRight{ grid-area:right; border-left:1px solid var(--border); }
+  h2{ font-family:var(--font-head); font-weight:400; font-size:21px; color:var(--gold); margin:8px 0 6px; }
+  #stView{ grid-area:view; position:relative; min-width:0; min-height:0; }
+  #stCv{ position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; }
+  #stViews{ position:absolute; top:8px; left:8px; display:flex; gap:4px; flex-wrap:wrap; }
+  #stInfo{ position:absolute; top:10px; right:12px; font-size:14px; font-weight:700; color:var(--text-dim); text-align:right; pointer-events:none; }
+  #stHint{ position:absolute; bottom:6px; left:10px; right:10px; text-align:center; font-size:12.5px; color:var(--text-dim); pointer-events:none; }
+  #stTime{ grid-area:time; display:flex; flex-direction:column; gap:6px; padding:6px 12px 8px; background:var(--side); border-top:1px solid var(--border); }
+  #stCtl{ display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+  #stCtl .gap{ width:12px; }
+  #stStrip{ display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; }
+  #stStrip canvas{ flex:0 0 auto; width:64px; height:72px; image-rendering:pixelated; background:#121b28; border:2px solid var(--border); border-radius:4px; cursor:pointer; }
+  #stStrip canvas.ed{ border-style:dashed; border-color:var(--cyan); }
+  #stStrip canvas.on{ border-color:var(--gold); }
+  .ch{ padding:5px 9px; font-family:var(--font-body); font-size:13.5px; font-weight:700; color:var(--text-dim); background:#0d1420; border:1px solid var(--border); border-radius:3px; cursor:pointer; text-decoration:none; }
+  .ch:hover{ border-color:var(--gold); color:var(--text); }
+  .ch.on{ color:#1a1206; background:var(--gold); border-color:var(--gold); }
+  .ch.ed{ border-style:dashed; color:var(--cyan); }
+  .ch.on.ed{ color:#1a1206; }
+  .ch.dis{ opacity:.4; }
+  .ch small{ font-size:11px; opacity:.75; }
+  .row{ display:flex; gap:4px; flex-wrap:wrap; margin:5px 0; }
+  .list{ display:flex; flex-direction:column; gap:4px; }
+  .list .ch{ text-align:left; }
+  label.sl{ display:grid; grid-template-columns:100px 1fr 44px; align-items:center; gap:6px; margin:3px 0; font-size:13px; font-weight:700; color:var(--text-dim); }
+  label.sl input{ width:100%; accent-color:var(--cyan); }
+  label.sl output{ text-align:right; color:#fff; }
+  .fld{ display:flex; align-items:center; gap:6px; margin:6px 0; font-size:13px; font-weight:700; color:var(--text-dim); }
+  .fld input{ flex:1; min-width:0; padding:4px 6px; font:inherit; color:#fff; background:#0d1420; border:1px solid var(--border); border-radius:3px; }
+  .fld b{ min-width:48px; text-align:center; color:#fff; }
+  .note{ margin:6px 0; font-size:13px; line-height:1.35; color:var(--text-dim); }
+  @media (max-width:900px){
+    html,body{ overflow:auto; height:auto; }
+    body{ grid-template-columns:1fr; grid-template-rows:auto 60vh auto auto auto; grid-template-areas:"top" "view" "time" "left" "right"; }
+    #stTop{ flex-wrap:wrap; }
+  }
+</style>
+</head>
+<body>
+<header id="stTop"><b>ESTUDIO DE ANIMACIÓN</b><span id="stSaved"></span><span class="sp"></span>
+  <button class="ch" id="stUndo" title="Ctrl+Z">↶ DESHACER</button>
+  <button class="ch" id="stExport" title="Guarda una copia de todas las animaciones en un archivo">⬇ EXPORTAR</button>
+  <label class="ch" title="Carga animaciones desde un archivo exportado">⬆ IMPORTAR<input type="file" id="stImport" accept=".json,application/json" hidden></label>
+  <a class="ch" id="stGame" href="ISLEFORGE.html">← AL JUEGO</a>
+</header>
+<aside id="stLeft"><h2>ANIMACIONES</h2><div class="list" id="stList"></div><div class="row"><button class="ch" id="stNew">+ NUEVA ANIMACIÓN</button></div><div id="stProps"></div></aside>
+<section id="stView"><canvas id="stCv"></canvas><div id="stViews"></div><div id="stInfo"></div>
+  <div id="stHint">Arrastra el fondo: girar la cámara (↔ alrededor, ↕ altura) · Rueda: acercar · Clic derecho, botón central o Mayús + arrastrar: mover · Doble clic: centrar · Arrastra un punto: girar esa articulación</div></section>
+<aside id="stRight"><h2>POSE DEL FOTOGRAMA</h2><div class="row" id="stJoints"></div><div id="stAxes"></div><div class="row" id="stActs"></div>
+  <h2>CÓMO LLEVA EL HACHA</h2><div id="stGrip"></div><div class="row"><button class="ch" id="stGripReset">↺ RESTABLECER</button></div>
+  <p class="note">Todo se guarda solo, en este navegador. El juego lo usa al abrirse (y al momento si ya está abierto en otra pestaña). EXPORTAR guarda una copia en un archivo. Teclas: Espacio reproducir · ← → fotograma · Ctrl+Z deshacer · Ctrl+C / Ctrl+V copiar y pegar la pose.</p></aside>
+<footer id="stTime"><div id="stCtl"></div><div id="stStrip"></div></footer>
+<script>
+(function(){
+/* ===================== ESTUDIO DE ANIMACIÓN: lo mínimo del juego =====================
+   El muñeco 3D (p9r_person.js) vive dentro del juego; fuera de él necesita solo esto. La partida se LEE (aspecto del piloto,
+   estilo lápiz y las poses de antes de que existiera el estudio) pero nunca se escribe: lo del estudio va en ANIM_KEY.
+   La clave de la partida es la de p2_core.js (SAVE_KEY). */
+const save=(()=>{ try{ return JSON.parse(localStorage.getItem('omnialoya_save_v4'))||{}; }catch(e){ return {}; } })();
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), lerp=(a,b,k)=>a+(b-a)*k, DEG=180/Math.PI;
+let t=0, interior=false, inHome=false;   // el estudio siempre es «de día, al aire libre» (prLight)
+function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function hexRgb(hex){ const n=parseInt(hex.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function shade(hex,amt){
+  const [r,g,b]=hexRgb(hex);
+  const f=(v)=>Math.round(amt>=0? v+(255-v)*amt : v*(1+amt));
+  return '#'+[f(r),f(g),f(b)].map(v=>clamp(v,0,255).toString(16).padStart(2,'0')).join('');
+}
+
+/* ===================== PERSONAS EN 3D (personaje v0.3) =====================
+   El piloto y los androides de la base son un muñeco 3D hecho de esferas, con huesos que respiran, andan y corren. Cada pose se
+   pinta en píxeles desde la cámara de la base y se guarda: de cada píxel, hacia dónde mira su superficie y de qué material es.
+   Lo que se calcula cada fotograma es solo la LUZ (sol o luna de verdad, color del cielo, farolas y balizas). Por eso gira en
+   16 direcciones, le da el sol por el lado que toca y el rojo del helipuerto le tiñe al pasar. Su sombra sale de sus huesos.
+   Mide unas 5,3 cabezas: proporciones de adulto. Las versiones anteriores siguen en sprites/personaje (0.1 a mano, 0.2 con 3,4 cabezas)
+   y en las etiquetas personaje-v0.1 y personaje-v0.2 de git. */
+const PR_W=92, PR_H=104, PR_OX=46, PR_OY=84;              // lienzo de una pose y dónde caen los pies
+const PR_STEP=[9.2,14.8];   // cuánto crece u.walk en una vuelta de piernas, andando y corriendo: a este ritmo el pie apoyado no resbala (tools/prueba_poses.py)
+const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
+/* La cámara de ahora: la de la base o la que elijas en las vistas previas (TU PILOTO y MENÚ DEV), de 0° (a su altura) a 90°
+   (desde arriba). Las poses vistas desde otra altura se guardan aparte y, al cambiar de altura, se tiran (si no, la memoria
+   se llenaría girando la cámara). */
+let prCamSE=PR_SE, prCamCE=PR_CE, prCamK='', prCamLast='';
+function prCamera(deg){
+  if(deg==null){ prCamSE=PR_SE; prCamCE=PR_CE; prCamK=''; return; }
+  prCamK='|e'+deg; prCamSE=Math.sin(deg/DEG); prCamCE=Math.cos(deg/DEG);
+  if(prCamK!==prCamLast){ for(const q in prCache) if(q.includes('|e')) delete prCache[q]; prCamLast=prCamK; }
+}
+const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27,wood:28,edge:29,steel:30};
+const PR_SWING=48;   // lo que dura un golpe de herramienta
+/* Cómo lleva la herramienta: se edita a mano en el MENÚ DEV (p9v_tools.js) y se guarda en save.toolGrip. Ángulos en radianes */
+const TOOL_GRIP_DEF={grip:0,size:1,twist:0,lat:0,rest:0.4,up:1.25,hit:0.1,armUp:2.9,armHit:1.1};
+const toolGrip=Object.assign({},TOOL_GRIP_DEF);
+const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle,PM.edge]), PR_GLOW=new Set([PM.patch,PM.led]);
+const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
+const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
+const prZ=new Float32Array(prArea), prNX=new Float32Array(prArea), prNY=new Float32Array(prArea), prNZ=new Float32Array(prArea), prM=new Uint8Array(prArea), prP=new Uint8Array(prArea);
+const prTX=new Float32Array(prArea), prTY=new Float32Array(prArea), prTZ=new Float32Array(prArea);
+let prRes=1;   // píxeles del muñeco por cada píxel del juego: 2 en la base si la pantalla los muestra, 4 en la vista previa
+const prRampCache=new Map();
+
+/* Aparta hacia su lado un punto del brazo si se mete en el cuerpo. A cada altura el cuerpo es una «pastilla»: media anchura X y fondo D */
+function prClear(q,s,r,g,pz,sway){
+  const zr=(q[2]-pz)/g.h, T=g.loft; if(zr>T[3][0]) return;
+  const j=zr<T[1][0]?0:zr<T[2][0]?1:2, k=clamp((zr-T[j][0])/(T[j+1][0]-T[j][0]),0,1);
+  let X=lerp(T[j][1],T[j+1][1],k)+Math.abs(sway), D=lerp(T[j][2],T[j+1][2],k);
+  if(zr<3.5){ X=Math.max(X,4*g.stance); D=Math.max(D,g.th[0]); }      // de cadera para abajo mandan los muslos
+  const need=D+r+0.3; if(Math.abs(q[1])>=need) return;
+  const x=X+Math.sqrt(need*need-q[1]*q[1]); if(s*q[0]<x) q[0]=s*x;
+}
+/* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
+   Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
+/* RETOQUES A MANO (editor de poses del MENÚ DEV): poseEdits[modo][fotograma] = {articulación: ángulo extra en radianes}.
+   Se suman a la pose calculada, así que sin retoques el muñeco se mueve igual que siempre */
+const poseEdits={}, PR_NOD={};
+const poseD=(mode,f)=>(poseEdits[mode]&&poseEdits[mode][f])||PR_NOD;
+/* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): prClips[modo] = {name, n fotogramas, fps, base (0-3: la
+   animación del juego de la que parte), follow (true: recorre los pasos de la base; false: se queda en su fotograma bf), tool}.
+   Sus modos empiezan en 10 y sus poses son retoques de poseEdits, como los de las animaciones del juego. */
+const prClips={}, PR_BASE_N=[2,8,8,8];
+function prPoseOf(mode,f,g){
+  const C=prClips[mode], m=C?C.base:mode, b=C?(C.follow?Math.floor(f*PR_BASE_N[m]/C.n):C.bf||0):f;
+  return prPose(m,m?b/8:0,m?0:b,g,poseD(mode,f));
+}
+/* Las animaciones (retoques, agarre del hacha y animaciones nuevas) se guardan aparte de la partida, en ANIM_KEY: así el
+   estudio y el juego las comparten sin pisarse la partida */
+const ANIM_KEY='isleforge_anim_v1';
+function animRead(){ try{ return JSON.parse(localStorage.getItem(ANIM_KEY)); }catch(e){ return null; } }
+function animWrite(){ try{ localStorage.setItem(ANIM_KEY,JSON.stringify({v:1,edits:poseEdits,grip:toolGrip,clips:prClips})); }catch(e){} }
+function animApply(A){
+  for(const k in poseEdits) delete poseEdits[k]; Object.assign(poseEdits,A.edits||{});
+  Object.assign(toolGrip,TOOL_GRIP_DEF,A.grip||{});
+  for(const k in prClips) delete prClips[k]; Object.assign(prClips,A.clips||{});
+  for(const q in prCache) delete prCache[q];
+}
+/* Las articulaciones que se pueden girar a mano (id, nombre, [clave del retoque, nombre del eje]), los huesos que se dibujan
+   entre ellas y los valores del agarre del hacha: los usan el MENÚ DEV (p9v_tools.js) y el ESTUDIO (e1_estudio.js) */
+const DEV_JOINTS=[['body','Tronco',[['body.lean','Inclinar']]],['head','Cabeza',[['head.yaw','Girar'],['head.pitch','Asentir']]],
+  ['armL','Hombro izq.',[['armL.sw','Adelante/atrás'],['armL.ab','Abrir']]],['elbowL','Codo izq.',[['elbowL','Doblar']]],
+  ['armR','Hombro der.',[['armR.sw','Adelante/atrás'],['armR.ab','Abrir']]],['elbowR','Codo der.',[['elbowR','Doblar']]],
+  ['legL','Cadera izq.',[['legL.sw','Adelante/atrás'],['legL.ab','Abrir']]],['kneeL','Rodilla izq.',[['kneeL','Doblar']]],['footL','Pie izq.',[['footL','Doblar']]],
+  ['legR','Cadera der.',[['legR.sw','Adelante/atrás'],['legR.ab','Abrir']]],['kneeR','Rodilla der.',[['kneeR','Doblar']]],['footR','Pie der.',[['footR','Doblar']]],
+  ['tool','Hacha',[['tool.ang','Ángulo'],['tool.twist','Girar filo']]]];
+const DEV_BONES=[['armL','elbowL'],['elbowL','handL'],['armR','elbowR'],['elbowR','handR'],['legL','kneeL'],['kneeL','footL'],['footL','toeL'],['legR','kneeR'],['kneeR','footR'],['footR','toeR'],['armL','armR'],['legL','legR'],['body','head']];
+const DEV_GRIP=[['grip','Agarre en el mango',-4,14,0.5,1],['size','Tamaño',0.6,1.6,0.05,1],['twist','Giro del filo',-180,180,5,0],['lat','Inclinación lateral',-60,60,5,0],
+  ['rest','Ángulo en reposo',-60,120,5,0],['up','Ángulo al subir',-30,150,5,0],['hit','Ángulo al golpear',-60,90,5,0],['armUp','Brazo arriba',90,200,5,0],['armHit','Brazo al golpear',20,140,5,0]];   // clave, nombre, mín, máx, paso, 1 = sin grados
+function prPose(mode,ph,br,g,D=PR_NOD){
+  const dv=k=>D[k]||0;
+  const th=ph*Math.PI*2, walk=mode===1||mode===2, run=mode===2, TH=13.4*g.h, SH=13*g.h, UA=10*g.h, FA=9*g.h, stance=4*g.stance;
+  const A=run?0.95:walk?0.58:0, K=run?1.75:walk?1.0:0, B=(run?0.95:walk?0.55:0)*g.swing, lean=(run?0.24:walk?0.06:0)+dv('body.lean');
+  const sway=g.sway*(walk?Math.sin(th)*(run?0.5:1):0.4);   // la cadera se balancea al andar y descansa un poco hacia un lado parada
+  const leg=(s,p)=>{   // sw: la pierna adelante o atrás; ab: la abre hacia su lado
+    const sd=s<0?'L':'R', a=A*Math.sin(p)+dv('leg'+sd+'.sw'), k=(walk?0.12:0.03)+K*Math.max(0,Math.cos(p-0.35))+dv('knee'+sd), b=a-k, f=(b<0?-b*0.8:-b*0.35)+dv('foot'+sd);
+    const ab=dv('leg'+sd+'.ab'), ca=Math.cos(ab), sa=Math.sin(ab);
+    const knee=[s*stance+s*sa*TH,Math.sin(a)*TH*ca,-Math.cos(a)*TH*ca], ank=[knee[0]+s*stance*0.05+s*sa*SH,knee[1]+Math.sin(b)*SH*ca,knee[2]-Math.cos(b)*SH*ca];
+    return {knee,ank,toe:[ank[0]+s*stance*0.1,ank[1]+Math.cos(f)*5,ank[2]-Math.sin(f)*5]};
+  };
+  const L=leg(-1,th), R=leg(1,th+Math.PI), pz=2.9*g.boot+0.1-Math.min(L.ank[2],R.ank[2],L.toe[2]+0.3*g.boot,R.toe[2]+0.3*g.boot);
+  for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
+  const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
+  const arm=(s,p)=>{
+    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5-B*Math.sin(p));   // sube, baja de golpe y vuelve
+    const e=(chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16)+dv('elbow'+sd), [sy,sz]=up(0,15.8+br*0.4);
+    const ab=dv('arm'+sd+'.ab'), ca=Math.cos(ab), sa=Math.sin(ab);   // ab: abre el brazo hacia su lado
+    const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow+s*sa*UA,sy+Math.sin(a)*UA*ca,sz-Math.cos(a)*UA*ca], c=a+e, q=g.arm;
+    const ha=[el[0]-s*(run?1.8:0)+s*sa*FA,el[1]+Math.sin(c)*FA*ca,el[2]-Math.cos(c)*FA*ca];
+    prClear(el,s,2.6*q,g,pz,sway); prClear(ha,s,Math.max(g.hand,2*q)+0.5,g,pz,sway);   // el codo y la mano nunca dentro del cuerpo
+    const mid=[(el[0]+ha[0])/2,(el[1]+ha[1])/2,(el[2]+ha[2])/2], mx=mid[0];
+    prClear(mid,s,2.3*q,g,pz,sway); el[0]+=mid[0]-mx; ha[0]+=mid[0]-mx;                      // ni el antebrazo entre los dos
+    return {sh,el,ha,c};
+  };
+  // el mango respecto al antebrazo, y hacia qué lado va el filo: al golpear baja por delante, con el filo en cabeza; en reposo cuelga
+  const G=toolGrip, tk=mode===3?(ph<0.45?G.up:ph<0.7?lerp(G.up,G.hit,(ph-0.45)/0.25):lerp(G.hit,G.up,(ph-0.7)/0.3)):G.rest;
+  return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br,tk:tk+dv('tool.ang'),ts:mode===3?-1:1,D};
+}
+/* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
+   sh = cuenta para la sombra. pal.key = el piloto, con su aspecto elegido; sin key, androide de la base */
+/* Las complexiones cambian cada zona por su lado: el fuerte gana hombros, pecho y brazos más que cintura (espalda en V, no barriga);
+   el ligero afina todo, también manos y botas, y es algo más alto */
+const PR_BUILD=[
+  {chest:0.86,waist:0.84,hip:0.88,arm:0.8,leg:0.84,end:0.86,head:0.97,h:1.03},
+  {chest:1,waist:1,hip:1,arm:1,leg:1,end:1,head:1,h:1},
+  {chest:1.2,waist:1.04,hip:1.04,arm:1.26,leg:1.14,end:1.12,head:1.03,h:0.99}];
+/* Lo que distingue a cada género: anchura de hombros y caderas, tronco ([altura, media anchura, fondo] en cadera, cintura y pecho),
+   grosor de brazos, muslos y gemelos, tamaño de manos y botas, cuello, separación de piernas y codos, balanceo al andar y altura.
+   n = neutro, el cuerpo de los androides */
+const PR_GEN={
+  n:{sh:1,hip:1,loft:[[1.2,2.9,4.1],[7.5,2.6,4.6],[14.8,3.2,5.1],[16.6,1.5,2.9]],seat:null,nk:2.8,arm:1,th:[4,3.3],cf:[3.3,2.7],hand:2.1,boot:1,stance:1,elbow:1,swing:1,sway:0,h:1,jaw:0.86},
+  m:{sh:1.08,hip:0.94,loft:[[1.2,2.9,4.1],[7.5,2.8,4.5],[14.8,3.8,5.3],[16.6,1.9,3]],seat:[2.3,-1.7,0.6,3.7],nk:3.1,arm:1.08,th:[4.1,3.3],cf:[3.4,2.7],hand:2.3,boot:1.08,stance:1.06,elbow:1.02,swing:1.16,sway:0,h:1,jaw:0.87},
+  f:{sh:0.84,hip:1.02,loft:[[1.2,3.6,3.8],[7.8,1.8,3.5],[14.2,2.5,3.9],[16.2,1,2.5]],seat:[2.8,-1.5,0.2,3.7],nk:2.3,arm:0.78,th:[3.9,2.9],cf:[2.9,2],hand:1.8,boot:0.86,stance:0.94,elbow:0.9,swing:0.8,sway:0.9,h:0.94,jaw:0.76}};
+const prGenCache={};
+function prGen(pal){
+  const id=(pal.key?pal.gender:'n')+(pal.build==null?1:pal.build); if(prGenCache[id]) return prGenCache[id];
+  const g=PR_GEN[id[0]], b=PR_BUILD[+id[1]], T=g.loft;
+  return prGenCache[id]=Object.assign({},g,{
+    sh:g.sh*b.chest, hip:g.hip*b.hip, stance:g.stance*b.hip, arm:g.arm*b.arm, hand:g.hand*b.end, boot:g.boot*b.end, nk:g.nk*Math.sqrt(b.chest), h:g.h*b.h,
+    loft:[[T[0][0],T[0][1]*b.hip,T[0][2]*b.hip],[T[1][0],T[1][1]*b.waist,T[1][2]*b.waist],[T[2][0],T[2][1]*b.chest,T[2][2]*b.chest],[T[3][0],T[3][1]*b.chest,T[3][2]*b.chest]],
+    th:g.th.map(v=>v*b.leg), cf:g.cf.map(v=>v*b.leg), seat:g.seat&&[g.seat[0]*b.hip,g.seat[1],g.seat[2],g.seat[3]*b.leg], cw:b.chest, hw:b.hip, hd:b.head});
+}
+/* LA MOCHILA: modelo guardado para el almacenamiento ampliado. Hoy no la lleva nadie: se pone con pal.pack=true, y entonces también
+   salen sus tirantes en el pecho y su sombra. Cómo se ve: sprites/personaje/mochila */
+function prBackpack(cap,pt){
+  for(let i=0;i<5;i++) for(let j=0;j<5;j++) { const c=pt(-4+i*2,-9,10.5+j*2); cap(c,c,2.1,2.1,PM.pack,(x,y)=>j===4&&i===1?PM.metal:0); }
+  const t0=pt(4.4,-10,19.6), t1=pt(9.4,-12,28);
+  cap(t0,t1,0.55,0.4,PM.metal); cap(t1,t1,0.95,0.95,PM.led);
+}
+/* LAS CARAS: b y t mueven las cejas (t positivo las baja hacia el centro, enfado; negativo las sube, pena), e los ojos y m la boca.
+   Se dibujan sobre la cara con su sitio en casillas de la cara: x hacia el lado y v hacia arriba, con los ojos en x=3,3 */
+const PR_FACE={
+  normal:{b:0,t:0,e:'open',m:'line'},       feliz:{b:0.4,t:0,e:'open',m:'smile'},     risa:{b:0.5,t:0,e:'joy',m:'laugh'},
+  sorpresa:{b:0.6,t:0,e:'wide',m:'o'},      enfado:{b:-0.3,t:0.5,e:'half',m:'frown'}, triste:{b:0.1,t:-0.45,e:'open',m:'frown'},
+  cansado:{b:-0.2,t:-0.2,e:'half',m:'pant'}, guino:{b:0.3,t:0,e:'wink',m:'smirk'},     sueno:{b:-0.3,t:0,e:'shut',m:'line'}};
+function prFace(fx,v,fem,expr){
+  const F=PR_FACE[expr], ax=Math.abs(fx), ex=ax-3.3, ey=-1.5, cy=-5.2, skin=fem?PM.lips:PM.mouth;
+  const by=(fem?1.05:0.9)+F.b+F.t*ex;
+  if(Math.abs(ex)<(fem?1.7:1.9)&&Math.abs(v-by)<(fem?0.35:0.55)) return PM.brow;
+  const eyes=F.e==='wink'?(fx<0?'shut':'open'):F.e, H=eyes==='wide'?1.6:fem?1.3:1.15;
+  if(eyes==='shut'){ if(Math.abs(ex)<1.6&&Math.abs(v-ey)<0.5) return PM.eye; }
+  else if(eyes==='joy'){ if(Math.abs(ex)<1.7&&Math.abs(v-(ey+0.5-0.45*ex*ex))<0.55) return PM.eye; }
+  else {
+    const top=eyes==='half'?ey+0.1:ey+H;
+    if(Math.abs(ex)<1.55&&v>ey-H&&v<top) return Math.abs(ex+0.1)<0.8&&(eyes!=='wide'||Math.abs(v-ey)<0.8)?PM.eye:PM.eyeW;   // del susto, la pupila encoge
+    if(eyes==='half'&&Math.abs(ex)<1.6&&v>=top&&v<top+0.75) return PM.mouth;
+    if(fem&&eyes!=='half'&&Math.abs(ex-0.15)<1.9&&v>=top&&v<top+0.6) return PM.eye;     // pestañas
+  }
+  const dm=fem?0.75:0.5;
+  if(F.m==='line'){ if(ax<(fem?1.7:2.3)&&Math.abs(v-cy)<dm) return skin; }
+  else if(F.m==='smile'){ if(ax<2.9&&Math.abs(v-(cy-0.4+0.17*ax*ax))<dm) return skin; }
+  else if(F.m==='smirk'){ if(ax<2.6&&Math.abs(v-(cy-0.1+(fx>0?0.2*ax*ax:0)))<dm) return skin; }
+  else if(F.m==='frown'){ if(ax<2.7&&Math.abs(v-(cy+0.4-0.17*ax*ax))<dm) return skin; }
+  else if(F.m==='o'){ const a=ax/1.5, b=(v-cy)/1.7; if(a*a+b*b<1) return PM.inside; }
+  else if(F.m==='pant'){ if(ax<1.7&&v>cy-1.3&&v<cy+0.8) return PM.inside; }
+  else if(F.m==='laugh'){ if(ax<2.9&&v<cy+1&&v>cy-1.8+0.14*ax*ax) return v>cy+0.2?PM.teeth:PM.inside; }
+  if(expr==='risa'&&Math.abs(ax-5.3)<1.2&&Math.abs(v+4)<0.85) return PM.blush;
+  return 0;
+}
+/* LAS HERRAMIENTAS: piezas 3D como el muñeco. base = donde se agarra, dir = hacia dónde va el mango, side = hacia dónde mira el filo */
+function prAxe(cap,base,dir,side,k){
+  const Q=(a,b)=>[0,1,2].map(i=>base[i]+(dir[i]*a+side[i]*b)*k);
+  cap(Q(-3,0),Q(23,0),0.85*k,0.7*k,PM.wood,null,1);
+  cap(Q(20.5,-3.4),Q(20.5,1.8),1.5*k,1.5*k,PM.steel,null,1);
+  for(let i=-5;i<=5;i++){ const o=i*0.4; cap(Q(20.5+o*0.55,0),Q(20.5+o*1.35,7.2-Math.abs(o)*0.25),0.85*k,0.4*k,PM.steel,(x,y,z,q)=>q>0.72?PM.edge:0,i===0?1:0); }
+}
+function prToolParts(){
+  const O=[]; prAxe((a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh,g:1}),[0,0,8],[0,0,1],[0,1,0],2.4);
+  return {O,shadow:[]};
+}
+function prParts(pal,P,yaw,expr,h){
+  const pilot=!!pal.key, O=[], {pz,up,L,R,AL,AR,br,sway}=P, hd=pal.head, g=prGen(pal), fem=pilot&&pal.gender==='f';
+  let grp=1;   // cuerpo, brazo, brazo, cabeza: entre piezas distintas no se mezcla la luz y hay una línea limpia
+  const cap=(a,b,ra,rb,m,f,sh)=>O.push({a,b,ra,rb,m,f,sh,g:grp});
+  const pt=(x,y,z)=>{ const [yy,zz]=up(y,z); return [x,yy,zz]; };
+  // piernas y botas
+  const shin=(x,y,z,k)=>k>0.42&&k<0.62?PM.band:k<0.1?PM.pocket:0;   // el arranque, igual que el final del muslo: si no, se pisan en la rodilla
+  for(const [G,s] of [[L,-1],[R,1]]){
+    const hipX=s*4*g.hip+sway;
+    const thigh=(x,y,z)=>{   // bolsillo de carga por fuera del muslo, con su solapa, y rodillera abajo
+      const kx=G.knee[0]-hipX, ky=G.knee[1], kz=G.knee[2]-pz, k=((x-hipX)*kx+y*ky+(z-pz)*kz)/(kx*kx+ky*ky+kz*kz);   // según el punto: la k de cada esfera tiembla si la pierna va hacia la cámara
+      const out=s*(x-(hipX+kx*k));
+      if(out>1.5&&k>0.46&&k<0.78) return k<0.52?PM.seam:PM.pocket;
+      return k>0.86?PM.pocket:0;
+    };
+    cap([hipX,0,pz],G.knee,g.th[0],g.th[1],PM.suit,pilot?thigh:null,1);
+    cap(G.knee,G.ank,g.cf[0],g.cf[1],PM.suit,shin,1);
+    cap(G.ank,G.toe,2.9*g.boot,2.6*g.boot,PM.boot,(x,y,z)=>z<1.5?PM.sole:0,1);
+  }
+  // tronco: dos columnas juntas para que sea más ancho que profundo
+  const torso=(x,y,z)=>{
+    const zr=(z-pz)/g.h;
+    if(zr>5.4&&zr<7.4) return Math.abs(x)<1.7&&y>0?PM.buckle:PM.belt;
+    if(zr<=5.4) return 0;
+    if(pilot&&pal.pack&&zr<18&&Math.abs(Math.abs(x)-4.6*g.cw)<0.95) return PM.helmD;              // tirantes de la radio
+    if(y>0&&Math.abs(x)<0.4) return PM.band;                                                     // cremallera
+    if(!fem&&y>0&&Math.abs(x)<3.6&&Math.abs(x)>1.4&&zr>10.8&&zr<13.8) return zr>12.8?PM.seam:PM.pocket; // bolsillos con solapa
+    return 0;
+  };
+  // losas horizontales apiladas de la cadera al pecho: de una sola pieza por delante, y la anchura no añade fondo. No bajan de la
+  // cadera: lo que queda por debajo son los muslos; bajarlas más deja un pañal colgando entre las piernas
+  for(let i=0,T=g.loft,z=T[0][0];z<=T[3][0];i++,z+=0.4){
+    const j=z<T[1][0]?0:z<T[2][0]?1:2, A=T[j], B=T[j+1], k=(z-A[0])/(B[0]-A[0]);
+    const x=lerp(A[1],B[1],k), r=lerp(A[2],B[2],k), c=sway*Math.max(0,1-z/T[2][0]);
+    cap(pt(c-x,0,z),pt(c+x,0,z),r,r,PM.suit,torso,i%9===0);
+  }
+  // el frente de la cadera baja hasta los muslos: sin esto, debajo del cinturón se ve la panza de la losa, en sombra
+  cap(pt(sway-2*g.hw,1.3,-0.4),pt(sway+2*g.hw,1.3,-0.4),3.3*g.hw,3.3*g.hw,PM.suit);
+  // las nalgas, solo por detrás
+  if(g.seat) for(const s of [-1,1]){ const [bx,by,bz,br]=g.seat, q=pt(s*bx+sway,by,bz); cap(q,q,br,br,PM.suit,null,1); }
+  if(fem) for(const s of [-1,1]){ const q=pt(s*1.9*g.cw,1.5,12.6); cap(q,q,3.4*g.cw,3.4*g.cw,PM.suit,torso); }
+  // brazos: hombro, codo, guante y banda reflectante; el parche va en el hombro izquierdo
+  for(const [H,s] of [[AL,-1],[AR,1]]){
+    const q=g.arm; grp=s<0?2:3;
+    cap(H.sh,H.sh,3.2*q,3.2*q,PM.suit,pilot&&s<0?(x,y,z)=>x<H.sh[0]-0.5&&Math.abs(y-H.sh[1])<1.5&&Math.abs(z-H.sh[2]+0.6)<1.4?PM.patch:0:null);
+    cap(H.sh,H.el,3*q,2.6*q,PM.suit,(x,y,z,k)=>k>0.55&&k<0.74?PM.band:0,1);
+    cap(H.el,H.ha,2.6*q,2*q,PM.suit,(x,y,z,k)=>k>0.8?PM.pocket:0,1);   // con su puño
+    cap(H.ha,[H.ha[0],H.ha[1],H.ha[2]-1.8],g.hand,g.hand*0.82,PM.glove);
+    cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
+  }
+  if(pal.tool){   // el mango sale de la mano según el antebrazo; lat lo inclina a un lado, twist gira el filo sobre el mango, grip corre la mano por el mango
+    grp=5; const G=toolGrip, c=AR.c+P.tk, q=P.ts, cl=Math.cos(G.lat), sl=Math.sin(G.lat)*(AR.sh[0]<0?-1:1);
+    const dir=[sl,Math.sin(c)*cl,-Math.cos(c)*cl], s0=[0,q*Math.cos(c),q*Math.sin(c)];
+    const x=[dir[1]*s0[2]-dir[2]*s0[1],dir[2]*s0[0]-dir[0]*s0[2],dir[0]*s0[1]-dir[1]*s0[0]], tw=G.twist+(P.D['tool.twist']||0), ct=Math.cos(tw), st=Math.sin(tw);
+    const side=[0,1,2].map(i=>s0[i]*ct+x[i]*st), base=[0,1,2].map(i=>AR.ha[i]-dir[i]*G.grip*G.size);
+    prAxe(cap,base,dir,side,G.size);
+  }
+  grp=1;
+  // cuello y solapas del traje, abiertas por delante
+  const n=pt(0,0,18.4+br*0.3), nr=g.nk+0.7;
+  cap(pt(0,0,16),pt(0,0.3,24),g.nk,g.nk*0.92,pilot?PM.skin:PM.metal);
+  for(let i=0;i<16;i++){ const a=i/16*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a); if(sa>0.86) continue; const q=[n[0]+ca*nr,n[1]+sa*nr,n[2]]; cap(q,q,1.1,1.1,pilot?PM.suit:PM.band); }
+  // cabeza: esfera con casco, gafas y cara pintados según el punto; orejeras y gafas con relieve; yaw = hacia dónde mira
+  // la cabeza se inclina hacia arriba solo cuando mira a la cámara, para que desde tan alto se le vea la cara: de lado o de espaldas
+  // esa inclinación la haría mirar al cielo. Las medidas de la cara van en unidades de una cabeza de radio 9,4: hs la pasa a su tamaño
+  yaw+=P.D['head.yaw']||0;
+  const HR=5.8*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h))*clamp(prCamSE/PR_SE,0,1.4)+(P.D['head.pitch']||0), hc=pt(0,0.8,29.2+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const hp=(x,y,z)=>{ const yy=(y*cp-z*sp)*hs, zz=(y*sp+z*cp)*hs, xx=x*hs; return [hc[0]+xx*cy+yy*sy,hc[1]-xx*sy+yy*cy,hc[2]+zz]; };
+  const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [(dx*cy-dy*sy)/hs,(yy*cp+dz*sp)/hs,(dz*cp-yy*sp)/hs]; };   // al revés: del mundo a la cabeza
+  const headF=(x,y,z)=>{
+    const [fx,fy,zr]=hq(x,y,z), ax=Math.abs(fx);
+    if(!pilot){   // androide: cráneo de metal con su visor
+      if(fy>2&&Math.abs(zr+0.8)<1.8&&ax<7) return PM.eye;
+      return zr>1.8?PM.helm:PM.metal;
+    }
+    if(pal.goggles&&fy>0){                                                      // gafas pintadas: con relieve asoman por detrás de la cabeza
+      const dx=ax-3.2, dz=zr-3.8, d=dx*dx+dz*dz;
+      if(d<4.4) return PM.lens; if(d<7.6) return PM.helmD;
+    }
+    if(pal.goggles&&Math.abs(zr-3.8)<1.1) return PM.helmD;                      // correa de las gafas
+    const hl=fem?1.9+0.2*fx:2.4;                                               // la frente despejada en él, el flequillo de lado en ella
+    if(hd==='casco'){
+      if(zr>1.5||fy<1.2) return ax<0.5&&zr>5?PM.helmD:PM.helm;                  // casco, con su costura
+    } else if(hd==='gorra'){
+      if(zr>2.8) return ax<0.45&&zr>6?PM.helmD:PM.helm;
+      if(zr>hl||fy<1.6) return PM.hair;
+    } else if(zr>hl||fy<1.4) return PM.hair;
+    if(fy<=0) return PM.skin;
+    if(fem&&hd==='casco'&&ax>5.5&&zr>-5.6) return PM.hair;                        // mechones que enmarcan la cara
+    if(!fem&&hd!=='casco'&&ax>6.3&&zr>-2.6) return PM.hair;                     // patillas
+    const fc=prFace(fx,zr,fem,expr); if(fc) return fc;
+    if(!fem&&pal.beard&&zr<-4.2+0.22*ax&&fy>1) return PM.hair;                 // baja de las patillas hasta encima de la boca
+    return PM.skin;
+  };
+  grp=4;
+  cap(hp(0,0,1.2),hp(0,0,-3),HR,HR*g.jaw,PM.skin,headF);   // ovalada: arriba el cráneo, abajo la mandíbula
+  if(pilot){
+    const ns=hp(0,fem?7.5:8.4,-3); cap(ns,ns,(fem?0.8:1.1)*hs,(fem?0.8:1.1)*hs,PM.skin);   // nariz
+    if(hd==='pelo'||hd==='gorra') for(const s of [-1,1]) cap(hp(s*8.6,1,-2),hp(s*8.6,1,-2),1.9*hs,1.9*hs,PM.skin);   // orejas
+  }
+  const hw=(x,y,z)=>[hc[0]+(x*cy+y*sy)*hs,hc[1]+(y*cy-x*sy)*hs,hc[2]+z*hs];   // lo que cuelga no se inclina con la cabeza
+  if(pilot){
+    if(hd==='gorra') for(const [y,x,r] of [[7.6,6,1.5],[10,5,1.4],[12,3,1.2]]) cap(hp(-x,y,2.4),hp(x,y,2.4),r*hs,r*hs,PM.helm);
+    if(hd==='coleta'||(fem&&hd==='gorra')){ cap(hw(0,-8.6,3),hw(0,-11,-4),3*hs,2.3*hs,PM.hair); cap(hw(0,-11,-4),hw(0,-10,-18),2.3*hs,0.9*hs,PM.hair); }
+    if(hd==='melena'){ cap(hw(0,-6,0),hw(0,-7,-17),6*hs,3.6*hs,PM.hair); for(const s of [-1,1]) cap(hw(s*7.2,-2,-1),hw(s*6.6,-3,-15),3.4*hs,2.3*hs,PM.hair); }
+    for(const s of [-1,1]){
+      if(hd==='casco') cap(hp(s*7.9,0.4,-1),hp(s*7.7,0.8,-4.4),2.4*hs,2.2*hs,PM.helm);
+    }
+    if(pal.pack) prBackpack(cap,pt);
+  } else cap(hp(0,0,9),hp(0,0,11.5),0.7,0.5,PM.metal);
+  const shadow=O.filter(p=>p.sh);
+  shadow.push({a:[hc[0],hc[1],hc[2]-1.5],b:[hc[0],hc[1],hc[2]+0.8],ra:HR*0.9,rb:HR*0.9});
+  if(pilot&&pal.pack) shadow.push({a:pt(0,-9,11),b:pt(0,-9,18),ra:4.8,rb:4.8});
+  return {O,shadow};
+}
+/* Alisa la superficie en una dirección (dx,dy): las esferas dejan ondas que con la luz por bandas se ven como grano. No cruza bordes */
+function prSmooth(BW,BH,R,dx,dy,edge){
+  for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
+    const q=y*BW+x; if(!prM[q]) continue;
+    let a=prNX[q], b=prNY[q], c=prNZ[q];
+    for(let s=-1;s<=1;s+=2) for(let j=1;j<=R;j++){
+      const px=x+dx*s*j, py=y+dy*s*j; if(px<0||py<0||px>=BW||py>=BH) break;
+      const p=py*BW+px; if(!prM[p]||prP[p]!==prP[q]||Math.abs(prZ[p]-prZ[q])>edge) break;
+      a+=prNX[p]; b+=prNY[p]; c+=prNZ[p];
+    }
+    const l=Math.hypot(a,b,c)||1; prTX[q]=a/l; prTY[q]=b/l; prTZ[q]=c/l;
+  }
+  for(let q=BW*BH-1;q>=0;q--) if(prM[q]){ prNX[q]=prTX[q]; prNY[q]=prTY[q]; prNZ[q]=prTZ[q]; }
+}
+/* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
+/* Dónde cae cada articulación de una pose, en píxeles del lienzo de la pose a resolución S (el editor de poses dibuja ahí sus puntos) */
+function prJoints(pal,d,mode,f,S){
+  const g=prGen(pal), P=prPoseOf(mode,f,g), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
+  const V=q=>{ const wx=q[0]*c+q[1]*s, wy=-q[0]*s+q[1]*c; return [(PR_OX+wx)*S,(PR_OY+wy*prCamSE-q[2]*prCamCE)*S]; };
+  const hip=s0=>[s0*4*g.hip+P.sway,0,P.pz], [by,bz]=P.up(0,11), [hy,hz]=P.up(0.8,29.2);
+  return {body:V([0,by,bz]),head:V([0,hy,hz]),armL:V(P.AL.sh),armR:V(P.AR.sh),elbowL:V(P.AL.el),elbowR:V(P.AR.el),handL:V(P.AL.ha),handR:V(P.AR.ha),
+    legL:V(hip(-1)),legR:V(hip(1)),kneeL:V(P.L.knee),kneeR:V(P.R.knee),footL:V(P.L.ank),footR:V(P.R.ank),toeL:V(P.L.toe),toeR:V(P.R.toe),tool:V(P.AR.ha)};
+}
+function prBuild(pal,d,mode,f,look,expr){
+  const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(save.pencil?'l':'')+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||'')+prCamK; if(prCache[key]) return prCache[key];
+  const P=prPoseOf(mode,f,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=pal.solo?prToolParts():prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
+  prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
+  for(const p of O){
+    const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
+    for(let i=0;i<=n;i++){
+      const k=i/n, lx=p.a[0]+dx*k, ly=p.a[1]+dy*k, lz=p.a[2]+dz*k, r=p.ra+(p.rb-p.ra)*k, rr=r*S, wx=lx*c+ly*s, wy=-lx*s+ly*c;
+      const vx=(PR_OX+wx)*S, vy=(PR_OY+wy*prCamSE-lz*prCamCE)*S, vz=(wy*prCamCE+lz*prCamSE)*S;
+      const x0=Math.max(0,Math.floor(vx-rr)), x1=Math.min(BW-1,Math.ceil(vx+rr)), y0=Math.max(0,Math.floor(vy-rr)), y1=Math.min(BH-1,Math.ceil(vy+rr));
+      for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+        const ax=x+0.5-vx, ay=y+0.5-vy, d2=ax*ax+ay*ay; if(d2>=rr*rr) continue;
+        const nz=Math.sqrt(rr*rr-d2), z=vz+nz, q=y*BW+x; if(z<=prZ[q]) continue;
+        const nwx=ax/rr, nwy=(ay*prCamSE+nz*prCamCE)/rr, nwz=(nz*prCamSE-ay*prCamCE)/rr;
+        prZ[q]=z; prNX[q]=nwx; prNY[q]=nwy; prNZ[q]=nwz;
+        let m=p.m;
+        if(p.f){ const px=wx+r*nwx, py=wy+r*nwy; m=p.f(px*c-py*s,px*s+py*c,lz+r*nwz,k)||p.m; }
+        prM[q]=m; prP[q]=p.g;
+      }
+    }
+  }
+  prSmooth(BW,BH,2*S,1,0,1.4*S); prSmooth(BW,BH,2*S,0,1,1.4*S);
+  const I=[], NX=[], NY=[], NZ=[], M=[], F=[], R=Math.max(1,S>>1)+(save.pencil?1:0);   // el contorno engorda con la resolución para no quedarse en un hilo
+  for(let y=0;y<BH;y++) for(let x=0;x<BW;x++){
+    const q=y*BW+x, nb=[];
+    for(let j=1;j<=R;j++) nb.push(y>=j?q-BW*j:-1,y<BH-j?q+BW*j:-1,x>=j?q-j:-1,x<BW-j?q+j:-1);
+    if(prM[q]){   // un borde dentro de la figura (brazo sobre el tronco) se marca oscuro
+      let ink=0; for(const b of nb) if(b>=0&&prM[b]&&(prZ[b]-prZ[q]>4.6*S||(prP[b]!==prP[q]&&prZ[b]-prZ[q]>0.6*S))) ink=1;
+      I.push(q); NX.push(prNX[q]*127); NY.push(prNY[q]*127); NZ.push(prNZ[q]*127); M.push(prM[q]); F.push(ink);
+    } else {      // contorno: del color más oscuro de lo que tiene al lado
+      let m=0; for(const b of nb) if(b>=0&&prM[b]) m=prM[b];
+      if(m){ I.push(q); NX.push(0); NY.push(0); NZ.push(0); M.push(m); F.push(2); }
+    }
+  }
+  const toW=v=>[v[0]*c+v[1]*s,-v[0]*s+v[1]*c,v[2]];
+  return prCache[key]={S,I:Uint32Array.from(I),NX:Int8Array.from(NX),NY:Int8Array.from(NY),NZ:Int8Array.from(NZ),M:Uint8Array.from(M),F:Uint8Array.from(F),
+    bones:shadow.map(p=>[toW(p.a),toW(p.b),(p.ra+p.rb)/2])};
+}
+/* Cinco tonos por material: las sombras tiran a violeta y las luces a crema */
+function prRamp(hex,soft){
+  const c=hexRgb(hex), mix=(b,k)=>c.map((v,i)=>v+(b[i]-v)*k), lift=(k,a)=>c.map(v=>Math.min(255,v*k+a));
+  if(soft) return [mix([170,84,70],0.42),mix([190,104,84],0.22),c,lift(1.03,4),lift(1.06,8)];   // la piel: sombras rojizas y sin quemarse al sol
+  return [mix([26,20,52],0.68),mix([44,34,74],0.4),c,lift(1.16,12),lift(1.32,26)];   // las luces suben el color: mezclarlas con crema volvía gris lo oscuro
+}
+function prRamps(pal){
+  let R=prRampCache.get(pal); if(R) return R;
+  const cap=pal.cap||pal.hair, pilot=!!pal.key; R=[];
+  const set={suit:pal.suit,band:pilot?'#f4ecd2':pal.light,pocket:shade(pal.suit,-0.3),helm:pilot?shade(cap,0.1):cap,helmD:shade(cap,-0.55),skin:pal.skin,eye:pal.eye,lens:'#7fd8ee',
+    belt:'#332a24',buckle:'#e0c47a',glove:pilot?'#5a4632':pal.hair,boot:pilot?'#5a4230':'#3a4048',sole:'#241a14',pack:shade(cap,-0.2),metal:pilot?'#a8b0b8':pal.skin,patch:'#3ee6e6',mouth:shade(pal.skin,-0.56),led:'#ff4757',hair:pal.hair,eyeW:'#f2eee6',inside:'#5a1620',teeth:'#f2eee6',brow:shade(pal.hair,-0.2),seam:shade(pal.suit,-0.5),wood:'#9a6a3a',edge:'#dfe7ee',steel:'#4e5862'};
+  const mix=(a,b,k)=>'#'+hexRgb(a).map((v,i)=>Math.round(v+(hexRgb(b)[i]-v)*k).toString(16).padStart(2,'0')).join('');
+  set.lips=mix(pal.skin,'#d0344c',0.62); set.blush=mix(pal.skin,'#f0607a',0.3);
+  for(const k in PM) R[PM[k]]=prRamp(set[k],pilot&&(k==='skin'||k==='blush'));
+  prRampCache.set(pal,R); return R;
+}
+/* La luz que le llega ahora: dirección y color del sol (o la luna), color del cielo y luces cercanas.
+   prSkyFix = un cielo de mentira para la vista previa de la pantalla TU PILOTO */
+let prSkyFix=null;
+function prLight(u){
+  const S=prSkyFix||skyNow(), L={s:[0,0,1],k:0,sun:[1,1,1],amb:[1,1,1],a:0.55,pts:[],h:[0,0,1]};
+  if(interior&&!prSkyFix){ L.s=[-0.34,0.3,0.89]; L.k=0.72; L.sun=[1.08,1.02,0.92]; L.amb=[0.76,0.76,0.9]; }
+  else {
+    const alt=S.sun.alt, day=clamp((alt+4)/14,0,1), warm=1-clamp(alt/18,0,1);
+    const src=alt>-4?S.sun:S.moon, A=src.az/DEG, E=Math.max(0.05,src.alt)/DEG;
+    L.s=[-Math.sin(A)*Math.cos(E),Math.cos(A)*Math.cos(E),Math.sin(E)];
+    L.k=alt>-4?0.86*day:clamp(S.moon.alt/10,0,1)*0.3;
+    L.sun=alt>-4?[lerp(1.06,1.34,warm),lerp(1,0.84,warm),lerp(0.94,0.58,warm)]:[0.62,0.74,1.1];
+    L.amb=[lerp(0.5,0.8,day)+0.12*day*warm,lerp(0.55,0.86,day)-0.14*day*warm,lerp(0.86,1,day)+0.02*day*warm];
+    L.a=0.54+0.06*day;
+    const add=(lx,ly,lz,r,g,b,R0)=>{ const dx=lx-u.x, dy=ly-u.y, dz=lz-28, d=Math.hypot(dx,dy,dz); if(d>R0) return;
+      const k=1-d/R0; L.pts.push([dx/d,dy/d,dz/d,r*k,g*k,b*k]); };
+    if(inHome&&!prSkyFix){
+      for(const [x,y,k] of beacons()) add(x,y,10,1.1*k,0.22*k,0.26*k,150);
+      const n=nightAmt(); if(n>0.08) for(const [c,r] of homeLamps) add(c*TILE+15,r*TILE-4,52,1.2*n,0.96*n,0.62*n,130);
+    }
+  }
+  const hx=L.s[0], hy=L.s[1]+prCamCE, hz=L.s[2]+prCamSE, hl=Math.hypot(hx,hy,hz)||1; L.h=[hx/hl,hy/hl,hz/hl];
+  return L;
+}
+/* Colorea la pose con la luz de ahora */
+function prRender(B,pal,L,blink){
+  let C=prCvs[B.S];
+  if(!C){ const c=mkCanvas(PR_W*B.S,PR_H*B.S), g=c.getContext('2d',{willReadFrequently:true}); C=prCvs[B.S]={c,g,img:g.createImageData(c.width,c.height)}; }
+  const D=C.img.data, R=prRamps(pal), n=B.I.length, [sx,sy,sz]=L.s, [hx,hy,hz]=L.h, led=Math.floor(t/30)%2;
+  D.fill(0);
+  for(let i=0;i<n;i++){
+    const p=B.I[i]*4, f=B.F[i]; let m=B.M[i];
+    if(f===2){
+      if(save.pencil){ const n=(Math.imul(B.I[i],2654435761)>>>0)%100; if(n<10) continue; const v=40+n%26; D[p]=v; D[p+1]=v*0.88; D[p+2]=v*0.8; D[p+3]=255; continue; }   // trazo de grafito, irregular pero fijo
+      const c=R[m][0]; D[p]=c[0]*0.5; D[p+1]=c[1]*0.5; D[p+2]=c[2]*0.5; D[p+3]=255; continue;
+    }
+    if(PR_GLOW.has(m)||(m===PM.eye&&!pal.key&&!blink)){ const c=R[m][m===PM.led&&led?1:4]; D[p]=c[0]; D[p+1]=c[1]; D[p+2]=c[2]; D[p+3]=255; continue; }
+    if(blink){ if(m===PM.eye) m=PM.mouth; else if(m===PM.eyeW) m=PM.skin; }
+    const nx=B.NX[i]/127, ny=B.NY[i]/127, nz=B.NZ[i]/127, ds=Math.max(0,nx*sx+ny*sy+nz*sz)*L.k, T=L.a*(0.72+0.28*nz)+ds;
+    let lv=T<0.42?0:T<0.6?1:T<0.94?2:T<1.2?3:4;
+    if(PR_FLAT.has(m)) lv=Math.min(lv,2);
+    if(f===1) lv=Math.max(0,lv-2);
+    if(PR_GLOSS.has(m)&&L.k>0.2&&nx*hx+ny*hy+nz*hz>0.95) lv=4;
+    const c=R[m][lv], b=R[m][2], tn=ds>0.14?L.sun:L.amb;
+    let r=c[0]*tn[0], g=c[1]*tn[1], bl=c[2]*tn[2];
+    if(save.pencil&&(f===1||lv<=1)){   // lápiz: las líneas de dentro y las sombras se rayan en diagonal con grafito, sin tapar el color
+      const q=B.I[i], W2=PR_W*B.S, x=q%W2, y=(q/W2)|0, hatch=f===1||((x+y)%(B.S*2)===0)||(lv===0&&((x-y+W2)%(B.S*2)===0));
+      if(hatch){ const k=f===1?0.75:0.55; r=lerp(r,44,k); g=lerp(g,38,k); bl=lerp(bl,34,k); }
+    }
+    for(const q of L.pts){ const d=Math.max(0,nx*q[0]+ny*q[1]+nz*q[2]); if(d>0){ r+=b[0]*q[3]*d; g+=b[1]*q[4]*d; bl+=b[2]*q[5]*d; } }
+    D[p]=Math.min(255,r); D[p+1]=Math.min(255,g); D[p+2]=Math.min(255,bl); D[p+3]=255;
+  }
+  C.g.putImageData(C.img,0,0);
+  return C.c;
+}
+/* Qué cara pone ahora: la que le haya tocado por algo que acaba de pasar (setMood) o la que pide el momento */
+function setMood(u,e,n){ if(u){ u.mood=e; u.moodT=n; } }
+function prMood(u,moving,run){
+  if(u.moodFix) return u.moodFix;   // la pantalla TU PILOTO
+  if(u.moodT>0){ u.moodT--; return u.mood; }
+  u.runT=run?(u.runT||0)+1:Math.max(0,(u.runT||0)-2);
+  if(u.runT>300) return 'cansado';
+  if(!interior&&wAmt('rain')+wAmt('storm')>0.5) return 'enfado';
+  if(!moving&&u.idle>200){ if(nightAmt()>0.6) return 'sueno'; if(Math.floor((t+37)/60)%9===0) return 'guino'; }
+  return 'normal';
+}
+/* Rumbo, paso, mirada y pañuelo: lo que cambia con el tiempo. Devuelve [modo, fotograma, mirada, cara] */
+function prStep(u){
+  if(u.swingT>0) return [3,Math.floor((1-u.swingT/PR_SWING)*8)&7,0,'enfado'];
+  const sp=Math.hypot(u.vx,u.vy), run=sp>2.9, moving=sp>0.2;
+  if(u.prDir!==u.dir){ u.prDir=u.dir; if(!moving||u.face==null) u.face={up:Math.PI,left:-Math.PI/2,right:Math.PI/2}[u.dir]||0; }
+  if(moving) u.face+=angDiff(u.face,Math.atan2(u.vx,u.vy))*0.26;
+  u.idle=moving?0:(u.idle||0)+1;
+  let aim=0;
+  if(!moving&&u===human&&homeNear&&!interior) aim=clamp(Math.round(angDiff(u.face,Math.atan2(homeNear.x-u.x,homeNear.y-u.y))/0.42),-2,2);
+  else if(u.idle>170) aim=[0,-2,0,1,0,2,-1,0][Math.floor((t+(u.x&255))/95)&7];
+  u.lk=(u.lk||0)+clamp(aim-(u.lk||0),-0.14,0.14);
+  const fr=moving?Math.floor(((u.walk/PR_STEP[run?1:0])%1)*8)&7:Math.floor((t+(u.x&63))/44)&1;
+  if(run&&fr%4===0&&fr!==u.prFr&&!interior&&!prSkyFix){   // polvo al pisar corriendo
+    for(let i=0;i<3;i++) particles.push({x:u.x+rand(-5,5),y:u.y+rand(-1,3),vx:rand(-0.5,0.5)-u.vx*0.12,vy:rand(-0.6,-0.1)-u.vy*0.12,life:20,maxLife:20,color:'#cdbb9c',size:2});
+  }
+  u.prFr=fr;
+  if(u===human&&homeNear!==u.prNear){ u.prNear=homeNear; if(homeNear&&homeNear.id!=='plot'&&!(u.moodT>0)) setMood(u,'feliz',50); }   // sonríe al llegar a un sitio
+  return [moving?(run?2:1):0,fr,Math.round(u.lk),prMood(u,moving,run)];
+}
+function drawHuman(u,pal){
+  const [mode,f,look,expr]=prStep(u), d=((Math.round(u.face/(Math.PI/8))%16)+16)%16, x=Math.round(u.x), y=Math.round(u.y), B=prBuild(pal,d,mode,f,look,pal.key?expr:'');
+  u.prB=B;
+  const L=prLight(u), blink=(t+(x&127))%211<6;
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y,11,Math.max(0.5,4*prCamSE/PR_SE),0,0,Math.PI*2); ctx.fill();
+  ctx.drawImage(prRender(B,pal,L,blink),x-PR_OX,y-PR_OY,PR_W,PR_H);
+}
+/* Su sombra sale de sus huesos: cada hueso se tumba en el suelo desde sus dos puntas, así copia la pose de verdad */
+function shPerson(u){
+  const B=u.prB; if(!B) return;
+  const s=shS, L=Math.min(s.len,SHADOW_STAND)*0.8, G=ctx, X=(q)=>u.x+q[0]+s.dx*q[2]*L, Y=(q)=>u.y+(q[1]+s.dy*q[2]*L/PR_SE)*prCamSE;
+  G.lineCap='round'; G.strokeStyle='#000';
+  for(const [a,b,r] of B.bones){ G.lineWidth=r*2; G.beginPath(); G.moveTo(X(a),Y(a)); G.lineTo(X(b),Y(b)); G.stroke(); }
+  G.lineCap='butt';
+}
+/* ===================== ESTUDIO DE ANIMACIÓN (estudio.html) =====================
+   Página aparte para crear y retocar las animaciones del piloto con el mismo muñeco 3D del juego (p9r_person.js).
+   · Ratón como en Blender: arrastrar el fondo gira la cámara (↔ alrededor, ↕ su altura), la rueda acerca hacia el puntero,
+     clic derecho / botón central / Mayús + arrastrar mueve la vista y doble clic la centra. Arrastrar un punto gira esa
+     articulación (como en el MENÚ DEV); las barras de la derecha hacen lo mismo con precisión.
+   · Animaciones del juego (PARADO, ANDAR, CORRER, TALAR): se retocan sus fotogramas. NUEVA ANIMACIÓN crea una propia (nombre,
+     fotogramas, velocidad, la pose de la que parte y su herramienta) para engancharla al juego más adelante.
+   · Piel de cebolla: el fotograma anterior se ve en transparente detrás, para ajustar el movimiento.
+   · Todo se guarda solo en el navegador (ANIM_KEY, p9r_person.js); el juego lo lee al abrirse y, si está abierto en otra
+     pestaña, al momento. La partida no se toca. Ctrl+Z deshace. */
+const $=id=>document.getElementById(id);
+const ST_SKY={sun:{alt:52,az:-30},moon:{alt:-20,az:0}};   // la luz de día de TU PILOTO
+const ST_LOOK={gender:'m',suit:'#ff8c2a',helm:'#3d5a2e',skin:'#ffd0a0',hair:'#3a2414',head:'casco',goggles:true,beard:false,build:1};   // = LOOK_DEF (p9s_look.js)
+const ST_BASE=[['PARADO',0,2,2/88*60],['ANDAR',1,8,8/19.2*60],['CORRER',2,8,8/20.6*60],['TALAR',3,8,8/PR_SWING*60]];   // nombre, modo, fotogramas y fotogramas por segundo (los del juego)
+const ST_VIEWS=[['3/4',3,20],['FRENTE',0,0],['PERFIL',4,0],['ESPALDA',8,10],['ARRIBA',3,90],['JUEGO',3,35]];   // nombre, hacia dónde mira (0-16) y altura de la cámara
+const ST_SPEED=[0.25,0.5,1,2], ST_S=4, ST_TOOLS=[['','NINGUNA'],['hacha','HACHA']];
+const V={d:3,el:20,zoom:1,px:0,py:0};   // la vista: rumbo (16 = una vuelta), altura de la cámara, zoom y desplazamiento
+let stId=0, stF=0, stPlay=false, stSpeed=2, stJoint='armR', stDrag=null, stSliding=false, stOnion=true, stDirty=true, stStripDirty=true, stStripT=0, stLast=0, stSaveT=0, stCopy=null;
+const stUndoL=[], stPals={};
+const stEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ch=(txt,on,attr,extra='')=>'<button class="ch'+(on?' on':'')+extra+'" '+attr+'>'+txt+'</button>';
+
+/* El piloto con el aspecto de tu partida (y una copia con la herramienta en la mano) */
+function stPal(tool){
+  if(stPals[tool]) return stPals[tool];
+  const k=Object.assign({},ST_LOOK,save.look);
+  return stPals[tool]={suit:k.suit,light:shade(k.suit,0.32),dark:shade(k.suit,-0.34),skin:k.skin,hair:k.hair,cap:k.helm,eye:'#1a1206',
+    gender:k.gender,head:k.head,goggles:k.goggles,beard:k.beard,build:k.build,key:'p'+k.gender+k.head+(+k.goggles)+(+k.beard)+k.build,tool};
+}
+function stAnims(){
+  return ST_BASE.map(([name,id,n,fps])=>({id,name,n,fps,tool:id===3?'hacha':'',custom:false}))
+    .concat(Object.keys(prClips).map(Number).sort((a,b)=>a-b).map(id=>Object.assign({id,custom:true},prClips[id])));
+}
+const stCur=()=>stAnims().find(a=>a.id===stId)||stAnims()[0];
+const stFr=()=>Math.floor(stF)%stCur().n;
+const stD=()=>(Math.round(V.d*4)/4%16+16)%16;   // 64 rumbos: girar es suave y cada pose se puede guardar
+const stExpr=A=>A.id===3?'enfado':'normal';
+function stPose(A,f,d){ const pal=stPal(A.tool||''); return prRender(prBuild(pal,d,A.id,f,0,stExpr(A)),pal,prLight({x:0,y:0}),false); }
+function stCam(fn){ const e=Math.round(V.el); prCamera(e===35?null:e); try{ return fn(); } finally { prCamera(null); } }   // la cámara elegida solo vale aquí dentro
+/* De la pose (px de su lienzo) a la pantalla: k = px de pantalla por px de pose; los pies en (fx, fy). El muñeco queda centrado
+   en la vista a cualquier altura de cámara (con la cámara baja se ve más alto) */
+function stXf(w,h){
+  const base=Math.min(h*0.8/(64*ST_S),w*0.8/(PR_W*ST_S)), k=base*V.zoom, fx=w/2+V.px, fy=h/2+V.py+31*ST_S*k*prCamCE;
+  return {k,fx,fy,x0:fx-PR_OX*ST_S*k,y0:fy-PR_OY*ST_S*k};
+}
+
+/* ---------- dibujo ---------- */
+function stRender(){
+  const cv=$('stCv'), dpr=devicePixelRatio||1, r=cv.getBoundingClientRect(), w=r.width, h=r.height;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  const g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.imageSmoothingEnabled=false;
+  const bg=g.createRadialGradient(w/2,h*0.45,10,w/2,h*0.5,Math.max(w,h)*0.7); bg.addColorStop(0,'#2a3a50'); bg.addColorStop(1,'#0b111b'); g.fillStyle=bg; g.fillRect(0,0,w,h);
+  if(Object.keys(prCache).length>160) for(const q in prCache) delete prCache[q];   // girando se crean muchas poses: no se guardan todas
+  const A=stCur(), f=stFr(), d=stD();
+  prRes=ST_S; prSkyFix=ST_SKY;
+  try{ stCam(()=>{
+    const T=stXf(w,h), Wp=PR_W*ST_S*T.k, Hp=PR_H*ST_S*T.k, K=ST_S*T.k;
+    stGrid(g,T,d);
+    g.fillStyle='rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(T.fx,T.fy,11*K,Math.max(1,7*K*prCamSE),0,0,Math.PI*2); g.fill();
+    if(stOnion&&!stPlay&&A.n>1&&!(stDrag&&stDrag.kind!=='joint')){ g.globalAlpha=0.3; g.drawImage(stPose(A,(f-1+A.n)%A.n,d),T.x0,T.y0,Wp,Hp); g.globalAlpha=1; }
+    g.drawImage(stPose(A,f,d),T.x0,T.y0,Wp,Hp);
+    if(!stPlay) stJointsDraw(g,T,A,f,d);
+  }); } finally { prSkyFix=null; }
+  $('stInfo').innerHTML=stEsc(A.name)+' · fotograma '+(f+1)+'/'+A.n+'<br>cámara '+Math.round(V.el)+'° · zoom ×'+V.zoom.toFixed(1);
+}
+/* El suelo: una rejilla que gira con la cámara (eje X rojo, eje Y verde: hacia donde mira el piloto en su pose) */
+function stGrid(g,T,d){
+  const h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h), K=ST_S*T.k, P=(x,y)=>[T.fx+(x*c+y*s)*K,T.fy+(-x*s+y*c)*prCamSE*K];
+  g.lineWidth=1;
+  for(let i=-40;i<=40;i+=8) for(const along of [0,1]){
+    const a=along?P(-40,i):P(i,-40), b=along?P(40,i):P(i,40);
+    g.strokeStyle=i?'rgba(255,255,255,.07)':along?'rgba(255,71,87,.55)':'rgba(62,230,122,.55)';
+    g.beginPath(); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); g.stroke();
+  }
+}
+const stJointIds=A=>DEV_JOINTS.filter(([id])=>id!=='tool'||A.tool);
+function stJointsXY(T,A,f,d){ const J=prJoints(stPal(A.tool||''),d,A.id,f,ST_S), o={}; for(const k in J) o[k]=[T.x0+J[k][0]*T.k,T.y0+J[k][1]*T.k]; return o; }
+function stJointsDraw(g,T,A,f,d){
+  const J=stJointsXY(T,A,f,d);
+  g.lineWidth=2; g.strokeStyle='rgba(62,230,230,.6)';
+  for(const [a,b] of DEV_BONES){ g.beginPath(); g.moveTo(J[a][0],J[a][1]); g.lineTo(J[b][0],J[b][1]); g.stroke(); }
+  for(const [id] of stJointIds(A)){ const [x,y]=J[id], on=id===stJoint; g.fillStyle=on?'#f5c518':'#e8f6ff'; g.strokeStyle='#05070c'; g.beginPath(); g.arc(x,y,on?7:5,0,Math.PI*2); g.fill(); g.stroke(); }
+}
+function stHit(x,y){   // ¿hay una articulación bajo el puntero?
+  const r=$('stCv').getBoundingClientRect(), A=stCur();
+  return stCam(()=>{ const J=stJointsXY(stXf(r.width,r.height),A,stFr(),stD()); let best=null, bd=14;
+    for(const [id] of stJointIds(A)){ const dd=Math.hypot(J[id][0]-x,J[id][1]-y); if(dd<bd){ bd=dd; best=id; } } return best; });
+}
+/* La tira de fotogramas (siempre desde la misma vista, para compararlos): borde dorado = el actual, discontinuo = retocado */
+function stStrip(){
+  const A=stCur(), st=$('stStrip');
+  if(st.dataset.k!==A.id+'|'+A.n){ st.dataset.k=A.id+'|'+A.n; st.innerHTML=Array.from({length:A.n},(_,i)=>'<canvas width="'+PR_W*2+'" height="'+PR_H*2+'" data-f="'+i+'" title="Fotograma '+(i+1)+'"></canvas>').join(''); }
+  prRes=2; prSkyFix=ST_SKY;
+  try{ [...st.children].forEach((c,i)=>{ const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); g.drawImage(stPose(A,i,3),0,0); }); }
+  finally{ prRes=ST_S; prSkyFix=null; }
+  stMark();
+}
+function stMark(){ const A=stCur(), f=stFr(), E=poseEdits[A.id]||{}; [...$('stStrip').children].forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
+
+/* ---------- datos: deshacer, guardar ---------- */
+function stGetD(){ const A=stCur(), f=stFr(); return ((poseEdits[A.id]=poseEdits[A.id]||{})[f]=poseEdits[A.id][f]||{}); }
+function stPush(){ stUndoL.push(JSON.stringify({edits:poseEdits,grip:toolGrip,clips:prClips})); if(stUndoL.length>80) stUndoL.shift(); }
+function stUndo(){ const s=stUndoL.pop(); if(!s) return; animApply(JSON.parse(s)); if(!stAnims().some(a=>a.id===stId)) stId=0; stChanged(true); stPanels(); }
+function stTidy(){ for(const m in poseEdits){ for(const f in poseEdits[m]){ const D=poseEdits[m][f]; for(const k in D) if(Math.abs(D[k])<1e-4) delete D[k]; if(!Object.keys(D).length) delete poseEdits[m][f]; } if(!Object.keys(poseEdits[m]).length) delete poseEdits[m]; } }
+function stChanged(all){   // algo cambió: se repinta y se guarda un momento después (all = puede afectar a todos los fotogramas)
+  const A=stCur(), f=stFr();
+  if(all) for(const q in prCache) delete prCache[q]; else for(const q in prCache) if(q.includes('|'+A.id+'|'+f+'|')) delete prCache[q];
+  clearTimeout(stSaveT); $('stSaved').textContent='guardando…';
+  stSaveT=setTimeout(()=>{ stTidy(); animWrite(); $('stSaved').textContent='✔ guardado'; },300);
+  stDirty=true; stStripDirty=true;
+}
+/* Lo que viene de un archivo: solo números y textos cortos en su sitio */
+function stClean(A){
+  if(!A||typeof A!=='object') throw new Error('no es un objeto');
+  const num=v=>typeof v==='number'&&isFinite(v), E={}, C={}, G={};
+  for(const m in A.edits||{}) if(/^\d{1,3}$/.test(m)) for(const f in A.edits[m]) if(/^\d{1,2}$/.test(f)){
+    const D={}; for(const k in A.edits[m][f]) if(/^[a-zA-Z]+(\.[a-zA-Z]+)?$/.test(k)&&num(A.edits[m][f][k])) D[k]=clamp(A.edits[m][f][k],-7,7);
+    if(Object.keys(D).length) (E[m]=E[m]||{})[f]=D; }
+  for(const k in TOOL_GRIP_DEF) if(A.grip&&num(A.grip[k])) G[k]=A.grip[k];
+  for(const id in A.clips||{}){ const c=A.clips[id]; if(!/^\d{2,3}$/.test(id)||+id<10||!c||typeof c!=='object') continue;
+    C[id]={name:String(c.name||'SIN NOMBRE').slice(0,20),n:clamp(Math.round(+c.n)||8,1,24),fps:clamp(Math.round(+c.fps)||8,1,30),base:[0,1,2,3].includes(c.base)?c.base:0,
+      follow:!!c.follow,bf:clamp(Math.round(+c.bf)||0,0,7),tool:c.tool==='hacha'?'hacha':''}; }
+  return {edits:E,grip:G,clips:C};
+}
+function stNewId(){ return Math.max(9,...Object.keys(prClips).map(Number))+1; }
+function stDup(A){
+  const id=stNewId(), name=(A.name+' 2').slice(0,20);
+  prClips[id]=A.custom?Object.assign({},prClips[A.id],{name}):{name,n:A.n,fps:Math.max(1,Math.round(A.fps)),base:A.id,follow:true,bf:0,tool:A.tool};
+  if(poseEdits[A.id]) poseEdits[id]=JSON.parse(JSON.stringify(poseEdits[A.id]));
+  stId=id;
+}
+
+/* ---------- paneles ---------- */
+function stPanels(){ stLeft(); stRight(); stCtl(); stDirty=true; stStripDirty=true; }
+function stLeft(){
+  const A=stCur();
+  $('stList').innerHTML=stAnims().map(a=>ch((a.custom?'✎ ':'')+stEsc(a.name)+' <small>'+a.n+' fot.</small>',a.id===A.id,'data-anim="'+a.id+'"')).join('');
+  $('stProps').innerHTML=A.custom?'<h2>AJUSTES</h2>'
+    +'<label class="fld">NOMBRE <input type="text" id="stName" maxlength="20" value="'+stEsc(A.name)+'"></label>'
+    +'<div class="fld">FOTOGRAMAS '+ch('−',false,'data-p="n" data-v="-1"')+'<b>'+A.n+'</b>'+ch('+',false,'data-p="n" data-v="1"')+'</div>'
+    +'<div class="fld">VELOCIDAD '+ch('−',false,'data-p="fps" data-v="-1"')+'<b>'+A.fps+' f/s</b>'+ch('+',false,'data-p="fps" data-v="1"')+'</div>'
+    +'<div class="note">Parte de la pose de:</div><div class="row">'+ST_BASE.map(([nm,m])=>ch(nm,A.base===m,'data-p="base" data-v="'+m+'"')).join('')+'</div>'
+    +(A.base?'<div class="row">'+ch('SIGUE SUS PASOS',A.follow,'data-p="follow" title="Encendido: recorre los fotogramas de esa animación; apagado: parte siempre de su primera pose"')+'</div>':'')
+    +'<div class="note">Herramienta en la mano:</div><div class="row">'+ST_TOOLS.map(([k,txt])=>ch(txt,(A.tool||'')===k,'data-p="tool" data-v="'+k+'"')).join('')+'</div>'
+    +'<div class="row">'+ch('⧉ DUPLICAR',false,'data-p="dup"')+ch('🗑 BORRAR',false,'data-p="del"')+'</div>'
+    +'<p class="note">Animación nueva: queda guardada para engancharla al juego (cavar, regar, picar…).</p>'
+   :'<p class="note">Animación del juego: lo que retoques aquí lo hace el piloto en el juego. Para probar una variante sin tocarla, duplícala.</p><div class="row">'+ch('⧉ DUPLICAR COMO NUEVA',false,'data-p="dup"')+'</div>';
+}
+function stRight(){
+  const A=stCur(), D=poseD(A.id,stFr());
+  $('stJoints').innerHTML=stJointIds(A).map(([id,txt,ax])=>ch(txt,id===stJoint,'data-j="'+id+'"',ax.some(([k])=>D[k])?' ed':'')).join('');
+  $('stActs').innerHTML=ch('⇉ ESTE HUESO EN TODOS',false,'data-a="all" title="Copia el giro de esta articulación a todos los fotogramas"')+ch('↺ HUESO',false,'data-a="joint"')+ch('↺ FOTOGRAMA',false,'data-a="frame"')
+    +ch('↺ ANIMACIÓN',false,'data-a="anim"')+ch('📋 COPIAR POSE',false,'data-a="copy"')+ch('📥 PEGAR POSE',false,'data-a="paste"',stCopy?'':' dis');
+  if(stSliding) return;   // no rehacer la barra que estás moviendo
+  if(!stJointIds(A).some(j=>j[0]===stJoint)) stJoint='armR';
+  $('stAxes').innerHTML=DEV_JOINTS.find(j=>j[0]===stJoint)[2].map(([k,txt])=>{ const v=Math.round((D[k]||0)*180/Math.PI);
+    return '<label class="sl">'+txt+'<input type="range" data-pk="'+k+'" min="-180" max="180" step="1" value="'+v+'"><output>'+v+'°</output></label>'; }).join('');
+  $('stGrip').innerHTML=DEV_GRIP.map(([k,txt,a,b,s,raw])=>{ const v=raw?toolGrip[k]:Math.round(toolGrip[k]*180/Math.PI);
+    return '<label class="sl">'+txt+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'"><output>'+v+(raw?'':'°')+'</output></label>'; }).join('');
+}
+function stCtl(){
+  $('stCtl').innerHTML=ch('◀',false,'data-c="prev" title="Fotograma anterior (←)"')+ch(stPlay?'⏸ PAUSA':'▶ REPRODUCIR',stPlay,'data-c="play" title="Espacio"')+ch('▶',false,'data-c="next" title="Fotograma siguiente (→)"')
+    +'<span class="gap"></span>'+ST_SPEED.map((v,i)=>ch('×'+v,i===stSpeed,'data-c="sp" data-v="'+i+'"')).join('')
+    +'<span class="gap"></span>'+ch('🧅 PIEL DE CEBOLLA',stOnion,'data-c="onion" title="El fotograma anterior se ve en transparente detrás"');
+  $('stViews').innerHTML=ST_VIEWS.map(([txt],i)=>ch(txt,false,'data-v="'+i+'"')).join('');
+}
+function stStep(s){ const n=stCur().n; stPlay=false; stF=(stFr()+s+n)%n; stCtl(); stRight(); stMark(); stDirty=true; }
+function stTogglePlay(){ stPlay=!stPlay; if(!stPlay){ stF=stFr(); stRight(); } stCtl(); stDirty=true; }
+
+/* ---------- eventos ---------- */
+$('stList').addEventListener('click',e=>{ const b=e.target.closest('[data-anim]'); if(!b) return; stId=+b.dataset.anim; stF=0; stPanels(); });
+$('stNew').onclick=()=>{ stPush(); const id=stNewId(); prClips[id]={name:'NUEVA '+(id-9),n:8,fps:8,base:0,follow:false,bf:0,tool:''}; stId=id; stF=0; stPlay=false; stChanged(true); stPanels(); };
+$('stProps').addEventListener('click',e=>{
+  const b=e.target.closest('[data-p]'); if(!b) return;
+  const A=stCur(), p=b.dataset.p, C=prClips[A.id];
+  if(p==='del'&&!confirm('¿Borrar la animación «'+A.name+'»?')) return;
+  stPush();
+  if(p==='dup') stDup(A);
+  else if(p==='del'){ delete prClips[A.id]; delete poseEdits[A.id]; stId=0; stF=0; }
+  else if(p==='n'){ C.n=clamp(C.n+ +b.dataset.v,1,24); stF=Math.min(stFr(),C.n-1); }
+  else if(p==='fps') C.fps=clamp(C.fps+ +b.dataset.v,1,30);
+  else if(p==='base'){ C.base=+b.dataset.v; C.follow=C.base>0&&C.follow; }
+  else if(p==='follow') C.follow=!C.follow;
+  else if(p==='tool') C.tool=b.dataset.v;
+  stChanged(true); stPanels();
+});
+$('stProps').addEventListener('change',e=>{
+  if(e.target.id!=='stName') return; const C=prClips[stCur().id]; if(!C) return;
+  stPush(); C.name=e.target.value.trim().toUpperCase().slice(0,20)||'SIN NOMBRE'; stChanged(true); stPanels();
+});
+$('stJoints').addEventListener('click',e=>{ const b=e.target.closest('[data-j]'); if(b){ stJoint=b.dataset.j; stRight(); stDirty=true; } });
+$('stRight').addEventListener('pointerdown',e=>{ if(e.target.type==='range'){ stPush(); stSliding=true; } });
+addEventListener('pointerup',()=>{ if(stSliding){ stSliding=false; stRight(); } });
+$('stAxes').addEventListener('input',e=>{
+  const k=e.target.dataset.pk; if(!k) return;
+  stPlay=false; stGetD()[k]=+e.target.value*Math.PI/180; e.target.nextElementSibling.textContent=e.target.value+'°'; stChanged(false); stRight();
+});
+$('stGrip').addEventListener('input',e=>{
+  const k=e.target.dataset.k; if(!k) return;
+  const raw=DEV_GRIP.find(q=>q[0]===k)[5], v=+e.target.value; toolGrip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°'); stChanged(true);
+});
+$('stGripReset').onclick=()=>{ stPush(); Object.assign(toolGrip,TOOL_GRIP_DEF); stChanged(true); stRight(); };
+$('stActs').addEventListener('click',e=>{
+  const b=e.target.closest('[data-a]'); if(!b) return;
+  const A=stCur(), f=stFr(), a=b.dataset.a, ax=DEV_JOINTS.find(j=>j[0]===stJoint)[2].map(q=>q[0]), E=poseEdits[A.id]||{};
+  if(a==='copy'){ stCopy=Object.assign({},poseD(A.id,f)); stRight(); return; }
+  if(a==='paste'&&!stCopy) return;
+  if(a==='anim'&&!confirm('¿Quitar todos los retoques de «'+A.name+'»?')) return;
+  stPush();
+  if(a==='all'){ const D=poseD(A.id,f); for(let i=0;i<A.n;i++){ const T=(poseEdits[A.id]=poseEdits[A.id]||{})[i]=poseEdits[A.id][i]||{}; for(const k of ax) T[k]=D[k]||0; } }
+  else if(a==='joint'){ if(E[f]) for(const k of ax) delete E[f][k]; }
+  else if(a==='frame') delete E[f];
+  else if(a==='anim') delete poseEdits[A.id];
+  else if(a==='paste') (poseEdits[A.id]=poseEdits[A.id]||{})[f]=Object.assign({},stCopy);
+  stChanged(true); stRight();
+});
+$('stCtl').addEventListener('click',e=>{
+  const b=e.target.closest('[data-c]'); if(!b) return; const c=b.dataset.c;
+  if(c==='prev') return stStep(-1); if(c==='next') return stStep(1); if(c==='play') return stTogglePlay();
+  if(c==='sp') stSpeed=+b.dataset.v; else if(c==='onion') stOnion=!stOnion;
+  stCtl(); stDirty=true;
+});
+$('stViews').addEventListener('click',e=>{ const b=e.target.closest('[data-v]'); if(!b) return; const [,d,el]=ST_VIEWS[+b.dataset.v]; V.d=d; V.el=el; stDirty=true; });
+$('stStrip').addEventListener('click',e=>{ const c=e.target.closest('canvas'); if(!c) return; stPlay=false; stF=+c.dataset.f; stCtl(); stRight(); stMark(); stDirty=true; });
+$('stUndo').onclick=stUndo;
+$('stExport').onclick=()=>{
+  stTidy(); const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,edits:poseEdits,grip:toolGrip,clips:prClips},null,1)],{type:'application/json'}));
+  a.download='animaciones-isleforge.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+$('stImport').onchange=async e=>{
+  const file=e.target.files[0]; e.target.value=''; if(!file) return;
+  try{ const A=stClean(JSON.parse(await file.text())); stPush(); animApply(A); stId=0; stF=0; stChanged(true); stPanels(); $('stSaved').textContent='✔ importado'; }
+  catch(err){ alert('Ese archivo no tiene animaciones válidas.'); }
+};
+/* El ratón en la vista */
+const stCv=$('stCv'), stXY=e=>{ const r=stCv.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top]; };
+stCv.addEventListener('contextmenu',e=>e.preventDefault());
+stCv.addEventListener('pointerdown',e=>{
+  const [x,y]=stXY(e); stCv.setPointerCapture(e.pointerId);
+  if(e.button===1||e.button===2||e.shiftKey){ stDrag={kind:'pan',x,y}; stCv.style.cursor='move'; return; }
+  const hit=stHit(x,y);
+  if(hit){ stPlay=false; stF=stFr(); stJoint=hit; stDrag={kind:'joint',x,y,pushed:false}; stCtl(); stRight(); }
+  else { stDrag={kind:'orbit',x,y}; stCv.style.cursor='grabbing'; }
+  stDirty=true;
+});
+stCv.addEventListener('pointermove',e=>{
+  const [x,y]=stXY(e);
+  if(!stDrag){ if(!stPlay) stCv.style.cursor=stHit(x,y)?'pointer':'grab'; return; }
+  const dx=x-stDrag.x, dy=y-stDrag.y; stDrag.x=x; stDrag.y=y;
+  if(stDrag.kind==='pan'){ V.px+=dx; V.py+=dy; }
+  else if(stDrag.kind==='orbit'){ V.d=(V.d+dx*0.025+16)%16; V.el=clamp(V.el-dy*0.35,0,90); }   // arrastrar hacia arriba sube la cámara
+  else {   // girar la articulación: ↔ y ↕ mueven sus dos ejes (o uno solo si solo tiene uno), como en el MENÚ DEV
+    if(!stDrag.pushed){ stPush(); stDrag.pushed=true; }
+    const ax=DEV_JOINTS.find(j=>j[0]===stJoint)[2], D=stGetD();
+    if(ax.length>1){ D[ax[0][0]]=(D[ax[0][0]]||0)+dx*0.012; D[ax[1][0]]=(D[ax[1][0]]||0)+dy*0.012; }
+    else D[ax[0][0]]=(D[ax[0][0]]||0)+(dx-dy)*0.012;
+    stChanged(false); stRight();
+  }
+  stDirty=true;
+});
+stCv.addEventListener('pointerup',()=>{ stDrag=null; stCv.style.cursor='grab'; stDirty=true; });
+stCv.addEventListener('wheel',e=>{   // acercar hacia el puntero: el punto bajo el ratón se queda quieto
+  e.preventDefault();
+  const r=stCv.getBoundingClientRect(), [x,y]=stXY(e), z0=V.zoom, z1=clamp(z0*Math.exp(-e.deltaY*0.0015),0.4,8);
+  V.px=x-r.width/2-(x-r.width/2-V.px)*z1/z0; V.py=y-r.height/2-(y-r.height/2-V.py)*z1/z0; V.zoom=z1; stDirty=true;
+},{passive:false});
+stCv.addEventListener('dblclick',()=>{ V.zoom=1; V.px=V.py=0; stDirty=true; });
+addEventListener('keydown',e=>{
+  if(e.target.type==='text'||(e.target.type==='range'&&e.key.startsWith('Arrow'))) return;
+  const k=e.key.toLowerCase(), mod=e.ctrlKey||e.metaKey, A=stCur();
+  if(mod&&k==='z'){ e.preventDefault(); stUndo(); }
+  else if(mod&&k==='c'){ stCopy=Object.assign({},poseD(A.id,stFr())); stRight(); }
+  else if(mod&&k==='v'){ if(stCopy){ stPush(); (poseEdits[A.id]=poseEdits[A.id]||{})[stFr()]=Object.assign({},stCopy); stChanged(true); stRight(); } }
+  else if(k===' '){ e.preventDefault(); stTogglePlay(); }
+  else if(k==='arrowleft'){ e.preventDefault(); stStep(-1); }
+  else if(k==='arrowright'){ e.preventDefault(); stStep(1); }
+});
+addEventListener('resize',()=>{ stDirty=true; });
+addEventListener('storage',e=>{   // retocadas en el juego (MENÚ DEV) en otra pestaña
+  if(e.key!==ANIM_KEY||stDrag||stSliding) return; const A=animRead(); if(!A) return;
+  animApply(A); if(!stAnims().some(a=>a.id===stId)) stId=0; stPanels();
+});
+function stLoop(now){
+  const dt=Math.min(0.1,(now-(stLast||now))/1000); stLast=now;
+  if(stPlay){ const A=stCur(), f0=stFr(); stF=(stF+dt*A.fps*ST_SPEED[stSpeed])%A.n; if(stFr()!==f0){ stDirty=true; stMark(); } }
+  if(stDirty){ stDirty=false; stRender(); }
+  if(stStripDirty&&now-stStripT>250){ stStripDirty=false; stStripT=now; stStrip(); }
+  requestAnimationFrame(stLoop);
+}
+/* Al abrir: las animaciones guardadas; la primera vez, las que ya tenía la partida (sin tocarla) */
+{ const A=animRead(); if(A) animApply(A); else { Object.assign(toolGrip,save.toolGrip||{}); for(const m in save.poseEdits||{}) poseEdits[m]=save.poseEdits[m]; animWrite(); } }
+$('stGame').href=/github\.io$/.test(location.hostname)?'./':'ISLEFORGE.html';
+stPanels(); requestAnimationFrame(stLoop);
+
+})();
+</script>
+</body>
+</html>

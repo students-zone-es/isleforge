@@ -11884,6 +11884,36 @@ function prClear(q,s,r,g,pz,sway){
    Se suman a la pose calculada, así que sin retoques el muñeco se mueve igual que siempre */
 const poseEdits={}, PR_NOD={};
 const poseD=(mode,f)=>(poseEdits[mode]&&poseEdits[mode][f])||PR_NOD;
+/* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): prClips[modo] = {name, n fotogramas, fps, base (0-3: la
+   animación del juego de la que parte), follow (true: recorre los pasos de la base; false: se queda en su fotograma bf), tool}.
+   Sus modos empiezan en 10 y sus poses son retoques de poseEdits, como los de las animaciones del juego. */
+const prClips={}, PR_BASE_N=[2,8,8,8];
+function prPoseOf(mode,f,g){
+  const C=prClips[mode], m=C?C.base:mode, b=C?(C.follow?Math.floor(f*PR_BASE_N[m]/C.n):C.bf||0):f;
+  return prPose(m,m?b/8:0,m?0:b,g,poseD(mode,f));
+}
+/* Las animaciones (retoques, agarre del hacha y animaciones nuevas) se guardan aparte de la partida, en ANIM_KEY: así el
+   estudio y el juego las comparten sin pisarse la partida */
+const ANIM_KEY='isleforge_anim_v1';
+function animRead(){ try{ return JSON.parse(localStorage.getItem(ANIM_KEY)); }catch(e){ return null; } }
+function animWrite(){ try{ localStorage.setItem(ANIM_KEY,JSON.stringify({v:1,edits:poseEdits,grip:toolGrip,clips:prClips})); }catch(e){} }
+function animApply(A){
+  for(const k in poseEdits) delete poseEdits[k]; Object.assign(poseEdits,A.edits||{});
+  Object.assign(toolGrip,TOOL_GRIP_DEF,A.grip||{});
+  for(const k in prClips) delete prClips[k]; Object.assign(prClips,A.clips||{});
+  for(const q in prCache) delete prCache[q];
+}
+/* Las articulaciones que se pueden girar a mano (id, nombre, [clave del retoque, nombre del eje]), los huesos que se dibujan
+   entre ellas y los valores del agarre del hacha: los usan el MENÚ DEV (p9v_tools.js) y el ESTUDIO (e1_estudio.js) */
+const DEV_JOINTS=[['body','Tronco',[['body.lean','Inclinar']]],['head','Cabeza',[['head.yaw','Girar'],['head.pitch','Asentir']]],
+  ['armL','Hombro izq.',[['armL.sw','Adelante/atrás'],['armL.ab','Abrir']]],['elbowL','Codo izq.',[['elbowL','Doblar']]],
+  ['armR','Hombro der.',[['armR.sw','Adelante/atrás'],['armR.ab','Abrir']]],['elbowR','Codo der.',[['elbowR','Doblar']]],
+  ['legL','Cadera izq.',[['legL.sw','Adelante/atrás'],['legL.ab','Abrir']]],['kneeL','Rodilla izq.',[['kneeL','Doblar']]],['footL','Pie izq.',[['footL','Doblar']]],
+  ['legR','Cadera der.',[['legR.sw','Adelante/atrás'],['legR.ab','Abrir']]],['kneeR','Rodilla der.',[['kneeR','Doblar']]],['footR','Pie der.',[['footR','Doblar']]],
+  ['tool','Hacha',[['tool.ang','Ángulo'],['tool.twist','Girar filo']]]];
+const DEV_BONES=[['armL','elbowL'],['elbowL','handL'],['armR','elbowR'],['elbowR','handR'],['legL','kneeL'],['kneeL','footL'],['footL','toeL'],['legR','kneeR'],['kneeR','footR'],['footR','toeR'],['armL','armR'],['legL','legR'],['body','head']];
+const DEV_GRIP=[['grip','Agarre en el mango',-4,14,0.5,1],['size','Tamaño',0.6,1.6,0.05,1],['twist','Giro del filo',-180,180,5,0],['lat','Inclinación lateral',-60,60,5,0],
+  ['rest','Ángulo en reposo',-60,120,5,0],['up','Ángulo al subir',-30,150,5,0],['hit','Ángulo al golpear',-60,90,5,0],['armUp','Brazo arriba',90,200,5,0],['armHit','Brazo al golpear',20,140,5,0]];   // clave, nombre, mín, máx, paso, 1 = sin grados
 function prPose(mode,ph,br,g,D=PR_NOD){
   const dv=k=>D[k]||0;
   const th=ph*Math.PI*2, walk=mode===1||mode===2, run=mode===2, TH=13.4*g.h, SH=13*g.h, UA=10*g.h, FA=9*g.h, stance=4*g.stance;
@@ -12117,7 +12147,7 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 /* Pinta una pose desde una de las 16 direcciones (d=0 mirando a la cámara) y la guarda ya empaquetada, píxel a píxel */
 /* Dónde cae cada articulación de una pose, en píxeles del lienzo de la pose a resolución S (el editor de poses dibuja ahí sus puntos) */
 function prJoints(pal,d,mode,f,S){
-  const g=prGen(pal), P=prPose(mode,mode?f/8:0,mode?0:f,g,poseD(mode,f)), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
+  const g=prGen(pal), P=prPoseOf(mode,f,g), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
   const V=q=>{ const wx=q[0]*c+q[1]*s, wy=-q[0]*s+q[1]*c; return [(PR_OX+wx)*S,(PR_OY+wy*prCamSE-q[2]*prCamCE)*S]; };
   const hip=s0=>[s0*4*g.hip+P.sway,0,P.pz], [by,bz]=P.up(0,11), [hy,hz]=P.up(0.8,29.2);
   return {body:V([0,by,bz]),head:V([0,hy,hz]),armL:V(P.AL.sh),armR:V(P.AR.sh),elbowL:V(P.AL.el),elbowR:V(P.AR.el),handL:V(P.AL.ha),handR:V(P.AR.ha),
@@ -12125,7 +12155,7 @@ function prJoints(pal,d,mode,f,S){
 }
 function prBuild(pal,d,mode,f,look,expr){
   const S=prRes, BW=PR_W*S, BH=PR_H*S, key=S+(save.pencil?'l':'')+(pal.key||'a')+(pal.tool||'')+d+'|'+mode+'|'+f+'|'+look+'|'+(expr||'')+prCamK; if(prCache[key]) return prCache[key];
-  const P=prPose(mode,mode?f/8:0,mode?0:f,prGen(pal),poseD(mode,f)), h=d/16*Math.PI*2, {O,shadow}=pal.solo?prToolParts():prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
+  const P=prPoseOf(mode,f,prGen(pal)), h=d/16*Math.PI*2, {O,shadow}=pal.solo?prToolParts():prParts(pal,P,look*0.42,expr||'normal',h), c=Math.cos(h), s=Math.sin(h);
   prZ.fill(-1e9,0,BW*BH); prM.fill(0,0,BW*BH);
   for(const p of O){
     const dx=p.b[0]-p.a[0], dy=p.b[1]-p.a[1], dz=p.b[2]-p.a[2], n=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/0.6));
@@ -12885,15 +12915,13 @@ devEl('devCam').addEventListener('input',e=>devCamSet(+e.target.value));
 devEl('btnToolDev').onclick=()=>{ S.pickup(); openDev(); };
 
 /* EDITAR CÓMO LLEVA EL HACHA: cada barra cambia un valor de toolGrip (p9r_person.js); se ve en vivo y se guarda */
-const DEV_GRIP=[['grip','Agarre en el mango',-4,14,0.5,1],['size','Tamaño',0.6,1.6,0.05,1],['twist','Giro del filo',-180,180,5,0],['lat','Inclinación lateral',-60,60,5,0],
-  ['rest','Ángulo en reposo',-60,120,5,0],['up','Ángulo al subir',-30,150,5,0],['hit','Ángulo al golpear',-60,90,5,0],['armUp','Brazo arriba',90,200,5,0],['armHit','Brazo al golpear',20,140,5,0]];   // clave, nombre, mín, máx, paso, 1 = sin grados
 let devDirty=false;
 Object.assign(toolGrip,save.toolGrip||{});
 function devGripHtml(){
   return DEV_GRIP.map(([k,t,a,b,s,raw])=>{ const v=raw?toolGrip[k]:Math.round(toolGrip[k]*180/Math.PI);
     return '<label>'+t+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'"><output>'+v+(raw?'':'°')+'</output></label>'; }).join('');
 }
-function devGripChanged(){ for(const q in prCache) delete prCache[q]; save.toolGrip=Object.assign({},toolGrip); saveSave(); devDirty=true; }
+function devGripChanged(){ for(const q in prCache) delete prCache[q]; save.toolGrip=Object.assign({},toolGrip); saveSave(); animWrite(); devDirty=true; }
 devEl('devGrip').addEventListener('input',e=>{
   const k=e.target.dataset.k; if(!k) return;
   const raw=DEV_GRIP.find(d=>d[0]===k)[5], v=+e.target.value;
@@ -12910,21 +12938,15 @@ devEl('devMenu').addEventListener('click',e=>{
 /* EDITOR DE POSES: como el modo pose de Blender. Eliges una articulación (o pulsas su punto en el muñeco) y la giras arrastrando
    o con sus barras; el retoque se guarda solo para este fotograma de esta animación (poseEdits en p9r_person.js, y en save.poseEdits)
    y se ve también en el juego. La tira de abajo marca con borde discontinuo los fotogramas retocados. */
-const DEV_JOINTS=[['body','Tronco',[['body.lean','Inclinar']]],['head','Cabeza',[['head.yaw','Girar'],['head.pitch','Asentir']]],
-  ['armL','Hombro izq.',[['armL.sw','Adelante/atrás'],['armL.ab','Abrir']]],['elbowL','Codo izq.',[['elbowL','Doblar']]],
-  ['armR','Hombro der.',[['armR.sw','Adelante/atrás'],['armR.ab','Abrir']]],['elbowR','Codo der.',[['elbowR','Doblar']]],
-  ['legL','Cadera izq.',[['legL.sw','Adelante/atrás'],['legL.ab','Abrir']]],['kneeL','Rodilla izq.',[['kneeL','Doblar']]],['footL','Pie izq.',[['footL','Doblar']]],
-  ['legR','Cadera der.',[['legR.sw','Adelante/atrás'],['legR.ab','Abrir']]],['kneeR','Rodilla der.',[['kneeR','Doblar']]],['footR','Pie der.',[['footR','Doblar']]],
-  ['tool','Hacha',[['tool.ang','Ángulo'],['tool.twist','Girar filo']]]];
-const DEV_BONES=[['armL','elbowL'],['elbowL','handL'],['armR','elbowR'],['elbowR','handR'],['legL','kneeL'],['kneeL','footL'],['footL','toeL'],['legR','kneeR'],['kneeR','footR'],['footR','toeR'],['armL','armR'],['legL','legR'],['body','head']];
 let devJoint='armR', devDrag=null;
-for(const m in save.poseEdits||{}) poseEdits[m]=save.poseEdits[m];
+{ const A=animRead(); if(A) animApply(A); else { for(const m in save.poseEdits||{}) poseEdits[m]=save.poseEdits[m]; animWrite(); } }   // viven aparte de la partida: las comparte el ESTUDIO (estudio.html)
+addEventListener('storage',e=>{ if(e.key===ANIM_KEY){ const A=animRead(); if(A){ animApply(A); devDirty=true; } } });   // retocadas en el estudio (otra pestaña): se ven aquí al momento
 const devMode=()=>DEV_ANIM[devAnim][1], devFr=()=>Math.floor(devF)%DEV_ANIM[devAnim][2];
 const devFrameEd=(m,f)=>!!(poseEdits[m]&&poseEdits[m][f]&&Object.keys(poseEdits[m][f]).length);
 function devGetD(){ const m=devMode(), f=devFr(); return ((poseEdits[m]=poseEdits[m]||{})[f]=poseEdits[m][f]||{}); }
 function devPoseSaved(){
   for(const m in poseEdits){ for(const f in poseEdits[m]){ const D=poseEdits[m][f]; for(const k in D) if(Math.abs(D[k])<1e-4) delete D[k]; if(!Object.keys(D).length) delete poseEdits[m][f]; } if(!Object.keys(poseEdits[m]).length) delete poseEdits[m]; }
-  save.poseEdits=JSON.parse(JSON.stringify(poseEdits)); saveSave();
+  save.poseEdits=JSON.parse(JSON.stringify(poseEdits)); saveSave(); animWrite();
   for(const q in prCache) delete prCache[q];
   devDirty=true;
 }
@@ -13012,6 +13034,7 @@ function menuBuildItems(){
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
     {id:'opt_pencil',label:'ESTILO LÁPIZ',val:save.pencil?'SÍ':'NO',sub:'Prueba: bordes de grafito en el piloto, los pinos y las rocas'},
     {id:'opt_dev',label:'MENÚ DEV',sub:'Ver las animaciones fotograma a fotograma (también con F2)'},
+    {id:'opt_studio',label:'ESTUDIO DE ANIMACIÓN',val:'ABRIR ↗',sub:'Página aparte para crear y retocar animaciones del piloto (se abre en otra pestaña)'},
     {id:'opt_lapse',label:'CICLO DEL DÍA',val:menuLapseBak&&menuLapseK===MENU_LAPSE?'ACELERADO':'NORMAL',sub:'Míralo pasar: un día entero en 20 segundos (también con T). Al pararlo vuelve tu hora'},
     {id:'opt_eclipse',label:'ECLIPSE',val:menuLapseBak&&menuLapseK!==MENU_LAPSE?'VIÉNDOLO':'VER',sub:'Salta al próximo eclipse de sol y míralo (también con E). Al salir vuelve tu hora'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
@@ -13111,6 +13134,7 @@ function menuActivate(){
     case 'options': S.pickup(); menuView='options'; menuIdx=0; renderMainMenu(); break;
     case 'back': { const from=menuView; S.pickup(); menuView='main'; menuItems=menuBuildItems(); menuIdx=Math.max(0,menuItems.findIndex(x=>x.id===(from==='confirm'?'new':from))); renderMainMenu(); break; }
     case 'opt_dev': S.pickup(); openDev(); break;
+    case 'opt_studio': S.pickup(); window.open('estudio.html','_blank'); break;
     case 'opt_pencil': save.pencil=!save.pencil; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_sound': save.sound=!save.sound; saveSave(); updateSoundBtn(); S.pickup(); renderMainMenu(); break;
     case 'opt_vol': menuOption(1,true); break;
