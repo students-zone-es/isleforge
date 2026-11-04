@@ -13252,6 +13252,9 @@ function menuMoonCv(M,phase){   // la luna de esta fase, ya dibujada (y su versi
   const img=dq.getImageData(0,0,d.width,d.height), P=img.data;
   for(let i=0;i<P.length;i+=4) if(P[i]+P[i+1]+P[i+2]<200) P[i+3]=0;   // de día la cara oscura no se ve
   dq.putImageData(img,0,0);
+  const im2=q.getImageData(0,0,c.width,c.height), P2=im2.data;   // de noche apenas se adivina (luz que rebota en la Tierra): si fuera opaca, sería un agujero en el cielo
+  for(let i=0;i<P2.length;i+=4) if(P2[i+3]&&P2[i]+P2[i+1]+P2[i+2]<200) P2[i+3]=70;
+  q.putImageData(im2,0,0);
   return M.moonCv={k,c,day:d,MR};
 }
 function menuSky(g,M,ts,Dia){
@@ -13278,18 +13281,22 @@ function menuSky(g,M,ts,Dia){
       const [x,y]=menuSkyXY(M,p); if(x<0||x>=SW) continue;
       g.fillStyle=b>0.85&&v>0.6?'#ffffff':(b>0.5?'#b9c2f0':'#6f74a8'); g.fillRect(Math.round(x),Math.round(y),1,1);
     }
+    const fs=(ts%7)/0.9, fk=Math.floor(ts/7);   // una estrella fugaz cada 7 s, en un sitio distinto cada vez
+    if(fs<1&&M.night>0.7){ const x0=opsHash(fk,1,9)*SW*0.8, y0=6+opsHash(fk,2,9)*HOR*0.35;
+      for(let k=0;k<7;k++){ const u=clamp(fs-k*0.035,0,1); g.fillStyle='rgba(235,240,255,'+((1-k/7)*(1-fs*0.7)).toFixed(2)+')'; g.fillRect(Math.round(x0+u*46),Math.round(y0+u*15),1,1); } }
     if(M.marsUp){ g.fillStyle='#ff6b3a'; g.fillRect(M.marsX,M.marsY,2,2); g.fillStyle='rgba(255,107,58,0.35)'; g.fillRect(M.marsX-1,M.marsY-1,4,4); }
     g.globalAlpha=1;
   }
   // luna: de noche entera; de día pálida y solo su parte iluminada. Cerca del horizonte, amarillenta
   if(M.moonUp){
-    const C=menuMoonCv(M,S.phase), X=Math.round(mx), Y=Math.round(my), MR=C.MR;
+    const C=menuMoonCv(M,menuMoonPhase()), X=Math.round(mx), Y=Math.round(my), MR=C.MR;
     const mh=g.createRadialGradient(X,Y,MR,X,Y,MR*2.2); mh.addColorStop(0,'rgba(230,226,200,'+(0.16*lit*M.night).toFixed(3)+')'); mh.addColorStop(1,'rgba(230,226,200,0)');
     g.globalCompositeOperation='lighter'; g.fillStyle=mh; g.fillRect(X-MR*2.2,Y-MR*2.2,MR*4.4,MR*4.4); g.globalCompositeOperation='source-over';
-    g.globalAlpha=M.night; g.drawImage(C.c,X-MR-1,Y-MR-1);
-    if(Dia>0.01){ g.globalAlpha=Dia*0.55; g.drawImage(C.day,X-MR-1,Y-MR-1); }
+    g.globalAlpha=M.night*(1-M.dusk); g.drawImage(C.c,X-MR-1,Y-MR-1);   // con la cara oscura: solo de noche cerrada
+    const dA=Math.max(Dia*0.55*clamp(S.moon.alt/8,0,1),M.night*M.dusk);   // solo la parte iluminada: de día pálida, en el crepúsculo entera
+    if(dA>0.01){ g.globalAlpha=dA; g.drawImage(C.day,X-MR-1,Y-MR-1); }   // de día, pegada al horizonte se pierde en la bruma
     g.globalAlpha=1;
-    const low=clamp(1-S.moon.alt/10,0,1);
+    const low=clamp(1-S.moon.alt/10,0,1)*M.night;   // de día no se tiñe de naranja: parecería otro sol
     if(low>0.02){ g.globalCompositeOperation='multiply'; g.fillStyle='rgba(255,'+Math.round(255-70*low)+','+Math.round(255-140*low)+',1)'; g.beginPath(); g.arc(X,Y,MR+1,0,Math.PI*2); g.fill(); g.globalCompositeOperation='source-over'; }
   }
   // sol: blanco arriba, dorado y luego naranja al acercarse al horizonte
@@ -13317,6 +13324,8 @@ function menuBuildScene(){
   let bg0=skyCv(['#070a1c','#0a0d24','#0e112c','#121533','#17193b','#1c1d42','#232349','#2b2a50','#353157'].map(menuHex),   // noche: el naranja del horizonte lo pone el sol (menuSky)
                  ['#3a2350','#2a2150','#1e2148','#181c3e','#131833','#0f1329','#0b0f22'].map(menuHex)), bg=bg0;
   let g=bg.getContext('2d');
+  const bgDusk=skyCv(['#141a40','#1c2150','#2a2a5e','#3d3266','#58396a','#7c4468','#a5546a','#cf6c62','#f0915a'].map(menuHex),
+                     ['#8a5266','#6a4064','#4a3460','#332a52','#252246','#1c1b3a','#15152e'].map(menuHex));
   const bgDay=skyCv(['#2b5d9e','#3468ad','#3f76bb','#4b84c6','#5b93cf','#6da2d6','#82b2dc','#9cc3e2','#bcd6e6'].map(menuHex),
                     ['#6a9cc2','#5a8fb8','#4a80ac','#3d729f','#326590','#28597f','#1f4c6e'].map(menuHex)), gd=bgDay.getContext('2d');
   // el sol, la luna, Marte y las estrellas ya no están pintados en el cielo: se mueven (menuSky). Las islas lejanas van en
@@ -13370,7 +13379,7 @@ function menuBuildScene(){
   const lhG=mkCanvas(300,H0), lg=lhG.getContext('2d'); lg.drawImage(sil,176,80,20,48,176,80,20,48);
   lg.globalCompositeOperation='source-in'; lg.fillStyle='#6a5470'; lg.fillRect(176,80,20,48);   // el mismo tono que el resto de la isla (litC)
   lg.globalCompositeOperation='source-over'; lg.fillStyle='#5d5650'; for(let x=176;x<196;x++){ for(let y=80;y<128;y++){ if(lg.getImageData(x,y,1,1).data[3]){ lg.fillRect(x,y,1,1); break; } } }
-  menuScene={moonLit:0,islN,islD,moonCv:{},silR,bgDay,lhG,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
+  menuScene={moonLit:0,dusk:0,bgDusk,islN,islD,moonCv:{},silR,bgDay,lhG,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),bg,sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
     stars:Array.from({length:Math.round(420*FX)},(_,i)=>[opsHash(i,1,5)*Math.PI*2,Math.asin(opsHash(i,2,5)*1.55-0.55),opsHash(i,3,5)*6.28,opsHash(i,4,5)]),   // [ascensión recta, declinación, parpadeo, brillo]
     wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
     smoke:[], lastPuff:-1, embers:[], bubbles:[]};
@@ -13504,9 +13513,13 @@ function drawMenuScene(){
   // DÍA Y NOCHE: la escena sigue la hora de tu partida (p9m_daynight.js). Dia = 1 a pleno día; lamp = el faro
   // encendido (se enciende al anochecer, hacia las 19:30, y se apaga al amanecer: de día no hace falta)
   const now=performance.now(); advanceClock(Math.min(4,(now-(M.lastT||now))/16.67)); M.lastT=now;   // en el menú el cielo sigue girando
-  const tdk=timeDark(), Dia=1-menuSmooth(0.05,0.6,tdk), lamp=menuSmooth(0.15,0.45,tdk); M.night=1-Dia; M.lamp=lamp;
+  // la luz sale de la altura del sol: de día pleno (3° o más) a noche cerrada (−7°) pasando por el crepúsculo; el faro se
+  // enciende cuando el sol baja de 4° y se apaga al amanecer. gold = la hora dorada, con el sol bajo
+  const sa=skyNow().sun.alt, Dia=menuSmooth(-7,3,sa), lamp=menuSmooth(4,-2,sa), dusk=clamp(1-Math.abs(sa+1.5)/9,0,1), gold=clamp(1-sa/16,0,1)*Dia;
+  M.night=1-Dia; M.lamp=lamp; M.dusk=dusk;
   g.drawImage(M.bg,0,0);
   if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.bgDay,0,0); g.globalAlpha=1; }
+  if(dusk>0.01){ g.globalAlpha=dusk*0.9; g.drawImage(M.bgDusk,0,0); g.globalAlpha=1; }
   menuSky(g,M,ts,Dia);   // amanecer/atardecer, estrellas, sol, luna y Marte en su sitio de verdad
   g.drawImage(M.islN,0,0); if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.islD,0,0); g.globalAlpha=1; }
   // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos y HORIZONTALES (barren el horizonte,
@@ -13543,10 +13556,11 @@ function drawMenuScene(){
     const far=i<3, wd=34+(i*17)%30, y=far?HOR-36+i*7:HOR-62+(i-3)*9, x=Math.round(((ts*(far?1.2:2.4)+i*97)%(SW+60+wd))-wd-30);
     const dm=M.moonUp?Math.hypot(x+wd/2-M.moonX,y-M.moonY):99;
     g.globalAlpha=clamp((dm-30)/30,0.25,1)*(far?0.75:0.9);
-    const day=Dia>0.5;
-    g.fillStyle=day?(far?'#dfe8f2':'#f2f6fb'):(far?'#3a2048':'#2c1a3e'); g.fillRect(x,y,wd,3); g.fillRect(x+4,y-2,wd-10,2); g.fillRect(x+10,y-3,Math.round(wd*0.4),1);
-    g.fillStyle=day?'#b8c8da':M.tw>0.2?(far?'#c45a50':'#8a3c5a'):(far?'#4a3a62':'#3a2c52'); g.fillRect(x+2,y+3,wd-4,1);   // panza roja solo al amanecer/atardecer
-    if(!day&&dm<48&&M.moonLit>0.25){ g.fillStyle='#e8e0cc'; g.fillRect(x+4,y-2,wd-10,1); }
+    const cl=()=>{ g.fillRect(x,y,wd,3); g.fillRect(x+4,y-2,wd-10,2); g.fillRect(x+10,y-3,Math.round(wd*0.4),1); };
+    g.fillStyle=menuMix(far?'#3a2048':'#2c1a3e',far?'#dfe8f2':'#f2f6fb',Dia); cl();
+    g.fillStyle=menuMix(far?'#4a3a62':'#3a2c52','#b8c8da',Dia); g.fillRect(x+2,y+3,wd-4,1);
+    if(M.dusk>0.05){ const a0=g.globalAlpha; g.globalAlpha=a0*M.dusk*0.6; g.fillStyle='#f4a27a'; cl(); g.fillStyle=far?'#c45a50':'#8a3c5a'; g.globalAlpha=a0*M.dusk; g.fillRect(x+2,y+3,wd-4,1); g.globalAlpha=a0; }   // panza roja al amanecer y al atardecer
+    if(Dia<0.5&&dm<48&&M.moonLit>0.25){ g.fillStyle='#e8e0cc'; g.fillRect(x+4,y-2,wd-10,1); }
   }
   g.globalAlpha=1;
   g.drawImage(M.sil,OX,OY);   // la isla queda delante de las nubes bajas
@@ -13611,7 +13625,7 @@ function drawMenuScene(){
       const h=opsHash(i,r,21), ph=h*6.283, k=Math.sin(ts*(0.7+h*0.9)*(1+chop*1.8)+ph);
       if(k<0.15-chop*0.35) continue;
       const foam=chop>0.4&&h>0.82&&k>0.6;
-      g.fillStyle=foam?'rgba(176,186,226,'+(chop*0.7*k).toFixed(2)+')':Dia>0.5?'rgba(200,226,246,'+(Math.abs(k)*0.6).toFixed(2)+')':r<5?'rgba(84,66,128,'+(Math.abs(k)*0.85).toFixed(2)+')':'rgba(56,66,124,'+(Math.abs(k)*0.8).toFixed(2)+')';
+      g.fillStyle=foam?'rgba(176,186,226,'+(chop*0.7*k).toFixed(2)+')':M.dusk>0.35&&r<6?'rgba(255,176,128,'+(Math.abs(k)*0.75*M.dusk).toFixed(2)+')':Dia>0.5?'rgba(200,226,246,'+(Math.abs(k)*0.6).toFixed(2)+')':r<5?'rgba(84,66,128,'+(Math.abs(k)*0.85).toFixed(2)+')':'rgba(56,66,124,'+(Math.abs(k)*0.8).toFixed(2)+')';
       g.fillRect(Math.round(i*gap+h*gap+Math.sin(ts*(0.9+chop*2)+ph)*(2+chop*2)),y,len+Math.round(h*2),1);
     }
   }
@@ -13705,6 +13719,8 @@ function drawMenuScene(){
   if(Dia>0.01){ g.globalAlpha=Dia; menuSpr(g,MENU_SHIP_DAY,sxr,sy,MENU_SHIP_COLS); g.globalAlpha=1; }
   g.drawImage(M.shipF,sxr,sy);
   g.fillStyle=Math.floor(ts*2)%2?'#3ee67a':'#ff4757'; g.fillRect(Math.round(sx)+25,sy+6,1,1);
+  const warm=Math.max(gold,dusk*0.55);   // hora dorada y crepúsculo: la luz baja lo tiñe todo de cálido
+  if(warm>0.02){ g.save(); g.globalCompositeOperation='soft-light'; g.fillStyle='rgba(255,140,60,'+(warm*0.6).toFixed(3)+')'; g.fillRect(0,0,SW,SH); g.restore(); }
   // LUNA: en luna nueva la noche es más negra; en luna llena se aclara un poco (la luz plateada lo baña todo)
   if(M.night>0.01){
     g.fillStyle='rgba(3,4,12,'+(0.34*(1-M.moonLit)*M.night).toFixed(3)+')'; g.fillRect(0,0,SW,SH);
