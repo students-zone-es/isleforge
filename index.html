@@ -448,7 +448,7 @@
       <div class="mPress">PULSA CUALQUIER TECLA</div>
       <div class="mList" id="mList"></div>
       <div class="mCard" id="mCard"></div>
-      <div class="mFoot"><span>↑ ↓ elegir · INTRO aceptar · ESC volver · T ciclo del día · también con el ratón</span><span>v0.9 (prototipo) · 5 mundos · supervivencia</span></div>
+      <div class="mFoot"><span>↑ ↓ elegir · INTRO aceptar · ESC volver · T ciclo del día · E eclipse · también con el ratón</span><span>v0.9 (prototipo) · 5 mundos · supervivencia</span></div>
     </div>
 
     <div id="scrLook" class="overlay hidden">
@@ -8322,7 +8322,7 @@ function drawWeather(fx,fy){
   if(w.boltT>0&&w.bolt) drawBolt(w.bolt,w.boltT/12);
 }
 
-/* ---------- el clima de tu base en la escena del menú (lienzo de 300x200) ---------- */
+/* ---------- el clima de tu base en la escena del menú (lienzo a 1/2 de la pantalla) ---------- */
 function menuWeatherSky(g,M,ts){
   const cov=Math.min(1,wAmt('rain')+wAmt('storm')*1.2+wAmt('fog')*0.5);
   if(cov>0){
@@ -8360,7 +8360,7 @@ function menuWeatherFront(g,M,ts){
     g.fillStyle='rgba(220,230,255,'+(weather.flash*0.45).toFixed(3)+')'; g.fillRect(0,0,M.SW,M.SH);
     if(weather.boltT>0&&weather.bolt){
       g.globalAlpha=clamp(weather.boltT/12,0,1); g.fillStyle='#eef2ff';
-      const P=weather.bolt.pts.map(([x,y])=>[x/3,Math.min(HOR,y/3*1.3)]);
+      const P=weather.bolt.pts.map(([x,y])=>[x*M.SW/W,Math.min(HOR,y*M.SH/H*1.3)]);
       for(let i=1;i<P.length;i++){ const [x0,y0]=P[i-1], [x1,y1]=P[i], n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)));
         for(let s=0;s<=n;s++) g.fillRect(Math.round(lerp(x0,x1,s/n)),Math.round(lerp(y0,y1,s/n)),1,1); }
       g.globalAlpha=1;
@@ -12982,7 +12982,8 @@ function menuBuildItems(){
     {id:'opt_shake',label:'TEMBLOR',val:save.shake!==false?'SÍ':'NO',sub:'La pantalla tiembla con las explosiones'},
     {id:'opt_pencil',label:'ESTILO LÁPIZ',val:save.pencil?'SÍ':'NO',sub:'Prueba: bordes de grafito en el piloto, los pinos y las rocas'},
     {id:'opt_dev',label:'MENÚ DEV',sub:'Ver las animaciones fotograma a fotograma (también con F2)'},
-    {id:'opt_lapse',label:'CICLO DEL DÍA',val:menuLapseBak?'ACELERADO':'NORMAL',sub:'Míralo pasar: un día entero en 20 segundos (también con T). Al pararlo vuelve tu hora'},
+    {id:'opt_lapse',label:'CICLO DEL DÍA',val:menuLapseBak&&menuLapseK===MENU_LAPSE?'ACELERADO':'NORMAL',sub:'Míralo pasar: un día entero en 20 segundos (también con T). Al pararlo vuelve tu hora'},
+    {id:'opt_eclipse',label:'ECLIPSE',val:menuLapseBak&&menuLapseK!==MENU_LAPSE?'VIÉNDOLO':'VER',sub:'Salta al próximo eclipse de sol y míralo (también con E). Al salir vuelve tu hora'},
     {id:'opt_full',label:'PANTALLA',val:document.fullscreenElement?'COMPLETA':'VENTANA',sub:'Pantalla completa: juega sin los bordes del navegador'},
     {id:'back',label:'← VOLVER'}];
   if(menuView==='controls') return [{id:'back',label:'← VOLVER'}];
@@ -13087,6 +13088,7 @@ function menuActivate(){
     case 'opt_mira': save.mira=(save.mira+1)%3; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_shake': save.shake=save.shake===false; saveSave(); S.pickup(); renderMainMenu(); break;
     case 'opt_lapse': menuLapse(!menuLapseBak); S.pickup(); renderMainMenu(); break;
+    case 'opt_eclipse': menuEclipseGo(); S.pickup(); renderMainMenu(); break;
     case 'opt_full':
       try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }catch(e){}
       setTimeout(()=>{ if(state==='menu') renderMainMenu(); },250);
@@ -13123,6 +13125,7 @@ function menuKey(k){
   else if(k==='arrowright'||k==='d') menuOption(1);
   else if(k==='enter'||k===' ') menuActivate();
   else if(k==='t'){ menuLapse(!menuLapseBak); S.tick(); if(menuView==='options') renderMainMenu(); }
+  else if(k==='e'){ menuEclipseGo(); S.tick(); if(menuView==='options') renderMainMenu(); }
   else if(k==='escape'){
     if(menuView!=='main'){ menuIdx=menuItems.findIndex(x=>x.id==='back'); menuActivate(); }
     else if(inHome&&map){ menuIdx=0; menuActivate(); }   // ESC en el menú vuelve a la base
@@ -13141,26 +13144,73 @@ function menuKey(k){
   document.addEventListener('fullscreenchange',()=>{ if(state==='menu'&&menuView==='options') renderMainMenu(); });
 })();
 
-/* ---------- escena animada de fondo (pixel art a 1/3 de la pantalla, se amplía x3) ----------
-   Se adapta a cualquier pantalla: el cielo, el mar, el barco y el helicóptero ocupan todo el ancho;
-   la isla con el faro queda centrada (OX), la luna y Marte anclados a la derecha (RX) y,
-   si la pantalla es más alta, hay más cielo y más mar (OY baja la isla hasta el horizonte).
-   Todo lo de la isla se dibuja en «coordenadas de diseño» (300x200, horizonte en 128). */
+/* ---------- escena animada de fondo (pixel art a 1/2 de la pantalla, se amplía x2) ----------
+   Se adapta a cualquier pantalla: el cielo, el mar, el barco y el helicóptero ocupan todo el ancho; el faro, solo en su
+   islote, queda en el centro, delante del horizonte; si la pantalla es más alta, hay más cielo y más mar. */
 function menuHex(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
 /* Color de día (a) mezclado con el de noche (b) según n (0 = día, 1 = noche) */
 function menuMix(a,b,n){ const A=menuHex(a), B=menuHex(b); return 'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*n)).join(',')+')'; }
-/* El faro de día: franjas rojas y blancas con su volumen, balcón y barandilla metálicos, marco de la linterna y
-   cúpula roja (de noche todo eso es silueta) */
-/* SOL: resplandor del aire en capas (amplio y cálido, halo, corona) y un disco blanco que se vuelve dorado hacia
-   el borde (como el sol de verdad, más tenue en el limbo), con rayos finos tramados */
-function menuDrawSun(g,X,Y){
-  const glow=(r,a,col)=>{ const q=g.createRadialGradient(X,Y,0,X,Y,r); q.addColorStop(0,'rgba('+col+','+a+')'); q.addColorStop(1,'rgba('+col+',0)'); g.fillStyle=q; g.fillRect(X-r,Y-r,r*2,r*2); };
-  glow(80,0.32,'255,226,170'); glow(34,0.55,'255,240,200'); glow(15,0.9,'255,250,232');
-  for(let k=0;k<12;k++){ const a=k/12*Math.PI*2+0.13, L=k%2?16:26;   // rayos
-    for(let d=9;d<L;d++){ if(BAYER4[(d&3)*4+(k&3)]/16>0.55*(1-d/L)) continue; g.fillStyle='rgba(255,246,214,'+(0.5*(1-d/L)).toFixed(2)+')'; g.fillRect(Math.round(X+Math.cos(a)*d),Math.round(Y+Math.sin(a)*d),1,1); } }
-  const R=8;
+/* SOL: resplandor del aire en capas (amplio y cálido, halo, corona) y un disco blanco que se vuelve dorado hacia el borde,
+   con rayos finos tramados. En un ECLIPSE (E, de menuEclipse) la luna negra se come el disco: el resplandor se apaga con
+   lo que queda de sol, justo antes y después de la totalidad brilla el «anillo de diamante» y, tapado del todo, se ve la
+   corona nacarada con sus protuberancias rosas. */
+const MENU_SUNR=11;
+function menuDrawSun(g,X,Y,M,E){
+  const R=MENU_SUNR, k=E?1-E.cov:1, a0=g.globalAlpha;
+  const glow=(x,y,r,a,col)=>{ const q=g.createRadialGradient(x,y,0,x,y,r); q.addColorStop(0,'rgba('+col+','+a.toFixed(3)+')'); q.addColorStop(1,'rgba('+col+',0)'); g.fillStyle=q; g.fillRect(x-r,y-r,r*2,r*2); };
+  if(k>0.002){
+    const s=Math.sqrt(k);
+    glow(X,Y,110,0.32*s,'255,226,170'); glow(X,Y,46,0.55*s,'255,240,200'); glow(X,Y,20,0.9*k,'255,250,232');
+    for(let i=0;i<12;i++){ const a=i/12*Math.PI*2+0.13, L=i%2?22:36;   // rayos
+      for(let d=13;d<L;d++){ if(BAYER4[(d&3)*4+(i&3)]/16>0.55*(1-d/L)) continue; g.fillStyle='rgba(255,246,214,'+(0.5*(1-d/L)*k).toFixed(2)+')'; g.fillRect(Math.round(X+Math.cos(a)*d),Math.round(Y+Math.sin(a)*d),1,1); } }
+  }
+  if(E&&E.tot>0.01){ g.globalAlpha=a0*E.tot; g.drawImage(M.corona,X-(M.corona.width>>1),Y-(M.corona.height>>1)); g.globalAlpha=a0; }
+  const mx=E?E.ox:0, my=E?E.oy:0, rm=E?E.rm:0;
   for(let y=-R;y<=R;y++) for(let x=-R;x<=R;x++){ const d=Math.hypot(x,y)/R; if(d>1.02) continue;
+    if(E&&Math.hypot(x-mx,y-my)<rm){ g.fillStyle='#161a2c'; g.fillRect(X+x,Y+y,1,1); continue; }   // el mordisco: la luna delante del sol
     g.fillStyle=d<0.45?'#ffffff':d<0.7?'#fffbe8':d<0.88?'#fff1c2':'#ffe08a'; g.fillRect(X+x,Y+y,1,1); }
+  if(!E) return;
+  const mk=menuSmooth(0.86,0.99,E.cov);   // casi tapado: el disco entero de la luna se recorta negro contra la corona
+  if(mk>0.01){ g.globalAlpha=a0*mk; const r=Math.ceil(rm);
+    for(let y=-r;y<=r;y++) for(let x=-r;x<=r;x++){ const d=Math.hypot(x,y); if(d>rm) continue; g.fillStyle=d>rm-1?'#1a1828':'#08080f'; g.fillRect(Math.round(X+mx+x),Math.round(Y+my+y),1,1); }
+    g.globalAlpha=a0; }
+  if(E.w>0&&E.w<0.09){   // anillo de diamante: el último punto de sol asoma por el borde, en el lado contrario a la luna
+    const b=1-E.w/0.09, l=Math.hypot(mx,my)||1, bx=Math.round(X-mx/l*R), by=Math.round(Y-my/l*R);
+    glow(bx,by,10+b*14,0.95*b,'255,252,240');
+    g.fillStyle='rgba(255,255,255,'+(0.9*b).toFixed(2)+')';
+    g.fillRect(bx-Math.round(b*16),by,Math.round(b*32)+1,1); g.fillRect(bx,by-Math.round(b*9),1,Math.round(b*18)+1); g.fillRect(bx-1,by-1,3,3);
+  }
+}
+/* La corona del sol (solo se ve en un eclipse total): rayos nacarados, más largos hacia el ecuador del sol, que se apagan
+   hacia fuera en 5 tonos tramados, y tres protuberancias rosas asomando por el borde */
+function menuCorona(){
+  const R=MENU_SUNR, CR=R*5, S=CR*2+1, c=mkCanvas(S,S), q=c.getContext('2d'), img=q.createImageData(S,S), P=img.data, rnd=mulberry32(808);
+  const rays=Array.from({length:7},()=>[1+Math.floor(rnd()*9),rnd()*6.28,0.3+rnd()*0.6]), prom=[[0.6,1.2],[2.4,0.8],[4.3,1]];
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+    const dx=x-CR, dy=y-CR, r=Math.hypot(dx,dy); if(r<R-0.5||r>CR) continue;
+    const an=Math.atan2(dy,dx), a=an+0.35, eq=Math.pow(Math.abs(Math.cos(a)),2);   // eq: cerca del ecuador del sol (eje algo inclinado)
+    let st=0.5; for(const [k,ph,w] of rays) st=Math.max(st,0.5+w*Math.pow(0.5+0.5*Math.sin(a*k+ph),8));   // rayos sueltos
+    const I=Math.pow(R/r,2.7-1.5*eq)*st*1.5*(1-menuSmooth(CR*0.55,CR,r));   // hacia el ecuador se apaga despacio (rayos largos); en los polos, enseguida
+    let al=I<0.07?0:Math.floor(clamp(I,0,1)*4+BAYER4[(y&3)*4+(x&3)]/16)/4, col=[255,248,232];
+    for(const [pa,ps] of prom){ const da=Math.abs(Math.atan2(Math.sin(an-pa),Math.cos(an-pa))), wd=0.11*ps; if(da<wd&&r<R+1.5+3.2*ps*(1-da/wd)){ col=[255,92,128]; al=1; } }
+    if(al<=0) continue;
+    const o=(y*S+x)*4; P[o]=col[0]; P[o+1]=col[1]; P[o+2]=col[2]; P[o+3]=Math.round(al*235);
+  }
+  q.putImageData(img,0,0); return c;
+}
+/* ECLIPSE DE SOL: en este mundo la luna gira justo por el camino del sol, así que en cada luna nueva que cae de día la luna
+   pasa por delante del sol. Tamaños aparentes del sol y la luna (grados) solo para el eclipse; la luna, algo mayor, lo
+   tapa del todo unos 35 minutos de juego. Devuelve null si no hay eclipse ahora. cov = parte del sol tapada (0..1);
+   ox, oy = dónde está la luna respecto al sol (px); w = lo que le falta para taparlo entero (grados); tot = totalidad (0..1) */
+const ECL_RS=0.8, ECL_RM=0.95;
+function menuEclipse(M,SK){
+  const ph=SK.phase, d=(ph>0.5?ph-1:ph)*360, sep=Math.abs(d), r=ECL_RS, R=ECL_RM;
+  if(sep>=r+R||SK.sun.alt<-3) return null;
+  let A=Math.PI*r*r;
+  if(sep>R-r){ const a=Math.acos((sep*sep+r*r-R*R)/(2*sep*r)), b=Math.acos((sep*sep+R*R-r*r)/(2*sep*R)); A=r*r*(a-Math.sin(2*a)/2)+R*R*(b-Math.sin(2*b)/2); }
+  // hacia dónde crece la longitud junto al sol, en pantalla: la luna llega por el oeste y se va por el este
+  const [ra,dec]=skyEcl(skySunLon()+0.02,0), [x0,y0]=menuSkyXY(M,SK.sun), [x1,y1]=menuSkyXY(M,skyHoriz(ra,dec,SK.lst)), l=Math.hypot(x1-x0,y1-y0)||1, k=d/r*MENU_SUNR;
+  return {cov:clamp(A/(Math.PI*r*r),0,1), ox:(x1-x0)/l*k, oy:(y1-y0)/l*k, rm:MENU_SUNR*R/r, w:sep-(R-r), tot:clamp(1-Math.max(0,sep-(R-r))/0.12,0,1)};
 }
 /* ROCAS del primer plano: peñascos que bajan hasta el suelo por los dos lados, cada uno con su cara iluminada
    (arriba a la izquierda), su sombra (abajo a la derecha) y grietas entre piedra y piedra. n = cuánta noche */
@@ -13188,18 +13238,6 @@ function menuDrawRocks(g,SH,RX,n){
   rock(-6,40,15,1,[16]); rock(28,82,11,2,[54]);                      // izquierda: dos peñascos que se solapan
   rock(212+RX,262+RX,14,3,[238+RX]); rock(246+RX,306+RX,24,4,[270+RX,288+RX]);   // derecha: más altos hacia el borde
 }
-function menuLighthouseDay(g,OX,OY,M){
-  g.drawImage(M.lhG,OX,OY);   // el suelo de la isla bajo el faro
-  const TD={r:['#8e2a22','#b8352b','#d8584a'],w:['#b9b4aa','#dcd7cc','#f4f0e6']};
-  for(let y=96;y<=121;y++){ const hw=3+Math.round((y-96)/25*2), pal=Math.floor((y-96)/4)%2?TD.w:TD.r;
-    for(let x=186-hw;x<=186+hw;x++){ const u=(x-(186-hw))/(hw*2); g.fillStyle=pal[u<0.35?0:u<0.75?1:2]; g.fillRect(x+OX,y+OY,1,1); } }
-  const P=(x,y,w,h,c)=>{ g.fillStyle=c; g.fillRect(x+OX,y+OY,w,h); };
-  P(185,117,2,4,'#3a2a22');                                                    // puerta
-  P(180,120,13,2,'#6a645a');                                                   // roca de la base
-  P(181,95,11,1,'#5d646c'); for(let x=181;x<=191;x+=2) P(x,93,1,2,'#7a828c'); // balcón y barandilla
-  P(183,88,1,5,'#4a5059'); P(189,88,1,5,'#4a5059');                            // marco de la linterna
-  P(183,87,7,1,'#8e2a22'); P(184,86,5,1,'#b8352b'); P(185,85,3,1,'#d8584a'); P(186,82,1,3,'#5d646c');   // cúpula y pararrayos
-}
 /* Fase de la luna de HOY (0 nueva · 0,25 cuarto creciente · 0,5 llena · 0,75 cuarto menguante), con el mes lunar de
    29,53 días contado desde una luna nueva conocida (6-ene-2000 18:14 UTC). menuMoonOverride la fija para probar. */
 let menuMoonOverride=null;
@@ -13224,8 +13262,8 @@ function menuDrawMoon(g,MX,MY,MR,phase){
     alb*=0.97+opsHash(x,y,62)*0.05;                                        // textura del suelo
     const ndl=u*Lx+z*Lz;
     let rel=0;
-    for(const [cx,cy,cr,cb] of MOON_CRATERS){                              // cráteres: fondo, borde con luz y sombra
-      const dx=x-cx*MR, dy=y-cy*MR, dd=Math.hypot(dx,dy);
+    for(const [cx,cy,cr0,cb] of MOON_CRATERS){                              // cráteres: fondo, borde con luz y sombra
+      const cr=cr0*MR/15, dx=x-cx*MR, dy=y-cy*MR, dd=Math.hypot(dx,dy);
       if(dd<cr-0.6){ if(cb<1) alb*=cb; else rel+=(cb-1)*0.8; }             // fondo: oscuro (Platón) o claro (Tycho, Copérnico)
       else if(dd<cr+0.5) rel+=(dx*Lx>0?0.22:-0.3)*(1-Math.min(1,Math.abs(ndl)*1.6));
     }
@@ -13246,11 +13284,11 @@ function menuDrawMoon(g,MX,MY,MR,phase){
    · Amanecer y atardecer: un resplandor naranja y rosa en el lado del horizonte por donde sale o se pone el sol (aunque
      ya esté debajo), más fuerte con el sol 2° bajo el horizonte.
    · Cerca del horizonte el sol y la luna se tiñen de naranja (el aire los enrojece) y se esconden detrás de las islas.
-   · La luna se ve también de día (solo su parte iluminada, pálida) y alumbra el mar solo si está en el cielo. */
+   · La luna solo se ve desde el atardecer (de día no: parecía un segundo sol); de día, en luna nueva, hay eclipse. */
 function menuSkyXY(M,p){ return [M.SW/2+p.az/135*(M.SW/2), M.HOR-p.alt/90*(M.HOR-4)]; }
 function menuMoonCv(M,phase){   // la luna de esta fase, ya dibujada (y su versión de día, sin la cara oscura)
   const k=Math.round(phase*200); if(M.moonCv.k===k) return M.moonCv;
-  const MR=15, c=mkCanvas(MR*2+3,MR*2+3), q=c.getContext('2d'); menuDrawMoon(q,MR+1,MR+1,MR,k/200);
+  const MR=20, c=mkCanvas(MR*2+3,MR*2+3), q=c.getContext('2d'); menuDrawMoon(q,MR+1,MR+1,MR,k/200);
   const d=mkCanvas(c.width,c.height), dq=d.getContext('2d'); dq.drawImage(c,0,0);
   const img=dq.getImageData(0,0,d.width,d.height), P=img.data;
   for(let i=0;i<P.length;i+=4) if(P[i]+P[i+1]+P[i+2]<200) P[i+3]=0;   // de día la cara oscura no se ve
@@ -13260,11 +13298,12 @@ function menuMoonCv(M,phase){   // la luna de esta fase, ya dibujada (y su versi
   q.putImageData(im2,0,0);
   return M.moonCv={k,c,day:d,MR};
 }
-function menuSky(g,M,ts,Dia){
+function menuSky(g,M,ts,Dia,E){
   const S=skyNow(), HOR=M.HOR, SW=M.SW;
   const [sx,sy]=menuSkyXY(M,S.sun), [mx,my]=menuSkyXY(M,S.moon), [ax,ay]=menuSkyXY(M,S.mars);
   M.sunX=sx; M.sunSX=sx; M.sunSY=sy; M.sunUp=S.sun.alt>-1&&sx>-20&&sx<SW+20;
-  M.moonX=mx; M.moonY=my; M.moonUp=S.moon.alt>-1&&mx>-20&&mx<SW+20;
+  M.moonX=mx; M.moonY=my; M.moonUp=!E&&S.moon.alt>-1&&mx>-20&&mx<SW+20;   // en un eclipse la luna es el disco negro del sol
+  if(E){ M.moonX=sx+E.ox; M.moonY=sy+E.oy; }
   M.marsX=Math.round(ax); M.marsY=Math.round(ay); M.marsUp=S.mars.alt>1&&ax>0&&ax<SW;
   const lit=(1-Math.cos(S.phase*Math.PI*2))/2; M.moonLit=M.moonUp?lit*clamp(S.moon.alt/6,0,1):0;
   g.save(); g.beginPath(); g.rect(0,0,SW,HOR); g.clip();
@@ -13277,10 +13316,10 @@ function menuSky(g,M,ts,Dia){
   }
   // estrellas: giran con la Tierra alrededor de la Polar
   if(M.night>0.05){
-    g.globalAlpha=M.night*0.55*(1-M.moonLit*0.7);   // la Vía Láctea: la luna llena la borra
+    g.globalAlpha=M.night*0.55*(1-M.moonLit*0.7)*(1-M.eclDark);   // la Vía Láctea: la luna llena la borra (y en el eclipse no da tiempo a verla)
     for(const [ra,dec,b] of M.milky){ const p=skyHoriz(ra,dec,S.lst); if(p.alt<2) continue; const [x,y]=menuSkyXY(M,p); if(x<0||x>=SW) continue;
       g.fillStyle=b>0.75?'#6a70a8':b>0.4?'#4a4f82':'#33375e'; g.fillRect(Math.round(x),Math.round(y),1,1); }
-    g.globalAlpha=M.night;
+    g.globalAlpha=M.night*(1-0.5*M.eclDark);   // en el eclipse solo asoman las más brillantes
     for(const [ra,dec,ph,b] of M.stars){
       const p=skyHoriz(ra,dec,S.lst); if(p.alt<1) continue;
       const v=Math.sin(ts*(1+b*2)+ph); if(v<-0.3) continue;
@@ -13288,166 +13327,137 @@ function menuSky(g,M,ts,Dia){
       g.fillStyle=b>0.85&&v>0.6?'#ffffff':(b>0.5?'#b9c2f0':'#6f74a8'); g.fillRect(Math.round(x),Math.round(y),1,1);
     }
     const fs=(ts%7)/0.9, fk=Math.floor(ts/7);   // una estrella fugaz cada 7 s, en un sitio distinto cada vez
-    if(fs<1&&M.night>0.7){ const x0=opsHash(fk,1,9)*SW*0.8, y0=6+opsHash(fk,2,9)*HOR*0.35;
-      for(let k=0;k<7;k++){ const u=clamp(fs-k*0.035,0,1); g.fillStyle='rgba(235,240,255,'+((1-k/7)*(1-fs*0.7)).toFixed(2)+')'; g.fillRect(Math.round(x0+u*46),Math.round(y0+u*15),1,1); } }
+    if(fs<1&&M.night>0.7&&!E){ const x0=opsHash(fk,1,9)*SW*0.8, y0=6+opsHash(fk,2,9)*HOR*0.35;
+      for(let k=0;k<7;k++){ const u=clamp(fs-k*0.035,0,1); g.fillStyle='rgba(235,240,255,'+((1-k/7)*(1-fs*0.7)).toFixed(2)+')'; g.fillRect(Math.round(x0+u*60),Math.round(y0+u*20),1,1); } }
     if(M.marsUp){ g.fillStyle='#ff6b3a'; g.fillRect(M.marsX,M.marsY,2,2); g.fillStyle='rgba(255,107,58,0.35)'; g.fillRect(M.marsX-1,M.marsY-1,4,4); }
     g.globalAlpha=1;
   }
-  // luna: de noche entera; de día pálida y solo su parte iluminada. Cerca del horizonte, amarillenta
+  // luna: de noche entera; en el crepúsculo solo su parte iluminada; de día no se pinta. Cerca del horizonte, amarillenta
   if(M.moonUp){
     const C=menuMoonCv(M,menuMoonPhase()), X=Math.round(mx), Y=Math.round(my), MR=C.MR;
     const mh=g.createRadialGradient(X,Y,MR,X,Y,MR*2.2); mh.addColorStop(0,'rgba(230,226,200,'+(0.16*lit*M.night).toFixed(3)+')'); mh.addColorStop(1,'rgba(230,226,200,0)');
     g.globalCompositeOperation='lighter'; g.fillStyle=mh; g.fillRect(X-MR*2.2,Y-MR*2.2,MR*4.4,MR*4.4); g.globalCompositeOperation='source-over';
     g.globalAlpha=M.night*(1-M.dusk); g.drawImage(C.c,X-MR-1,Y-MR-1);   // con la cara oscura: solo de noche cerrada
-    const dA=Math.max(Dia*0.55*clamp(S.moon.alt/8,0,1),M.night*M.dusk);   // solo la parte iluminada: de día pálida, en el crepúsculo entera
-    if(dA>0.01){ g.globalAlpha=dA; g.drawImage(C.day,X-MR-1,Y-MR-1); }   // de día, pegada al horizonte se pierde en la bruma
+    const dA=M.night*M.dusk;   // en el crepúsculo, solo la parte iluminada
+    if(dA>0.01){ g.globalAlpha=dA; g.drawImage(C.day,X-MR-1,Y-MR-1); }
     g.globalAlpha=1;
-    const low=clamp(1-S.moon.alt/10,0,1)*M.night;   // de día no se tiñe de naranja: parecería otro sol
+    const low=clamp(1-S.moon.alt/10,0,1)*M.night;
     if(low>0.02){ g.globalCompositeOperation='multiply'; g.fillStyle='rgba(255,'+Math.round(255-70*low)+','+Math.round(255-140*low)+',1)'; g.beginPath(); g.arc(X,Y,MR+1,0,Math.PI*2); g.fill(); g.globalCompositeOperation='source-over'; }
   }
   // sol: blanco arriba, dorado y luego naranja al acercarse al horizonte
   if(M.sunUp){
     const X=Math.round(sx), Y=Math.round(sy), low=clamp(1-S.sun.alt/12,0,1);
-    g.globalAlpha=clamp(0.35+Dia,0,1); menuDrawSun(g,X,Y); g.globalAlpha=1;
-    if(low>0.02){ g.globalCompositeOperation='multiply'; g.fillStyle='rgba(255,'+Math.round(255-110*low)+','+Math.round(255-190*low)+',1)'; g.beginPath(); g.arc(X,Y,10,0,Math.PI*2); g.fill(); g.globalCompositeOperation='source-over'; }
+    g.globalAlpha=clamp(0.35+menuSmooth(-7,3,S.sun.alt),0,1); menuDrawSun(g,X,Y,M,E); g.globalAlpha=1;
+    if(low>0.02){ g.globalCompositeOperation='multiply'; g.fillStyle='rgba(255,'+Math.round(255-110*low)+','+Math.round(255-190*low)+',1)'; g.beginPath(); g.arc(X,Y,MENU_SUNR+2,0,Math.PI*2); g.fill(); g.globalCompositeOperation='source-over'; }
   }
   g.restore();
 }
 function menuBuildScene(){
-  const SW=Math.round(W/3), SH=Math.round(H/3), H0=128;
-  const HOR=Math.round(H0+(SH-200)*0.55), OX=Math.round((SW-300)/2), OY=HOR-H0, RX=SW-300, FX=SW/300;
-  let g=null;
-  // el sol, la luna, Marte y las estrellas ya no están pintados en el cielo: se mueven (menuSky). Las islas lejanas van en
-  // capas aparte (de noche y de día) para que el sol y la luna se escondan DETRÁS de ellas al ponerse
-  const islN=mkCanvas(SW,SH), islD=mkCanvas(SW,SH), gBg=g; g=islN.getContext('2d');
-  // islas lejanas en el horizonte (repartidas por todo el ancho)
+  const SW=Math.round(W/2), SH=Math.round(H/2), HOR=Math.round(SH*0.6), RX=SW-300, FX=SW/300;
+  // el sol, la luna, Marte y las estrellas se mueven (menuSky). Las islas lejanas van en capas aparte (de noche y de día)
+  // para que el sol y la luna se escondan DETRÁS de ellas al ponerse
+  const islN=mkCanvas(SW,SH), islD=mkCanvas(SW,SH); let g=islN.getContext('2d');
   const isle=(x0,x1,hgt,col,top,seed)=>{ x0=Math.round(x0*FX); x1=Math.round(x1*FX); for(let x=x0;x<=x1;x++){ const u=(x-x0)/(x1-x0), h=Math.round(Math.sin(u*Math.PI)*hgt*(0.75+0.25*Math.sin(x*0.37+seed))+Math.sin(x*1.3+seed)*0.8);
     if(h<=0) continue; g.fillStyle=col; g.fillRect(x,HOR-h,1,h); g.fillStyle=top; g.fillRect(x,HOR-h,1,1); } };
   isle(6,78,9,'#261631','#4a2346',1); isle(206,262,6,'#261631','#4a2346',2); isle(266,299,4,'#261631','#4a2346',3);
   isle(30,60,4,'#1d1128','#3a1d3c',4);
   g=islD.getContext('2d');   // las mismas islas lejanas, de día (azuladas por la distancia)
   isle(6,78,9,'#6a86a0','#87a2b8',1); isle(206,262,6,'#6a86a0','#87a2b8',2); isle(266,299,4,'#6a86a0','#87a2b8',3); isle(30,60,4,'#7d97ae','#94acc0',4);
-  // tu base: isla de meseta (suelo plano en y=120) con hangar, forja, radar, grúa y faro APOYADOS en el suelo.
-  // Se dibuja en una capa aparte (coordenadas de diseño) para poder reflejarla en el agua.
-  const SIL='#120c1c', RIM='#2c1a32', GY=120, sil=mkCanvas(300,H0), b=sil.getContext('2d');
-  for(let x=96;x<=204;x++){
-    const s=Math.sin((x-96)/108*Math.PI), h=Math.round(Math.min(1,s*2.6)*(H0-GY)+(s>0.4?Math.sin(x*1.7)*0.6:0));
-    if(h<=0) continue; b.fillStyle=SIL; b.fillRect(x,H0-h,1,h); b.fillStyle=RIM; b.fillRect(x,H0-h,1,1);
-  }
-  b.fillStyle=SIL;
-  b.fillRect(112,108,22,14); b.fillRect(114,106,18,2); b.fillRect(117,104,12,2);          // hangar
-  b.fillRect(140,92,12,30);                                                              // forja
-  b.fillRect(146,74,4,18); b.fillRect(145,73,6,2);                                        // chimenea alta con borde
-  b.fillStyle='#2a1a30'; b.fillRect(146,79,4,1); b.fillRect(146,84,4,1); b.fillStyle=SIL; // franjas de la chimenea
-  b.fillRect(136,100,4,22); b.fillRect(152,104,8,18);
-  b.fillRect(163,100,2,22); b.fillRect(161,119,6,3);                                      // mástil del radar con base
-  for(let i=0;i<15;i++) b.fillRect(123+Math.round(i*0.15),120-i*2,1,2);                   // grúa
-  b.fillRect(121,119,5,3); b.fillRect(123,90,22,1); b.fillRect(143,91,1,6);
-  // faro: torre que se estrecha hacia arriba, con franjas, balcón con barandilla, linterna de cristal y cúpula
-  // franjas rojas y blancas apagadas por el anochecer; cada fila con volumen de cilindro (oscuro a la izquierda,
-  // claro a la derecha, donde le da lo que queda de luz) y la última columna con el borde iluminado
-  const TOWER={r:['#22101c','#3a1626','#552232'],w:['#221e30','#38304a','#524664']};
-  for(let y=96;y<=121;y++){ const hw=3+Math.round((y-96)/25*2), pal=Math.floor((y-96)/4)%2?TOWER.w:TOWER.r;
-    for(let x=186-hw;x<=186+hw;x++){ const u=(x-(186-hw))/(hw*2); b.fillStyle=pal[u<0.35?0:u<0.75?1:2]; b.fillRect(x,y,1,1); }
-    b.fillStyle='#6a4a62'; b.fillRect(186+hw,y,1,1); }
-  b.fillStyle='#120c1c'; b.fillRect(185,117,2,4);                                        // puerta (las ventanas están en M.wins)
-  b.fillStyle=SIL; b.fillRect(180,120,13,2);                                             // roca de la base
-  b.fillRect(181,95,11,1); for(let x=181;x<=191;x+=2) b.fillRect(x,93,1,2);               // balcón y barandilla
-  b.fillRect(183,88,1,5); b.fillRect(189,88,1,5);                                        // marco de la linterna
-  b.fillRect(183,87,7,1); b.fillRect(184,86,5,1); b.fillRect(185,85,3,1); b.fillRect(186,82,1,3);   // cúpula y pararrayos
-  b.fillRect(96,124,14,1); b.fillRect(98,125,1,3); b.fillRect(103,125,1,3); b.fillRect(108,125,1,3);  // muelle
-  b.fillStyle=RIM; b.fillRect(140,92,1,28); b.fillRect(112,108,1,12); b.fillRect(184,96,1,24); b.fillRect(96,124,14,1);
-  // máscara que tapa los haces del faro: los edificios sí, pero no el propio faro ni el suelo (para que el haz llegue al mar)
-  const bmask=mkCanvas(300,H0), mq=bmask.getContext('2d'); mq.drawImage(sil,0,0); mq.clearRect(178,80,16,48); mq.clearRect(0,119,300,10);
-  const silR=mkCanvas(300,H0), rq=silR.getContext('2d'); rq.drawImage(sil,0,0);   // reflejo: la torre de colores no debe pintar manchas en el agua
-  rq.globalCompositeOperation='source-atop'; rq.fillStyle='rgba(10,8,22,0.7)'; rq.fillRect(0,0,300,H0);
-  const lit=menuBuildLit(sil,H0);
-  // suelo bajo el faro, de día (esa zona no está en litC, que no ilumina al faro): la silueta en color roca
-  const lhG=mkCanvas(300,H0), lg=lhG.getContext('2d'); lg.drawImage(sil,176,80,20,48,176,80,20,48);
-  lg.globalCompositeOperation='source-in'; lg.fillStyle='#6a5470'; lg.fillRect(176,80,20,48);   // el mismo tono que el resto de la isla (litC)
-  lg.globalCompositeOperation='source-over'; lg.fillStyle='#5d5650'; for(let x=176;x<196;x++){ for(let y=80;y<128;y++){ if(lg.getImageData(x,y,1,1).data[3]){ lg.fillRect(x,y,1,1); break; } } }
-  menuScene={moonLit:0,dusk:0,skyKey:null,skyC:mkCanvas(SW,SH),skyImg:new ImageData(SW,SH),cloudC:mkCanvas(SW,HOR),cloudImg:new ImageData(SW,HOR),
-    clouds:Array.from({length:6},(_,i)=>menuCloudSpr(i)),milky:menuMilky(),islN,islD,moonCv:{},silR,lhG,motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),sil,bmask,beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),litC:lit.litC,rimC:lit.rimC,litF:mkCanvas(300,H0),islL:mkCanvas(300,H0),SW,SH,HOR,OX,OY,RX,W0:W,H0:H,
-    stars:Array.from({length:Math.round(420*FX)},(_,i)=>[opsHash(i,1,5)*Math.PI*2,Math.asin(opsHash(i,2,5)*1.55-0.55),opsHash(i,3,5)*6.28,opsHash(i,4,5)]),   // [ascensión recta, declinación, parpadeo, brillo]
-    wins:[[116,112],[120,112],[126,112],[130,112],[154,108],[157,108],[154,113],[137,104],[137,110],[186,101],[186,109]],
-    smoke:[], lastPuff:-1, embers:[], bubbles:[]};
-  // bocanadas de humo ya dibujadas (círculos pixelados con luz arriba a la izquierda), 2 tonos: cerca y lejos
-  menuScene.puffs=[['#5e4c60','#8e7282','#3c2f46'],['#7e6c7e','#ab919a','#5c4b62']].map(([base,hi,sh])=>{
-    const L=[]; for(let r=1;r<=10;r++){ const c=mkCanvas(r*2+3,r*2+3), q=c.getContext('2d');
-      const disc=(cx,cy,rr,col)=>{ q.fillStyle=col; for(let y=-rr;y<=rr;y++){ const w=Math.floor(Math.sqrt(rr*rr-y*y+rr*0.6)); q.fillRect(cx-w,cy+y,w*2+1,1); } };
-      disc(r+1,r+1,r,sh); disc(r+1,r,Math.max(1,r-1),base); if(r>2) disc(r,r-1,Math.max(1,r-3),hi);
-      L.push(c); }
-    return L; });
-  // líneas de escaneo y viñeta (pantalla completa, se pintan una vez)
+  menuScene={moonLit:0,dusk:0,eclDark:0,skyKey:null,skyC:mkCanvas(SW,SH),skyImg:new ImageData(SW,SH),cloudC:mkCanvas(SW,HOR),cloudImg:new ImageData(SW,HOR),
+    clouds:Array.from({length:6},(_,i)=>menuCloudSpr(i)),milky:menuMilky(),corona:menuCorona(),lh:menuBuildLighthouse(SW,SH,HOR),islN,islD,moonCv:{},
+    motes:Array.from({length:38},(_,i)=>({t:opsHash(i,31,7),s:opsHash(i,32,7)*2-1,ph:opsHash(i,33,7)*6.28})),c:mkCanvas(SW,SH),beamC:mkCanvas(SW,SH),lightC:mkCanvas(SW,SH),
+    shipF:mkCanvas(26,9),shipM:mkCanvas(26,9),SW,SH,HOR,RX,W0:W,H0:H,bubbles:[],
+    stars:Array.from({length:Math.round(420*FX)},(_,i)=>[opsHash(i,1,5)*Math.PI*2,Math.asin(opsHash(i,2,5)*1.55-0.55),opsHash(i,3,5)*6.28,opsHash(i,4,5)])};   // [ascensión recta, declinación, parpadeo, brillo]
+  // líneas de escaneo (una por píxel de la escena) y viñeta (pantalla completa, se pintan una vez)
   const sl=mkCanvas(W,H), sg=sl.getContext('2d');
-  sg.fillStyle='rgba(0,0,0,0.13)'; for(let y=0;y<H;y+=3) sg.fillRect(0,y,W,1);
+  sg.fillStyle='rgba(0,0,0,0.11)'; for(let y=0;y<H;y+=2) sg.fillRect(0,y,W,1);
   const vg=sg.createRadialGradient(W/2,H*0.45,H*0.35,W/2,H*0.5,Math.max(W,H)*0.62); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.55)');
   sg.fillStyle=vg; sg.fillRect(0,0,W,H);
   menuScene.over=sl;
 }
-/* Cómo se ven los edificios cuando el haz del faro les da de lleno: color, chapa del hangar, portón,
-   ladrillos de la forja, franjas de la chimenea, celosía del radar y un borde brillante en las caras
-   que miran al faro. Cada frame se recorta con la forma del haz (así la luz «barre» los edificios).
-   rimC = solo esos bordes, más fuertes cuanto más cerca de la lámpara (la luz que siempre les llega). */
-function menuBuildLit(sil,H0){
-  const LX=186, LY=90;
-  const litC=mkCanvas(300,H0), q=litC.getContext('2d');
-  q.drawImage(sil,0,0); q.clearRect(178,80,16,48);      // el faro no se ilumina a sí mismo
-  q.globalCompositeOperation='source-in'; q.fillStyle='#6a5470'; q.fillRect(0,0,300,H0);
-  q.globalCompositeOperation='source-atop';
-  const P=(x,y,w,h,c)=>{ q.fillStyle=c; q.fillRect(x,y,w,h); };
-  P(90,119,88,3,'#5d5650'); for(let x=97;x<176;x+=5) P(x,120,2,1,'#7a6c60');          // suelo de la meseta
-  P(117,104,12,1,'#b89aa6'); P(114,106,18,1,'#a3889a'); P(112,108,22,1,'#9a8092');      // techo curvo del hangar
-  for(let x=113;x<134;x+=2) P(x,109,1,11,'#59455f');                                    // chapa ondulada
-  P(119,113,8,8,'#3a2a42'); P(119,113,8,1,'#806a86'); P(123,114,1,7,'#5a4662');         // portón
-  for(let y=94;y<121;y+=3) for(let x=140+(((y-94)/3)&1)*2;x<152;x+=4) P(x,y,3,2,'#7d5d6c'); // ladrillos de la forja
-  P(140,92,12,1,'#ab8c98'); P(145,73,6,1,'#ab8c98');
-  P(146,79,4,1,'#c05a56'); P(146,84,4,1,'#c05a56');                                    // franjas rojas de la chimenea
-  P(136,100,4,1,'#ab8c98'); P(152,104,8,1,'#ab8c98'); P(153,106,6,1,'#4e3c56'); P(153,111,6,1,'#4e3c56');
-  for(let y=101;y<119;y+=2) P(163,y,1,1,'#9a8092');                                     // celosía del radar
-  P(123,90,22,1,'#9a8092'); P(96,124,14,1,'#7a6450');                                    // brazo de la grúa y muelle
-  q.globalCompositeOperation='source-over';
-  // bordes: los que miran al faro (derecha) brillan; los de arriba reciben luz rasante
-  const sa=sil.getContext('2d').getImageData(0,0,300,H0).data, A=(x,y)=>x<0||y<0||x>=300||y>=H0||x>=178&&x<194&&y>=80?0:sa[(y*300+x)*4+3];
-  const rimC=mkCanvas(300,H0), rq=rimC.getContext('2d');
-  for(let y=70;y<122;y++) for(let x=90;x<178;x++){
-    if(!A(x,y)) continue;
-    const right=!A(x+1,y), top=!A(x,y-1);
-    if(!right&&!top) continue;
-    P(x,y,1,1,right?'#ffe2b4':'#d9bc9c');
-    if(right){ const d=Math.hypot(x-LX,y-LY), a=clamp(1-d/105,0,1)*0.9; if(a>0.02){ rq.fillStyle='rgba(255,217,160,'+a.toFixed(2)+')'; rq.fillRect(x,y,1,1); } }
+/* EL FARO, punto a punto: cada píxel guarda su material, su textura y hacia dónde mira (su normal), y en cada frame se
+   ilumina con el sol, el cielo, la luna y su propia lámpara (menuLightHouse): el lado que mira al sol brilla, el contrario
+   se queda azulado con la luz del cielo y, a contraluz, se le encienden los bordes. Torre cónica con franjas rojas y
+   blancas, zócalo de sillares, puerta con escalones, ventanucos de la escalera, balcón de hierro con ménsulas y barandilla,
+   linterna de cristal con montantes, cúpula con bola de ventilación, veleta y pararrayos, sobre un islote de peñascos. */
+// [albedo r, g, b, brillo]: rojo, blanco, hierro, cristal, cúpula, sillar, junta, puerta, ventana, roca, roca mojada, grieta
+const LH_MAT=[[0.74,0.17,0.13,0.15],[0.93,0.91,0.86,0.15],[0.15,0.16,0.18,0.6],[0.1,0.12,0.15,0.9],[0.52,0.12,0.1,0.35],[0.6,0.57,0.52,0.05],
+  [0.38,0.36,0.33,0],[0.36,0.21,0.12,0.1],[0.09,0.1,0.13,0.4],[0.47,0.44,0.4,0.04],[0.22,0.24,0.18,0.1],[0.27,0.25,0.23,0]];
+function menuBuildLighthouse(SW,SH,HOR){
+  const cx=Math.round(SW*0.47), WL=HOR+Math.round(SH*0.085), yB=WL-19, TH=72, yT=yB-7-TH, yG=yT-1;   // WL = donde el islote toca el agua
+  const x0=cx-72, y0=yG-30, w=145, h=WL-y0+1;
+  const MAT=new Int8Array(w*h).fill(-1), N=new Float32Array(w*h*3), T=new Float32Array(w*h), WIN=new Int8Array(w*h).fill(-1), own=new Int8Array(w*h).fill(-1);
+  const put=(x,y,m,nx,ny,nz,t=1)=>{ const X=x-x0, Y=y-y0; if(X<0||Y<0||X>=w||Y>=h) return; const i=Y*w+X, l=Math.hypot(nx,ny,nz)||1;
+    MAT[i]=m; N[i*3]=nx/l; N[i*3+1]=ny/l; N[i*3+2]=nz/l; T[i]=t; };
+  const cyl=(y,R,ny,fm)=>{ const s=Math.sqrt(1-ny*ny); for(let dx=-R;dx<=R;dx++){ const u=dx/(R+0.5), m=fm(dx,u); if(m>=0) put(cx+dx,y,m,u*s,ny,Math.sqrt(1-u*u)*s,0.96+opsHash(cx+dx,y,71)*0.06); } };
+  // islote: peñascos redondeados, cada uno con su normal de esfera (el de delante tapa al de detrás) y una grieta entre ellos
+  const B=[[-4,-4,30,16,2],[-30,-1,19,10,1],[24,-2,21,12,1.5],[-52,1,12,6,0],[47,1,14,7,0.5],[10,-12,14,9,3],[-17,-10,12,9,2.5],[62,2,7,4,0],[-64,2,6,3,0]];
+  for(let y=y0;y<=WL;y++) for(let x=x0;x<x0+w;x++){
+    let best=-1, bz=-1e9, bn=null;
+    B.forEach(([bx,by,rx,ry,zb],k)=>{ const u=(x-cx-bx)/rx, v=(y-WL-by)/ry, d=u*u+v*v; if(d>=1) return; const z=Math.sqrt(1-d), zz=zb+z*Math.min(rx,ry)*0.5; if(zz>bz){ bz=zz; best=k; bn=[u,-v,z]; } });
+    if(best<0) continue;
+    const j1=opsHash(x,y,72)-0.5, j2=opsHash(x>>1,y>>1,73)-0.5, wet=y>WL-3||(y>WL-6&&opsHash(x,y>>1,74)<0.4);   // rugosa; abajo, mojada y con algas
+    put(x,y,wet?10:9,bn[0]+j2*0.5,bn[1]+j1*0.3,bn[2],0.85+opsHash(x,y,75)*0.25-(opsHash(x>>2,y>>1,76)<0.15?0.2:0));
+    own[(y-y0)*w+(x-x0)]=best;
   }
-  return {litC,rimC};
+  for(let Y=1;Y<h;Y++) for(let X=1;X<w;X++){ const i=Y*w+X; if(own[i]>=0&&((own[i-w]>=0&&own[i-w]!==own[i])||(own[i-1]>=0&&own[i-1]!==own[i]))) MAT[i]=11; }
+  // zócalo de sillares (hileras de 3 px con juntas en zigzag) y su remate
+  for(let y=yB-6;y<=yB;y++){ const course=Math.floor((yB-y)/3), mort=(yB-y)%3===2;
+    cyl(y,13,0,(dx,u)=>mort?6:Math.floor(Math.asin(u)/0.42+course*0.5)!==Math.floor(Math.asin(Math.min(1,(dx+1)/13.5))/0.42+course*0.5)?6:5); }
+  cyl(yB-7,14,0.5,()=>5);
+  // torre: cono con 6 franjas (abajo blanca, arriba roja)
+  for(let y=yT;y<=yB-8;y++){ const f=(yB-8-y)/TH, band=Math.floor((yB-8-y)/12); cyl(y,Math.round(9.5-3.5*f),0.05,()=>band%2?0:1); }
+  for(let s=0;s<3;s++){ const y=yB-6+s*2; for(let dx=-3-s;dx<=2+s;dx++){ put(cx+dx,y,5,0,0.7,0.7,1.08); put(cx+dx,y+1,6,0,0,1); } }   // escalones
+  for(let y=yB-16;y<=yB-8;y++) for(let dx=-3;dx<=2;dx++){ const top=y===yB-16, edge=dx===-3||dx===2||top; if(top&&(dx===-3||dx===2)) continue;   // puerta con marco
+    const u=dx/10; put(cx+dx,y,edge?1:7,u,0,Math.sqrt(1-u*u),edge?1:dx===-1?0.8:1); }
+  [[18,-0.1],[40,0.3],[60,-0.2]].forEach(([hy,u0],k)=>{ const yw=yB-8-hy, R=Math.round(9.5-3.5*hy/TH), dx0=Math.round(u0*R);   // ventanucos de la escalera
+    for(let y=yw;y<yw+3;y++) for(let dx=dx0;dx<dx0+2;dx++){ const u=dx/(R+0.5); put(cx+dx,y,8,u,0,Math.sqrt(1-u*u)); WIN[(y-y0)*w+(cx+dx-x0)]=k; } });
+  // balcón: suelo de hierro que sobresale (desde abajo le ves la panza) con ménsulas debajo
+  cyl(yG,9,0,()=>2); cyl(yG+1,9,-0.6,()=>2);
+  for(const bx of [-3,0,3]) for(let y=yG+2;y<=yG+3;y++) put(cx+bx,y,2,bx/9,-0.3,0.95);
+  for(const sg of [-1,1]){ put(cx+sg*8,yG+2,2,sg*0.9,-0.4,0.3); put(cx+sg*7,yG+2,2,sg*0.8,-0.4,0.4); put(cx+sg*7,yG+3,2,sg*0.8,-0.3,0.4); }
+  for(let y=yG-3;y<=yG-1;y++) cyl(y,6,0,()=>2);                                             // murete de la linterna
+  for(let y=yG-13;y<=yG-4;y++) cyl(y,5,0,dx=>Math.abs(dx)===5||Math.abs(dx)===2?2:3);       // cristal con montantes
+  for(let dx=-9;dx<=9;dx++){ const u=dx/9.5, nz=Math.sqrt(1-u*u); put(cx+dx,yG-4,2,u,0.2,nz);   // barandilla: pasamanos y barrotes
+    if(dx%3===0||Math.abs(dx)===9) for(let y=yG-3;y<=yG-1;y++) put(cx+dx,y,2,u,0,nz); }
+  cyl(yG-14,7,0.2,()=>4);                                                                    // alero y cúpula
+  for(let k=1;k<=6;k++){ const ny=k/6.5; cyl(yG-14-k,Math.max(1,Math.round(6.4*Math.sqrt(1-ny*ny))),ny,()=>4); }
+  cyl(yG-21,1,-0.2,()=>2); cyl(yG-22,1,0.5,()=>2);                                           // bola de ventilación
+  for(let y=yG-28;y<=yG-23;y++) put(cx,y,2,0.3,0,1);                                          // pararrayos y veleta
+  for(const dx of [-1,1,2]) put(cx+dx,yG-26,2,0,0,1);
+  const px=[]; for(let i=0;i<w*h;i++) if(MAT[i]>=0) px.push(i);
+  const foam=[]; for(let X=0;X<w;X++) if(own[(h-1)*w+X]>=0) foam.push(X+x0);
+  return {x0,y0,w,h,WL,yG,LX:cx,LY:yG-9,px:Int32Array.from(px),MAT,N,T,WIN,foam,c:mkCanvas(w,h),img:new ImageData(w,h)};
 }
-/* Luces de la isla en coordenadas de diseño, sin la silueta: el haz del faro sobre los edificios
-   (con un halo más suave alrededor), los bordes que miran al faro, las ventanas, el fuego de la forja,
-   la luz de la chimenea y el radar. Se pinta una vez por frame y se usa en la isla y en su reflejo. */
-function menuIslandLights(M,ts,beams,LX,LY,flash,H0){
-  const lf=M.litF.getContext('2d'); lf.clearRect(0,0,300,H0);
-  for(const bm of beams){
-    const dx=bm.ex-LX, dy=bm.ey-LY, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
-    for(const [wm,km] of [[2.4,0.35],[1.25,1]]){   // halo ancho y núcleo del haz
-      const w=bm.w*wm+1, kk=bm.k*km;
-      const gr=lf.createLinearGradient(LX,LY,bm.ex,bm.ey);
-      gr.addColorStop(0,'rgba(0,0,0,'+kk.toFixed(2)+')'); gr.addColorStop(0.6,'rgba(0,0,0,'+(kk*0.6).toFixed(2)+')'); gr.addColorStop(1,'rgba(0,0,0,0)');
-      lf.fillStyle=gr; lf.beginPath();
-      lf.moveTo(LX+nx,LY+ny); lf.lineTo(bm.ex+nx*w,bm.ey+ny*w); lf.lineTo(bm.ex-nx*w,bm.ey-ny*w); lf.lineTo(LX-nx,LY-ny);
-      lf.closePath(); lf.fill();
+/* Ilumina el faro este frame. La luz del sol llega desde donde está en el cielo (x = derecha, y = arriba, z = hacia ti):
+   por la mañana le da por la izquierda, al atardecer por la derecha y a mediodía está detrás (contraluz). Cuatro tonos
+   por material, como el resto del pixel art. */
+const LH_AMB0=[0.05,0.05,0.08], LH_NIGHT=[0.2,0.18,0.32], LH_LAMP=[1,0.78,0.5], LH_GLOW=[1,0.88,0.62], LH_LENS=[0.3,0.22,0.08], LH_MOON=[0.62,0.68,0.85];
+function menuLightHouse(M,S,cov,lamp,flash,moonK){
+  const L=M.lh, D=L.img.data, RD=Math.PI/180; D.fill(0);
+  const dir=p=>[Math.sin(p.az*RD)*Math.cos(p.alt*RD),Math.sin(p.alt*RD),-Math.cos(p.az*RD)*Math.cos(p.alt*RD)];
+  const Ls=dir(S.sun), Lm=dir(S.moon), sa=S.sun.alt, sunI=menuSmooth(-1.5,3,sa)*(1-cov)*0.9;   // sin sol (puesto o tapado) no hay luz directa
+  const sc=sa>14?[1,0.97,0.9]:sa>3?[1,lerp(0.74,0.97,(sa-3)/11),lerp(0.5,0.9,(sa-3)/11)]:[1,0.6,0.36];
+  const mI=M.moonUp?M.night*moonK*0.5:0, Z=M.zen.map(v=>v/255), HC=M.hor.map(v=>v/255), lI=lamp*(0.85+0.4*flash), back=Math.max(0,-Ls[2]);
+  const hl=Math.hypot(Ls[0],Ls[1],Ls[2]+1)||1, hx=Ls[0]/hl, hy=Ls[1]/hl, hz=(Ls[2]+1)/hl;   // medio vector: brillo del hierro y el cristal
+  for(const i of L.px){
+    const X=i%L.w, Y=(i/L.w)|0, x=X+L.x0, y=Y+L.y0, m=L.MAT[i], A=LH_MAT[m], t=L.T[i], nx=L.N[i*3], ny=L.N[i*3+1], nz=L.N[i*3+2], o=i*4;
+    let dS=(nx*Ls[0]+ny*Ls[1]+nz*Ls[2]+0.12)/1.12+BAYER4[(y&3)*4+(x&3)]/16*0.14-0.07; dS=dS>0.72?1:dS>0.42?0.66:dS>0.16?0.34:dS>0.02?0.12:0;
+    const rim=back*(1-nz)*(1-nz)*(nx*Ls[0]>0?1:0.3)>0.22?0.55:0;   // contraluz: el borde que mira al sol se enciende
+    const dM0=nx*Lm[0]+ny*Lm[1]+nz*Lm[2], dM=dM0>0.3?1:dM0>0?0.5:0;
+    const sp=A[3]>0?Math.pow(Math.max(0,nx*hx+ny*hy+nz*hz),28)*A[3]*sunI:0;
+    const near=y<=L.yG+1?clamp(1-Math.hypot(x-L.LX,(y-L.LY)*1.3)/15,0,1)*lI:0;   // la lámpara alumbra el balcón y la cúpula
+    if(m===3){   // cristal: refleja el cielo y, con la lámpara encendida, brilla por dentro (de día se ve la lente ámbar)
+      const ins=Math.abs(x-L.LX)<=1?1:0.55;
+      for(let j=0;j<3;j++) D[o+j]=Math.min(255,((Z[j]*0.35+HC[j]*0.3)*0.7+LH_GLOW[j]*lI*0.85*ins+LH_LENS[j]*ins*(1-lamp)*0.6+sp*1.5)*255);
+    } else if(m===8&&L.WIN[i]>=0&&M.night>0.3+0.25*L.WIN[i]&&lamp>0.2){ D[o]=246; D[o+1]=190; D[o+2]=104; }   // ventanucos encendidos
+    else for(let j=0;j<3;j++){
+      const amb=Z[j]*(0.32+0.3*ny)+HC[j]*0.34+LH_AMB0[j]+LH_NIGHT[j]*M.night;   // de noche, la luz difusa de las estrellas y el agua deja ver las franjas
+      D[o+j]=Math.min(255,(A[j]*t*(amb+sc[j]*sunI*(dS+rim)+LH_MOON[j]*mI*dM+LH_LAMP[j]*near*0.9)+sc[j]*sp)*255);
     }
+    D[o+3]=255;
   }
-  lf.globalCompositeOperation='source-in'; lf.drawImage(M.litC,0,0); lf.globalCompositeOperation='source-over';
-  const q=M.islL.getContext('2d'); q.clearRect(0,0,300,H0);
-  q.drawImage(M.litF,0,0);
-  q.globalAlpha=Math.min(1,0.45+flash*0.55)*(M.lamp??1); q.drawImage(M.rimC,0,0); q.globalAlpha=1;
-  const fl=0.6+Math.sin(ts*9)*0.2+Math.sin(ts*23)*0.1;
-  q.fillStyle='rgba(255,138,42,'+fl.toFixed(2)+')'; q.fillRect(142,104,6,6);
-  q.fillStyle='rgba(255,215,110,'+(fl*0.9).toFixed(2)+')'; q.fillRect(143,106,4,3);
-  M.wins.forEach(([x,y],i)=>{ if((M.night??1)>0.12+opsHash(i,5,3)*0.6&&Math.sin(ts*0.7+i*1.9)>-0.6){   // al anochecer se encienden una a una
-    q.fillStyle=i%3?'#ffcf6b':'#ffe9a8'; q.fillRect(x,y,2,2); } });
-  q.fillStyle=Math.floor(ts*1.2)%2?'#ff3b3b':'#4a1218'; q.fillRect(150,76,1,1);   // luz de aviso de la chimenea
-  const rw=Math.round(Math.abs(Math.cos(ts*1.6))*5)+1; q.fillStyle=menuMix('#9aa0a8','#120c1c',M.night??1); q.fillRect(164-rw,98,rw*2,3);   // radar girando
-  q.fillStyle=Math.floor(ts*1.5)%2?'#ff4757':'#5a1a24'; q.fillRect(163,96,2,2);
-  q.fillStyle='rgba(255,226,160,'+((0.55+flash*0.45)*(M.lamp??1)).toFixed(2)+')'; q.fillRect(184,88,5,5);   // lámpara del faro
+  L.c.getContext('2d').putImageData(L.img,0,0);
 }
 function menuShipWake(g,sxr,sy,ts,SW){
   const wl=sy+8, fr=Math.floor(ts*6);
@@ -13469,19 +13479,6 @@ function menuShipWake(g,sxr,sy,ts,SW){
   for(let i=0;i<4;i++){ if(opsHash(i,10,fr)<0.7){ g.fillStyle='rgba(236,242,255,0.7)'; g.fillRect(sxr+23+i,wl-1+(i>>1)+(opsHash(i,11,fr)<0.5?0:1),1,1); } }
 }
 function menuSmooth(e0,e1,x){ const u=clamp((x-e0)/(e1-e0),0,1); return u*u*(3-2*u); }
-/* ¿Cuánta luz del faro llega a un punto (coordenadas de diseño)? 0..1 */
-function menuBeamLight(beams,LX,LY,px,py){
-  let best=0;
-  for(const bm of beams){
-    const dx=bm.ex-LX, dy=bm.ey-LY, L2=dx*dx+dy*dy||1, L=Math.sqrt(L2);
-    const t=((px-LX)*dx+(py-LY)*dy)/L2; if(t<=0||t>=1.15) continue;
-    const perp=Math.abs((px-LX)*(-dy)+(py-LY)*dx)/L, hw=1+bm.w*Math.min(1,t)*2.2;
-    if(perp>=hw) continue;
-    const along=t<0.6?lerp(1,0.6,t/0.6):lerp(0.6,0,clamp((t-0.6)/0.55,0,1));
-    best=Math.max(best,along*bm.k*Math.sqrt(1-perp/hw));
-  }
-  return best;
-}
 const MENU_SHIP=['...............k..........','...............k..........','..............kkk.........','...........kkkkkkkk.......',
   '...........klklklkk.......','.....kkkkkkkkkkkkkkkkkk...','kkkkkkkkkkkkkkkkkkkkkkkkkk','.kkkkkkkkkkkkkkkkkkkkkkkk.','..kkkkkkkkkkkkkkkkkkkkkk..'];
 const MENU_HELI=['kkkkkkkkkk','....k.....','..kkkkk...','.kkkkkkkkk','..kkkk....','.k....k...'];
@@ -13497,56 +13494,25 @@ function menuSpr(g,rows,x,y,cols,flip){
 }
 function drawMenuScene(){
   if(!menuScene||menuScene.W0!==W||menuScene.H0!==H) menuBuildScene();   // la pantalla cambió de tamaño
-  const M=menuScene, g=M.c.getContext('2d'), ts=performance.now()/1000, HOR=M.HOR, OX=M.OX, OY=M.OY, RX=M.RX, SW=M.SW, SH=M.SH, H0=128;
+  const M=menuScene, g=M.c.getContext('2d'), ts=performance.now()/1000, HOR=M.HOR, SW=M.SW, SH=M.SH, L=M.lh, WL=L.WL;
   g.imageSmoothingEnabled=false;
-  // DÍA Y NOCHE: la escena sigue la hora de tu partida (p9m_daynight.js). Dia = 1 a pleno día; lamp = el faro
-  // encendido (se enciende al anochecer, hacia las 19:30, y se apaga al amanecer: de día no hace falta)
-  const now=performance.now(); advanceClock(Math.min(4,(now-(M.lastT||now))/16.67)*(menuLapseBak?MENU_LAPSE:1)); M.lastT=now;   // en el menú el cielo sigue girando
+  const now=performance.now(); advanceClock(Math.min(4,(now-(M.lastT||now))/16.67)*(menuLapseBak?menuLapseK:1)); M.lastT=now;   // en el menú el cielo sigue girando
   // la luz sale de la altura del sol: de día pleno (3° o más) a noche cerrada (−7°) pasando por el crepúsculo; el faro se
-  // enciende cuando el sol baja de 4° y se apaga al amanecer. gold = la hora dorada, con el sol bajo
-  const SK=skyNow(), sa=SK.sun.alt, lamp0=menuSmooth(4,-2,sa), lamp=lamp0>0.02&&lamp0<0.98&&opsHash(Math.floor(ts*12),1,4)<0.3?lamp0*0.3:lamp0, Dia=menuSmooth(-7,3,sa), dusk=clamp(1-Math.abs(sa+1.5)/9,0,1), gold=clamp(1-sa/16,0,1)*Dia;
-  M.night=1-Dia; M.lamp=lamp; M.dusk=dusk;
-  const moonK=SK.moon.alt>0?(1-Math.cos(SK.phase*Math.PI*2))/2*clamp(SK.moon.alt/6,0,1):0;
-  g.drawImage(menuSkyPaint(M,SK,moonK),0,0);   // cielo y mar, pintados según dónde está el sol
-  menuSky(g,M,ts,Dia);   // amanecer/atardecer, estrellas, sol, luna y Marte en su sitio de verdad
+  // enciende cuando el sol baja de 4° y se apaga al amanecer. gold = la hora dorada, con el sol bajo. En un ECLIPSE la luz
+  // cae como si el sol se pusiera (sa baja hasta −8°): se hace de noche a mediodía, salen las estrellas y se enciende el faro
+  const SK=skyNow(), E=menuEclipse(M,SK), cov=E?E.cov:0, dark=E?Math.max(menuSmooth(0.7,1,cov)*0.75,E.tot):0;
+  const sa=lerp(SK.sun.alt,Math.min(SK.sun.alt,-8),dark), SL=dark>0?Object.assign({},SK,{sun:Object.assign({},SK.sun,{alt:sa})}):SK;
+  const lamp0=menuSmooth(4,-2,sa), lamp=lamp0>0.02&&lamp0<0.98&&opsHash(Math.floor(ts*12),1,4)<0.3?lamp0*0.3:lamp0, Dia=menuSmooth(-7,3,sa), dusk=clamp(1-Math.abs(sa+1.5)/9,0,1), gold=clamp(1-sa/16,0,1)*Dia;
+  M.night=1-Dia; M.lamp=lamp; M.dusk=dusk; M.eclDark=dark;
+  const moonK=!E&&SK.moon.alt>0?(1-Math.cos(SK.phase*Math.PI*2))/2*clamp(SK.moon.alt/6,0,1):0;
+  g.drawImage(menuSkyPaint(M,SK,moonK,sa,dark),0,0);   // cielo y mar, pintados según dónde está el sol
+  menuSky(g,M,ts,Dia,E);   // amanecer/atardecer, estrellas, sol (o eclipse), luna y Marte en su sitio de verdad
   g.drawImage(M.islN,0,0); if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.islD,0,0); g.globalAlpha=1; }
-  // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos y HORIZONTALES (barren el horizonte,
-  // nunca apuntan al mar). c = hacia los lados, z = hacia ti (+) o al fondo (-). Se proyectan con perspectiva de verdad
-  // (la linterna está HH px sobre el horizonte y el faro a K «alturas» de ti), así los dos haces nunca se ven iguales:
-  // el que se aleja converge hacia el horizonte, más corto, fino y tenue; el que viene hacia ti cruza la pantalla, más
-  // ancho y brillante (la niebla y la humedad dispersan la luz hacia delante) y subiendo un poco porque pasa cerca.
-  // Justo de frente o de espaldas el haz casi no se ve: queda el destello.
-  const LX=186, LY=90, th=ts*Math.PI*2/7, K=12, HH=H0-LY;
-  const beams=[th,th+Math.PI].map(a=>{
-    const c=Math.cos(a), z=Math.sin(a), ac=Math.abs(c), zf=Math.max(0,z), fr=menuSmooth(-0.25,0.25,z);
-    const sv=z>0?Math.min(1,0.8/z):1, q=1-sv*z;          // hasta dónde se ve el haz (en distancias al faro) y su profundidad allí
-    const face=menuSmooth(0.1,0.45,ac);
-    const ex=LX+HH*K*sv*c/q, ey=LY-HH*sv*z/q, sp=0.035+0.17*Math.pow(zf,1.2);   // sp: apertura del cono (tangente del medio ángulo)
-    return {c,z,ex,ey,w:Math.max(2,Math.hypot(ex-LX,ey-LY)*sp),
-      k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr)*face,a:(0.14+0.2*(z+1))*face,st:lerp(4,1,fr)}; });
-  const chop=Math.min(1,wAmt('rain')*0.7+wAmt('storm')*1.2);   // lluvia y viento de tormenta: mar picado
-  for(const bm of beams){ bm.k*=lamp; bm.a*=lamp; }   // faro apagado: sin haces
-  const zMax=Math.max(beams[0].z,beams[1].z), flash=(zMax>0.8?(zMax-0.8)/0.2:0)*lamp;
-  menuIslandLights(M,ts,beams,LX,LY,flash,H0);
-  // reflejo de la base en el agua: filas invertidas que se ondulan (la silueta y también sus luces:
-  // ventanas, fuego de la forja y las caras que ilumina el faro)
-  g.save(); g.translate(OX,OY);
-  for(let j=0;j<40;j++){
-    const wob=Math.round(Math.sin(ts*(2.2+chop*2)+j*0.9)*(0.4+j*0.05)*(1+chop*2)), fade=1-j/48;
-    g.globalAlpha=0.5*(1-Dia*0.7); g.drawImage(M.silR,90,H0-1-j,120,1,90+wob,H0+j,120,1);
-    if(Dia>0.01){ g.globalAlpha=0.4*Dia*fade; g.drawImage(M.litC,90,H0-1-j,120,1,90+wob,H0+j,120,1); }   // de día el reflejo tiene color
-    g.globalAlpha=0.5*fade; g.drawImage(M.islL,90,H0-1-j,120,1,90+wob,H0+j,120,1);
-  }
-  g.globalAlpha=1;
-  g.restore();
-  menuDrawClouds(g,M,ts,SK,Dia,moonK);   // nubes con volumen, iluminadas desde el sol o la luna
-  g.drawImage(M.sil,OX,OY);   // la isla queda delante de las nubes bajas
-  if(Dia>0.01){ g.globalAlpha=Dia; g.drawImage(M.litC,OX,OY); menuLighthouseDay(g,OX,OY,M); g.globalAlpha=1; }   // de día los edificios y el faro se ven con su color
-  menuDrawMist(g,M,ts,SK);   // bruma del amanecer, delante del pie de la isla
+  menuDrawClouds(g,M,ts,SL,Dia,moonK);   // nubes con volumen, iluminadas desde el sol o la luna
   // portal de la Luna: una lucecita en su superficie; cada 9 s un destello viaja hasta Marte (el salto cuántico)
   const pp=(0.5+0.5*Math.sin(ts*2.2))*M.night;
-  if(M.moonUp){
-    const px=Math.round(M.moonX)-6, py=Math.round(M.moonY)+6;
+  if(M.moonUp||E&&E.tot>0.5){
+    const px=Math.round(M.moonX)-8, py=Math.round(M.moonY)+8;
     g.fillStyle='rgba(62,230,230,'+(0.22*pp).toFixed(2)+')'; g.fillRect(px-1,py-1,3,3);
     g.fillStyle=pp>0.5?'#c8fbff':'#3ee6e6'; g.fillRect(px,py,1,1);
     const jt=(ts%9)/1.1;
@@ -13554,7 +13520,7 @@ function drawMenuScene(){
   }
   // helicóptero patrullando (cruza todo el ancho)
   const hp=(ts%19)/19;
-  if(hp<0.5){ const hx=Math.round(SW+30-hp/0.5*(SW+80)), hy=Math.round(62+Math.sin(ts*2.2)*2);
+  if(hp<0.5){ const hx=Math.round(SW+30-hp/0.5*(SW+80)), hy=Math.round(HOR*0.34+Math.sin(ts*2.2)*2);
     const hk=menuMix('#3c4652','#140e20',M.night);
     menuSpr(g,MENU_HELI,hx,hy,{k:hk});
     if(Dia>0.01){ g.globalAlpha=Dia; menuSpr(g,MENU_HELI_DAY,hx,hy,MENU_HELI_COLS); }
@@ -13562,30 +13528,53 @@ function drawMenuScene(){
     if(Math.floor(ts*2)%2){ g.fillStyle='#ff4757'; g.fillRect(hx+9,hy+3,1,1); } }
   menuDrawGulls(g,M,ts,Dia);
   menuWeatherSky(g,M,ts);   // nubarrones u oscuridad según el clima de tu base
-  // --- la isla (coordenadas de diseño) ---
-  g.save(); g.translate(OX,OY);
-  g.drawImage(M.islL,0,0);   // luz del faro sobre los edificios, ventanas y fuego de la forja
-  // humo de la chimenea: bocanadas que salen del tubo, suben, crecen, el viento las inclina y se deshacen.
-  // La posición se calcula con la edad de cada bocanada, así se mueve igual a cualquier velocidad de pantalla.
-  if(M.lastPuff<0||ts<M.lastPuff||ts-M.lastPuff>6) M.lastPuff=ts-6;          // al abrir el menú la columna ya está formada
-  while(M.lastPuff+0.12<=ts){ M.lastPuff+=0.12; M.smoke.push({t0:M.lastPuff,s:Math.random()*6.28,dx:(Math.random()-0.5)*1.4,v:0.85+Math.random()*0.3}); }
-  M.smoke=M.smoke.filter(p=>ts-p.t0<5.8&&ts>=p.t0);
-  for(const p of M.smoke){
-    const a=ts-p.t0, k=a/5.8;
-    const x=147.5+p.dx+a*3+a*a*1.05+Math.sin(a*1.3+p.s)*1.3, y=72-(a*8-a*a*0.62)*p.v;
-    const r=Math.min(10,1+Math.round(a*1.8)), spr=M.puffs[k<0.3?0:1][r-1];
-    g.globalAlpha=Math.min(1,a*6)*(1-k)*0.92;
-    g.drawImage(spr,Math.round(x-r-1),Math.round(y-r-1));
-    const sl=menuBeamLight(beams,LX,LY,x,y);
-    if(sl>0.05){ g.save(); g.globalCompositeOperation='lighter'; g.globalAlpha*=sl*0.55; g.drawImage(M.puffs[1][r-1],Math.round(x-r-1),Math.round(y-r-1)); g.restore(); }
+  menuDrawMist(g,M,ts,SL);   // bruma del amanecer sobre el horizonte (detrás del faro)
+  // FARO: la lámpara gira sobre sí misma (una vuelta cada 7 s) con dos haces opuestos y HORIZONTALES (barren el horizonte,
+  // nunca apuntan al mar). c = hacia los lados, z = hacia ti (+) o al fondo (-). Se proyectan con perspectiva de verdad
+  // (la linterna está HH px sobre el horizonte y el faro a K «alturas» de ti), así los dos haces nunca se ven iguales:
+  // el que se aleja converge hacia el horizonte, más corto, fino y tenue; el que viene hacia ti cruza la pantalla, más
+  // ancho y brillante (la niebla y la humedad dispersan la luz hacia delante) y subiendo un poco porque pasa cerca.
+  // Justo de frente o de espaldas el haz casi no se ve: queda el destello.
+  const LX=L.LX, LY=L.LY, th=ts*Math.PI*2/7, K=8, HH=HOR-LY;
+  const beams=[th,th+Math.PI].map(a=>{
+    const c=Math.cos(a), z=Math.sin(a), ac=Math.abs(c), zf=Math.max(0,z), fr=menuSmooth(-0.25,0.25,z);
+    const sv=z>0?Math.min(1,0.8/z):1, q=1-sv*z;          // hasta dónde se ve el haz (en distancias al faro) y su profundidad allí
+    const face=menuSmooth(0.1,0.45,ac);
+    const ex=LX+HH*K*sv*c/q, ey=LY-HH*sv*z/q, sp=0.035+0.17*Math.pow(zf,1.2);   // sp: apertura del cono (tangente del medio ángulo)
+    return {c,z,ex,ey,w:Math.max(2,Math.hypot(ex-LX,ey-LY)*sp),
+      k:lerp(0.5+0.25*ac,0.8+0.2*zf,fr)*face,a:(0.14+0.2*(z+1))*face,st:lerp(6,1,fr)}; });
+  const chop=Math.min(1,wAmt('rain')*0.7+wAmt('storm')*1.2);   // lluvia y viento de tormenta: mar picado
+  for(const bm of beams){ bm.k*=lamp; bm.a*=lamp; }   // faro apagado: sin haces
+  const zMax=Math.max(beams[0].z,beams[1].z), flash=(zMax>0.8?(zMax-0.8)/0.2:0)*lamp;
+  menuLightHouse(M,SK,cov,lamp,flash,moonK);
+  // haces del faro (luz que se suma): conos con bruma exterior, cuerpo y núcleo brillante
+  const bc=M.beamC.getContext('2d'); bc.clearRect(0,0,SW,SH);
+  for(const bm of beams){
+    const dx=bm.ex-LX, dy=bm.ey-LY, Lb=Math.hypot(dx,dy)||1, nx=-dy/Lb, ny=dx/Lb;
+    const w=bm.w, a0=Math.min(0.9,bm.a*(1+wAmt('fog')*0.9+(wAmt('rain')+wAmt('storm'))*0.35));   // en la niebla el haz se ve mucho más
+    const st=bm.st;   // el haz que va hacia el fondo empieza detrás de la torre
+    const gr=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
+    gr.addColorStop(0,'rgba(255,244,200,'+a0.toFixed(2)+')'); gr.addColorStop(0.7,'rgba(255,244,200,'+(a0*0.3).toFixed(2)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
+    const quad=ww=>{ bc.beginPath(); bc.moveTo(LX+dx/Lb*st+nx,LY+dy/Lb*st+ny); bc.lineTo(bm.ex+nx*ww,bm.ey+ny*ww); bc.lineTo(bm.ex-nx*ww,bm.ey-ny*ww); bc.lineTo(LX+dx/Lb*st-nx,LY+dy/Lb*st-ny); bc.closePath(); bc.fill(); };
+    const gh=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);   // bruma exterior: el borde del cono se difumina
+    gh.addColorStop(0,'rgba(255,236,190,'+(a0*0.4).toFixed(2)+')'); gh.addColorStop(0.6,'rgba(255,236,190,'+(a0*0.12).toFixed(2)+')'); gh.addColorStop(1,'rgba(255,236,190,0)');
+    bc.fillStyle=gh; quad(w*1.7);
+    bc.fillStyle=gr; quad(w);
+    // núcleo del haz: más estrecho y brillante (la luz se concentra en el centro y se difumina hacia los bordes)
+    const wc=w*0.35, gc=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
+    gc.addColorStop(0,'rgba(255,250,225,'+(a0*0.9).toFixed(2)+')'); gc.addColorStop(0.5,'rgba(255,250,225,'+(a0*0.25).toFixed(2)+')'); gc.addColorStop(1,'rgba(255,250,225,0)');
+    bc.fillStyle=gc; bc.beginPath(); bc.moveTo(LX+dx/Lb*st,LY+dy/Lb*st); bc.lineTo(bm.ex+nx*wc,bm.ey+ny*wc); bc.lineTo(bm.ex-nx*wc,bm.ey-ny*wc); bc.closePath(); bc.fill();
+    // motas de polvo y humedad que solo se ven dentro de la luz
+    for(const m of M.motes){
+      const u=(m.t+ts*0.012)%1; if(u<0.06) continue;
+      const tw=0.5+0.5*Math.sin(ts*3+m.ph), al=a0*1.3*(1-u)*tw; if(al<0.05) continue;
+      bc.fillStyle='rgba(255,248,220,'+Math.min(1,al).toFixed(2)+')';
+      bc.fillRect(Math.round(LX+dx*u+nx*m.s*w*u),Math.round(LY+dy*u+ny*m.s*w*u),1,1);
+    }
   }
-  g.globalAlpha=1;
-  if(Math.random()<0.2) M.embers.push({x:147.5,y:72,vx:(Math.random()-0.3)*0.4,life:1});
-  M.embers=M.embers.filter(p=>(p.life-=0.025)>0);
-  for(const p of M.embers){ p.y-=0.45; p.x+=p.vx+0.08; g.fillStyle=p.life>0.5?'#ffd76e':'#ff6b3a'; g.fillRect(Math.round(p.x),Math.round(p.y),1,1); }
-  g.restore();
-  // bajo el mar: el brillo de la Afotita y sus ecos (anillos de sonar)
+  // --- el mar ---
   g.save(); g.beginPath(); g.rect(0,HOR+1,SW,SH-HOR); g.clip();
+  // bajo el mar: el brillo de la Afotita y sus ecos (anillos de sonar)
   const pu=0.18+Math.sin(ts*1.3)*0.06, CXs=SW/2, FXs=Math.max(1,SW/300);
   const rg=g.createRadialGradient(CXs,SH+14,4,CXs,SH+14,110*FXs); rg.addColorStop(0,'rgba(191,233,255,'+(pu+0.15).toFixed(2)+')'); rg.addColorStop(1,'rgba(191,233,255,0)');
   g.fillStyle=rg; g.fillRect(0,HOR,SW,SH-HOR);
@@ -13595,7 +13584,11 @@ function drawMenuScene(){
   if(Math.random()<0.15) M.bubbles.push({x:CXs-30+Math.random()*60,y:SH,life:1});
   M.bubbles=M.bubbles.filter(p=>(p.life-=0.01)>0&&p.y>HOR+3);
   for(const p of M.bubbles){ p.y-=0.35; p.x+=Math.sin(ts*3+p.y)*0.2; g.fillStyle='rgba(224,184,255,'+(p.life*0.8).toFixed(2)+')'; g.fillRect(Math.round(p.x),Math.round(p.y),1,1); }
-  // olas y reflejo de la luna
+  // reflejo del faro y su islote: filas invertidas que se ondulan (con sus luces: la linterna y los ventanucos)
+  for(let j=0;j<SH-WL;j++){ const sy=WL-L.y0-j; if(sy<0) break;
+    const wob=Math.round(Math.sin(ts*(2.2+chop*2)+j*0.9)*(0.4+j*0.04)*(1+chop*2));
+    g.globalAlpha=0.45*(1-j/(WL-L.y0+24))*(0.6+0.4*Dia); g.drawImage(L.c,0,sy,L.w,1,L.x0+wob,WL+1+j,L.w,1); }
+  g.globalAlpha=1;
   // olas: cada cresta aparece y se apaga en su sitio balanceándose un poco (no una cinta que se desliza);
   // cerca del horizonte son finas y apretadas y hacia ti más largas y separadas (perspectiva)
   for(let y=HOR+2,r=0;y<SH;y+=2+(r>>2),r++){
@@ -13608,11 +13601,12 @@ function drawMenuScene(){
       g.fillRect(Math.round(i*gap+h*gap+Math.sin(ts*(0.9+chop*2)+ph)*(2+chop*2)),y,len+Math.round(h*2),1);
     }
   }
-  if(Dia>0.01&&M.sunUp){   // de día: el sol cabrillea en el mar (debajo de donde está) con destellos que se mecen con las olas
+  const glit=Dia*(1-cov);
+  if(glit>0.01&&M.sunUp){   // de día: el sol cabrillea en el mar (debajo de donde está) con destellos que se mecen con las olas
     g.save(); g.globalCompositeOperation='lighter';
     for(let y=HOR+2;y<SH;y+=2){ const w=3+(y-HOR)*0.22, j=Math.sin(ts*2.1+y*0.7)*2.5;
       for(let k=0;k<3;k++){ const on=Math.sin(ts*3.1+y*1.9+k*2.3); if(on<0.3) continue;
-        g.fillStyle='rgba(255,'+((y-HOR)<24?244:226)+','+((y-HOR)<24?200:160)+','+(Dia*(on-0.3)*0.9*(1-(y-HOR)/(SH-HOR)*0.6)).toFixed(2)+')';
+        g.fillStyle='rgba(255,'+((y-HOR)<24?244:226)+','+((y-HOR)<24?200:160)+','+(glit*(on-0.3)*0.9*(1-(y-HOR)/(SH-HOR)*0.6)).toFixed(2)+')';
         g.fillRect(Math.round(M.sunX-w/2+j+(k-1)*w*0.35),y,Math.max(1,Math.round(w*0.3)),1); } }
     g.restore();
   }
@@ -13620,46 +13614,7 @@ function drawMenuScene(){
   for(let y=HOR+2;y<SH&&M.moonLit>0.03;y+=2){ const w=(2+(y-HOR)*0.12)*(0.4+0.6*M.moonLit), j=Math.sin(ts*2.4+y*0.9)*3;
     if(Math.sin(ts*3+y*1.7)>-0.4){ g.fillStyle=(y-HOR)<20?'#f2e6c0':'#b9ab8a'; g.fillRect(Math.round(M.moonX-w/2+j),y,Math.max(1,Math.round(w*(0.5+0.5*Math.sin(y+ts)))),1); } }
   g.globalAlpha=1;
-  g.translate(OX,OY);
-  // reflejo de la linterna: como el de la luna, crestas que se encienden y se mecen con la ola (más anchas hacia ti),
-  // más vivas alrededor del punto espejo y más fuertes cuando el haz te apunta
-  g.save(); g.globalCompositeOperation='lighter';
-  const face=clamp(0.3+Math.max(0,zMax)*0.45+flash*0.5,0,1)*lamp, mir=H0-LY, dMax=SH-OY-H0;
-  for(let d=2;d<dMax;d+=2){
-    if(Math.sin(ts*2.6+d*1.3)<-0.2) continue;
-    const w=1+d*0.06, j=Math.sin(ts*2.1+d*0.8)*(0.6+d*0.03), peak=0.35+0.65*Math.exp(-(((d-mir)/26)**2));
-    const al=face*peak*(1-d/dMax)*0.8*(0.6+0.4*Math.sin(ts*3.3+d*2.1)); if(al<0.03) continue;
-    g.fillStyle='rgba(255,226,160,'+al.toFixed(2)+')'; g.fillRect(Math.round(LX-w/2+j),H0+d,Math.max(1,Math.round(w)),1);
-  }
   g.restore();
-  g.restore();
-  // haces del faro (luz que se suma): conos con bruma exterior, cuerpo y núcleo brillante
-  const bc=M.beamC.getContext('2d'); bc.clearRect(0,0,SW,SH);
-  bc.save(); bc.translate(OX,OY);
-  for(const bm of beams){
-    const dx=bm.ex-LX, dy=bm.ey-LY, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
-    const w=bm.w, a0=Math.min(0.9,bm.a*(1+wAmt('fog')*0.9+(wAmt('rain')+wAmt('storm'))*0.35));   // en la niebla el haz se ve mucho más
-    const st=bm.st;   // el haz que va hacia el fondo empieza detrás de la torre
-    const gr=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
-    gr.addColorStop(0,'rgba(255,244,200,'+a0.toFixed(2)+')'); gr.addColorStop(0.7,'rgba(255,244,200,'+(a0*0.3).toFixed(2)+')'); gr.addColorStop(1,'rgba(255,244,200,0)');
-    const quad=ww=>{ bc.beginPath(); bc.moveTo(LX+dx/L*st+nx,LY+dy/L*st+ny); bc.lineTo(bm.ex+nx*ww,bm.ey+ny*ww); bc.lineTo(bm.ex-nx*ww,bm.ey-ny*ww); bc.lineTo(LX+dx/L*st-nx,LY+dy/L*st-ny); bc.closePath(); bc.fill(); };
-    const gh=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);   // bruma exterior: el borde del cono se difumina
-    gh.addColorStop(0,'rgba(255,236,190,'+(a0*0.4).toFixed(2)+')'); gh.addColorStop(0.6,'rgba(255,236,190,'+(a0*0.12).toFixed(2)+')'); gh.addColorStop(1,'rgba(255,236,190,0)');
-    bc.fillStyle=gh; quad(w*1.7);
-    bc.fillStyle=gr; quad(w);
-    // núcleo del haz: más estrecho y brillante (la luz se concentra en el centro y se difumina hacia los bordes)
-    const wc=w*0.35, gc=bc.createLinearGradient(LX,LY,bm.ex,bm.ey);
-    gc.addColorStop(0,'rgba(255,250,225,'+(a0*0.9).toFixed(2)+')'); gc.addColorStop(0.5,'rgba(255,250,225,'+(a0*0.25).toFixed(2)+')'); gc.addColorStop(1,'rgba(255,250,225,0)');
-    bc.fillStyle=gc; bc.beginPath(); bc.moveTo(LX+dx/L*st,LY+dy/L*st); bc.lineTo(bm.ex+nx*wc,bm.ey+ny*wc); bc.lineTo(bm.ex-nx*wc,bm.ey-ny*wc); bc.closePath(); bc.fill();
-    // motas de polvo y humedad que solo se ven dentro de la luz
-    for(const m of M.motes){
-      const u=(m.t+ts*0.012)%1; if(u<0.06) continue;
-      const tw=0.5+0.5*Math.sin(ts*3+m.ph), al=a0*1.3*(1-u)*tw; if(al<0.05) continue;
-      bc.fillStyle='rgba(255,248,220,'+Math.min(1,al).toFixed(2)+')';
-      bc.fillRect(Math.round(LX+dx*u+nx*m.s*w*u),Math.round(LY+dy*u+ny*m.s*w*u),1,1);
-    }
-  }
-  bc.globalCompositeOperation='destination-out'; bc.drawImage(M.bmask,0,0); bc.globalCompositeOperation='source-over'; bc.restore();
   // el haz se refleja en las crestas de las olas: una franja de destellos justo bajo el horizonte a lo largo del haz
   // (en el mar picado no hay reflejo liso; más ancha y viva cuando el haz viene hacia ti, apenas nada cuando se aleja)
   g.save(); g.globalCompositeOperation='lighter';
@@ -13667,7 +13622,7 @@ function drawMenuScene(){
     if(bm.a<0.04) continue;
     const zf=Math.max(0,bm.z), dir=Math.sign(bm.ex-LX)||1, len=Math.min(Math.abs(bm.ex-LX),SW), depth=3+zf*20;
     for(let d=1;d<=depth;d++) for(let sx=2;sx<len;sx+=3){
-      const x=LX+OX+dir*sx, on=Math.sin(ts*2.3+x*0.37+d*1.9)+Math.sin(ts*1.4-x*0.13+d*0.6);
+      const x=LX+dir*sx, on=Math.sin(ts*2.3+x*0.37+d*1.9)+Math.sin(ts*1.4-x*0.13+d*0.6);
       if(on<0.8) continue;
       const al=bm.a*2.6*(1-sx/len)*(1-d/(depth+1))*(on-0.8); if(al<0.03) continue;
       g.fillStyle='rgba(255,236,180,'+Math.min(1,al).toFixed(2)+')'; g.fillRect(Math.round(x),HOR+d,1+(d>>2)+(on>1.5?1:0),1);
@@ -13676,10 +13631,10 @@ function drawMenuScene(){
   g.restore();
   // mapa de luz del faro (el haz en el aire): decide qué píxeles del barco se iluminan
   const lc=M.lightC.getContext('2d'); lc.clearRect(0,0,SW,SH); lc.drawImage(M.beamC,0,0);
-  // barco ISF-01 cruzando todo el ancho (con estela)
-  const sx=((ts*5)%(SW+90))-40, sy=Math.round(HOR+18+Math.sin(ts*1.4)*0.8), sxr=Math.round(sx);
+  // barco ISF-01 cruzando todo el ancho, lejos (detrás del faro), con estela
+  const sx=((ts*5)%(SW+90))-40, sy=Math.round(HOR+5+Math.sin(ts*1.4)*0.8), sxr=Math.round(sx);
   menuShipWake(g,sxr,sy,ts,SW);
-  // el barco solo se ilumina en los píxeles que caen dentro de la luz del faro (como los edificios)
+  // el barco solo se ilumina en los píxeles que caen dentro de la luz del faro
   const mq=M.shipM.getContext('2d'); mq.clearRect(0,0,26,9);
   mq.globalCompositeOperation='lighter'; for(let i=0;i<3;i++) mq.drawImage(M.lightC,-sxr,-sy); mq.globalCompositeOperation='source-over';
   const fq=M.shipF.getContext('2d'); fq.clearRect(0,0,26,9);
@@ -13698,50 +13653,53 @@ function drawMenuScene(){
   if(Dia>0.01){ g.globalAlpha=Dia; menuSpr(g,MENU_SHIP_DAY,sxr,sy,MENU_SHIP_COLS); g.globalAlpha=1; }
   g.drawImage(M.shipF,sxr,sy);
   g.fillStyle=Math.floor(ts*2)%2?'#3ee67a':'#ff4757'; g.fillRect(Math.round(sx)+25,sy+6,1,1);
+  // --- el faro en su islote, la espuma que lo rodea y el reflejo de la linterna ---
+  g.drawImage(L.c,L.x0,L.y0);
+  const fc='rgba(236,242,250,'+(0.35+0.45*Dia).toFixed(2)+')';
+  for(const x of L.foam){ const fr=Math.floor(ts*3+opsHash(x,1,7)*4); if(opsHash(x,fr,5)<0.4){ g.fillStyle=fc; g.fillRect(x,WL+(opsHash(x,fr,6)<0.5?0:1),1,1); } }
+  // reflejo de la linterna: como el de la luna, crestas que se encienden y se mecen con la ola (más anchas hacia ti),
+  // más vivas alrededor del punto espejo y más fuertes cuando el haz te apunta
+  g.save(); g.globalCompositeOperation='lighter';
+  const face=clamp(0.3+Math.max(0,zMax)*0.45+flash*0.5,0,1)*lamp, mir=WL-LY, dMax=SH-WL;
+  for(let d=3;d<dMax;d+=2){
+    if(Math.sin(ts*2.6+d*1.3)<-0.2) continue;
+    const w=1+d*0.06, j=Math.sin(ts*2.1+d*0.8)*(0.6+d*0.03), peak=0.35+0.65*Math.exp(-(((d-mir)/30)**2));
+    const al=face*peak*(1-d/dMax)*0.8*(0.6+0.4*Math.sin(ts*3.3+d*2.1)); if(al<0.03) continue;
+    g.fillStyle='rgba(255,226,160,'+al.toFixed(2)+')'; g.fillRect(Math.round(LX-w/2+j),WL+d,Math.max(1,Math.round(w)),1);
+  }
+  g.restore();
   const warm=Math.max(gold,dusk*0.55);   // hora dorada y crepúsculo: la luz baja lo tiñe todo de cálido
   if(warm>0.02){ g.save(); g.globalCompositeOperation='soft-light'; g.fillStyle='rgba(255,140,60,'+(warm*0.6).toFixed(3)+')'; g.fillRect(0,0,SW,SH); g.restore(); }
   // LUNA: en luna nueva la noche es más negra; en luna llena se aclara un poco (la luz plateada lo baña todo)
   if(M.night>0.01){
-    g.fillStyle='rgba(3,4,12,'+(0.34*(1-M.moonLit)*M.night).toFixed(3)+')'; g.fillRect(0,0,SW,SH);
+    g.fillStyle='rgba(3,4,12,'+(0.34*(1-M.moonLit)*M.night*(1-dark*0.6)).toFixed(3)+')'; g.fillRect(0,0,SW,SH);
     if(M.moonLit>0.5){ g.save(); g.globalCompositeOperation='lighter'; g.fillStyle='rgba(70,82,122,'+(0.16*(M.moonLit-0.5)*M.night).toFixed(3)+')'; g.fillRect(0,0,SW,SH); g.restore(); }
   }
-  // el haz en el aire, el destello cuando te apunta y la lente girando dentro de la linterna
+  // el haz en el aire, el destello cuando te apunta, el halo de la linterna y la lente girando dentro
   g.save(); g.globalCompositeOperation='lighter'; g.drawImage(M.beamC,0,0);
-  g.translate(OX,OY);
   if(flash>0){
-    const rg2=g.createRadialGradient(LX,LY,0,LX,LY,4+flash*26);
+    const rg2=g.createRadialGradient(LX,LY,0,LX,LY,6+flash*36);
     rg2.addColorStop(0,'rgba(255,250,220,'+(flash*0.9).toFixed(2)+')'); rg2.addColorStop(1,'rgba(255,250,220,0)');
-    g.fillStyle=rg2; g.fillRect(LX-32,LY-32,64,64);
+    g.fillStyle=rg2; g.fillRect(LX-44,LY-44,88,88);
     g.fillStyle='rgba(255,250,220,'+(flash*0.7).toFixed(2)+')';
-    g.fillRect(Math.round(LX-flash*46),LY,Math.round(flash*92),1); g.fillRect(LX,Math.round(LY-flash*16),1,Math.round(flash*32));
+    g.fillRect(Math.round(LX-flash*64),LY,Math.round(flash*128),1); g.fillRect(LX,Math.round(LY-flash*22),1,Math.round(flash*44));
   }
+  const hal=g.createRadialGradient(LX,LY,0,LX,LY,16); hal.addColorStop(0,'rgba(255,214,150,'+((0.32+flash*0.3)*lamp).toFixed(2)+')'); hal.addColorStop(1,'rgba(255,214,150,0)');
+  g.fillStyle=hal; g.fillRect(LX-16,LY-16,32,32);
   g.restore();
-  // halo cálido que siempre envuelve la linterna (la luz se dispersa en el aire húmedo)
-  g.save(); g.globalCompositeOperation='lighter';
-  const hal=g.createRadialGradient(LX+OX,LY+OY,0,LX+OX,LY+OY,11); hal.addColorStop(0,'rgba(255,214,150,'+((0.32+flash*0.3)*lamp).toFixed(2)+')'); hal.addColorStop(1,'rgba(255,214,150,0)');
-  g.fillStyle=hal; g.fillRect(LX+OX-11,LY+OY-11,22,22);
-  // la luz de la linterna cae sobre la barandilla, el suelo del balcón y el borde de la cúpula
-  for(let x=181;x<=191;x++){ const k=(0.5+flash*0.4)*(1-Math.abs(x-186)/7)*lamp;
-    g.fillStyle='rgba(255,200,130,'+k.toFixed(2)+')'; if(x%2) g.fillRect(x+OX,93+OY,1,2); g.fillRect(x+OX,95+OY,1,1); }
-  g.fillStyle='rgba(255,200,130,'+((0.35+flash*0.4)*lamp).toFixed(2)+')'; g.fillRect(184+OX,87+OY,5,1);
-  g.restore();
-  // cristal de la linterna con montante central y la lente girando dentro (su brillo se reparte entre dos píxeles)
-  g.fillStyle='#4a5a6a'; g.fillRect(184+OX,88+OY,5,5);   // cristal (apagado)
-  g.fillStyle='rgba(255,220,150,'+((0.7+flash*0.3)*lamp).toFixed(2)+')'; g.fillRect(184+OX,88+OY,5,5);
-  g.fillStyle='rgba(70,40,40,0.55)'; g.fillRect(186+OX,88+OY,1,5);
-  const lensX=184+OX+2+Math.cos(th)*2, l0=Math.floor(lensX), lf2=lensX-l0;
-  g.fillStyle='rgba(255,255,255,'+((1-lf2)*lamp).toFixed(2)+')'; g.fillRect(l0,89+OY,1,3);
-  if(lf2>0.01){ g.fillStyle='rgba(255,255,255,'+(lf2*lamp).toFixed(2)+')'; g.fillRect(l0+1,89+OY,1,3); }
+  const lensX=LX+Math.cos(th)*3.5, l0=Math.floor(lensX), lf2=lensX-l0;   // la lente: su brillo se reparte entre dos píxeles
+  g.fillStyle='rgba(255,255,255,'+((1-lf2)*lamp).toFixed(2)+')'; g.fillRect(l0,LY-3,1,7);
+  if(lf2>0.01){ g.fillStyle='rgba(255,255,255,'+(lf2*lamp).toFixed(2)+')'; g.fillRect(l0+1,LY-3,1,7); }
   // primer plano: rocas a izquierda y derecha
-  menuDrawRocks(g,SH,RX,M.night);
+  menuDrawRocks(g,SH,M.RX,M.night);
   menuWeatherFront(g,M,ts);   // lluvia, niebla y rayos
-  // ampliar x3 + líneas de escaneo
+  // ampliar x2 + líneas de escaneo
   ctx.imageSmoothingEnabled=false;
   ctx.drawImage(M.c,0,0,W,H);
   ctx.drawImage(M.over,0,0);
-  if(menuLapseBak){ ctx.font='20px "Jersey 15", monospace'; ctx.textAlign='right'; ctx.fillStyle='#000'; ctx.fillText('⏩ '+clockHHMM()+' · CICLO ACELERADO · T: parar',W-14,H-14); ctx.fillStyle='#ffd76e'; ctx.fillText('⏩ '+clockHHMM()+' · CICLO ACELERADO · T: parar',W-15,H-15); ctx.textAlign='left'; }
+  if(menuLapseBak){ const t=menuLapseK===MENU_LAPSE?'⏩ '+clockHHMM()+' · CICLO ACELERADO · T: parar':'🌑 '+clockHHMM()+' · ECLIPSE · E: volver a tu hora';
+    ctx.font='20px "Jersey 15", monospace'; ctx.textAlign='right'; ctx.fillStyle='#000'; ctx.fillText(t,W-14,31); ctx.fillStyle='#ffd76e'; ctx.fillText(t,W-15,30); ctx.textAlign='left'; }   // arriba: abajo lo tapa el pie del menú
 }
-
 /* ===================== EL CIELO PINTADO PUNTO A PUNTO =====================
    Cada píxel del cielo sale de dónde está el sol, como el cielo de verdad:
    · el color del aire en el cenit y en el horizonte cambia con la altura del sol (MENU_SKYK);
@@ -13751,7 +13709,10 @@ function drawMenuScene(){
    · en el crepúsculo, en el lado contrario al sol, sube la SOMBRA DE LA TIERRA (banda azul oscura) y encima el
      CINTURÓN DE VENUS (franja rosa), como se ve de verdad al anochecer;
    · el mar refleja ese cielo: cerca del horizonte, casi espejo; hacia ti, más color de agua.
-   Con trama 4x4, como el resto del pixel art. Solo se rehace cuando el sol (o la luz de la luna) ha cambiado. */
+   · en un eclipse total, el horizonte se enciende naranja todo alrededor (ring), como un atardecer en redondo.
+   La geometría sale del sol de verdad (S) y los colores de la luz que hay (sa: en un eclipse, la de un sol ya puesto).
+   El color se calcula cada 4 columnas y se interpola entre medias. Con trama 4x4, como el resto del pixel art. Solo se
+   rehace cuando el sol (o la luz de la luna) ha cambiado. */
 const MENU_SKYK=[[-90,'#06070f','#1a1838','#06070f'],[-18,'#080a18','#211e44','#080a16'],[-12,'#0a0e24','#2a2652','#0a0c1e'],[-8,'#0b1230','#2c2752','#0c0f26'],
   [-4,'#16244f','#7a4a6c','#1a1a38'],[-1,'#25386e','#d0705c','#2a2444'],[2,'#33558f','#efa06c','#2e3a5a'],[6,'#3a64a8','#f2c28c','#2d5878'],
   [12,'#3a6cb4','#c2d6e2','#245a82'],[25,'#2f63ad','#a9cbe6','#1f5a86'],[90,'#2459a4','#9cc3e2','#1c5684']].map(([a,z,h,w])=>[a,menuHex(z),menuHex(h),menuHex(w)]);   // [altura del sol, cenit, horizonte, agua]
@@ -13760,16 +13721,16 @@ function menuSkyKey(a){
   const u=clamp((a-K[i][0])/(K[i+1][0]-K[i][0]),0,1), m=(p,q)=>p.map((v,j)=>v+(q[j]-v)*u);
   return [m(K[i][1],K[i+1][1]),m(K[i][2],K[i+1][2]),m(K[i][3],K[i+1][3])];
 }
-function menuSkyPaint(M,S,moonK){
-  const sa=S.sun.alt, q=menuLapseBak?1.2:4, key=Math.round(sa*q)+'|'+Math.round(S.sun.az*q/2)+'|'+Math.round(moonK*8);   // acelerado: se repinta menos a menudo
+function menuSkyPaint(M,S,moonK,sa,ring){
+  const ga=S.sun.alt, q=menuLapseBak?1.2:4, key=Math.round(sa*q)+'|'+Math.round(ga*q)+'|'+Math.round(S.sun.az*q/2)+'|'+Math.round(moonK*8)+'|'+Math.round(ring*24);   // acelerado: se repinta menos a menudo
   if(M.skyKey===key) return M.skyC;
   M.skyKey=key;
   const SW=M.SW, SH=M.SH, HOR=M.HOR, D=M.skyImg.data, RD=Math.PI/180, [Z,HC,WT]=menuSkyKey(sa);
-  const sS=Math.sin(sa*RD), cS=Math.cos(sa*RD), warmK=clamp(1-Math.abs(sa-2)/14,0,1);
+  const sS=Math.sin(ga*RD), cS=Math.cos(ga*RD), warmK=clamp(1-Math.abs(sa-2)/14,0,1);
   const belt=clamp(1-Math.abs(sa+2.5)/5.5,0,1), hs=clamp(2-sa*1.1,1,11);
   const gK=sa<-8?0:sa<-2?lerp(0,0.6,(sa+8)/6):sa<6?0.7:lerp(0.7,0.32,clamp((sa-6)/24,0,1));
   const gC=sa<-2?[224,112,90]:sa<8?[255,176,112]:sa<20?[255,224,176]:[255,246,224], sig=lerp(26,13,clamp(sa/40,0,1));
-  const cool=Z.map(v=>Math.min(255,v*1.35+22)), mA=moonK*0.07;
+  const cool=Z.map(v=>Math.min(255,v*1.35+22)), mA=moonK*0.07, RC=[236,150,96];
   const cosD=new Float32Array(SW), opp=new Float32Array(SW);
   for(let x=0;x<SW;x++){ const az=(x-SW/2)/(SW/2)*135; cosD[x]=Math.cos((az-S.sun.az)*RD); opp[x]=(1-cosD[x])/2; }
   const c=[0,0,0];
@@ -13778,19 +13739,22 @@ function menuSkyPaint(M,S,moonK){
     const g=Math.acos(clamp(sA*sS+cA*cS*cosD[x],-1,1))/RD;
     let gl=gK*(Math.exp(-g/sig)+0.6*Math.exp(-g/4)); if(sa<0) gl*=lerp(1,Math.exp(-alt/10),clamp(-sa/4,0,1)); gl=Math.min(1,gl);
     const ob=opp[x]*opp[x]*belt, d=(alt-hs)/7, sh=alt<hs?0.55*ob:0, pk=alt>=hs&&d<1.6?0.45*ob*Math.sin(Math.PI*d/1.6):0;
+    const rb=ring>0?ring*0.7*Math.exp(-Math.max(0,alt)/5):0;
     for(let j=0;j<3;j++){
       const hz=HC[j]+(cool[j]-HC[j])*op; let v=hz+(Z[j]-hz)*t;
       v+=(gC[j]-v)*gl;
       if(sh) v+=([38,48,92][j]-v)*sh; else if(pk>0) v+=([233,163,184][j]-v)*pk;
+      if(rb) v+=(RC[j]-v)*rb;
       c[j]=v+mA*[60,70,110][j];
     }
   };
+  const GX=4, gw=Math.ceil((SW-1)/GX)+1, row=new Float32Array(gw*3);
   for(let y=0;y<SH;y++){
     const sea=y>=HOR, v=sea?(y-HOR)/Math.max(1,SH-HOR):0, alt=sea?2+v*32:(HOR-y)/(HOR-4)*90, F=sea?0.3+0.6*Math.pow(v,0.7):0;
+    for(let k=0;k<gw;k++){ at(Math.min(SW-1,k*GX),alt); row[k*3]=c[0]; row[k*3+1]=c[1]; row[k*3+2]=c[2]; }
     for(let x=0;x<SW;x++){
-      at(x,alt);
-      const th=BAYER4[(y&3)*4+(x&3)]/16, o=(y*SW+x)*4;
-      for(let j=0;j<3;j++){ let q=sea?c[j]*0.85+(WT[j]-c[j]*0.85)*F:c[j]; q=clamp(q,0,255); D[o+j]=Math.min(255,Math.floor(q/255*15+th)/15*255); }
+      const k=(x/GX)|0, k1=Math.min(gw-1,k+1), f=(x-k*GX)/GX, th=BAYER4[(y&3)*4+(x&3)]/16, o=(y*SW+x)*4;
+      for(let j=0;j<3;j++){ const cj=row[k*3+j]+(row[k1*3+j]-row[k*3+j])*f; let w=sea?cj*0.85+(WT[j]-cj*0.85)*F:cj; w=clamp(w,0,255); D[o+j]=Math.min(255,Math.floor(w/255*15+th)/15*255); }
       D[o+3]=255;
     }
   }
@@ -13803,7 +13767,7 @@ function menuSkyPaint(M,S,moonK){
    de noche, la luna en plata. Cuatro tonos, como pixel art. */
 function menuCloudSpr(i){
   // forma: una base plana y alargada con cúpulas encima que se solapan (más altas en el centro)
-  const far=i<3, R=mulberry32(91+i*7), w=Math.round(far?24+R()*18:40+R()*30), h=Math.round(far?7+R()*3:11+R()*6), n=far?4:5+Math.floor(R()*3);
+  const far=i<3, R=mulberry32(91+i*7), w=Math.round((far?24+R()*18:40+R()*30)*1.35), h=Math.round((far?7+R()*3:11+R()*6)*1.35), n=far?4:5+Math.floor(R()*3);
   const P=[]; for(let k=0;k<n;k++){ const u=0.14+0.72*(k+R()*0.6)/n, r=h*(0.42+0.5*Math.sin(u*Math.PI))*(0.8+0.35*R()); P.push([u*w,h-r*0.82,r]); }
   const top=Math.floor(Math.min(...P.map(p=>p[1]-p[2])))-2, Wd=w+4, Ht=h-top+3, Mk=new Float32Array(Wd*Ht);   // el recuadro llega hasta la cúpula más alta
   for(let y=0;y<Ht;y++) for(let x=0;x<Wd;x++){ const X=x-2+0.5, Y=y+top+0.5;
@@ -13834,9 +13798,11 @@ function menuDrawClouds(g,M,ts,S,Dia,moonK){
   const shN=[21,21,43], shDk=[94,74,120], shD=[163,182,204], shade=shN.map((v,j)=>{ const a=v+(shDk[j]-v)*sunK; return a+(shD[j]-a)*Dia; });
   const lx=sunK>0.05?M.sunSX:M.moonX, ly=sunK>0.05?M.sunSY:M.moonY;
   for(let i=0;i<M.clouds.length;i++){
-    const C=M.clouds[i], far=C.far, y0=far?HOR-36+i*7:HOR-62+(i-3)*9, x0=Math.round(((ts*(far?1.2:2.4)+i*97)%(SW+60+C.w))-C.w-30);
+    const C=M.clouds[i], far=C.far, y0=far?HOR-42+i*9:HOR-96+(i-3)*16, x0=Math.round(((ts*(far?1.2:2.4)+i*97)%(SW+60+C.w))-C.w-30);
     let Lx=lx-(x0+C.w/2), Ly=ly-(y0+C.h/2); const Ll=Math.hypot(Lx,Ly)||1; Lx/=Ll; Ly/=Ll;
-    const dm=M.moonUp?Math.hypot(x0+C.w/2-M.moonX,y0-M.moonY):99, al=Math.round(255*clamp((dm-30)/30,0.3,1)*(far?0.78:0.92));
+    const dm=M.moonUp&&M.night>0.3?Math.hypot(x0+C.w/2-M.moonX,y0-M.moonY):99;
+    const de=M.eclDark>0.05?Math.hypot(Math.max(0,Math.abs(M.sunSX-x0-C.w/2)-C.w/2),Math.max(0,Math.abs(M.sunSY-y0-C.h/2)-C.h/2)):99;   // en el eclipse no tapan el sol: se vuelven finas a su lado
+    const al=Math.round(255*Math.min(clamp((dm-30)/30,0.3,1),lerp(1,clamp(de/30,0.08,1),M.eclDark))*(far?0.78:0.92));
     const up=clamp(-Ly,-1,1);   // luz desde arriba (día) o desde abajo (sol ya puesto)
     for(const [x,y,nx,ny,edge,v] of C.px){
       const X=x0+x, Y=y0+y; if(X<0||X>=SW||Y<0||Y>=HOR) continue;
@@ -13861,7 +13827,7 @@ function menuDrawGulls(g,M,ts,Dia){
   if(Dia<0.05) return;
   g.globalAlpha=Dia;
   for(let i=0;i<5;i++){
-    const v=6+i*1.7, x=Math.round(M.SW+20-((ts*v+i*73)%(M.SW+60))), y=Math.round(34+i*6+Math.sin(ts*0.8+i*2)*4), up=Math.floor(ts*(5+i*0.7)+i)%2;
+    const v=6+i*1.7, x=Math.round(M.SW+20-((ts*v+i*73)%(M.SW+60))), y=Math.round(M.HOR*0.22+i*7+Math.sin(ts*0.8+i*2)*4), up=Math.floor(ts*(5+i*0.7)+i)%2;
     g.fillStyle=i%2?'#3a4250':'#4c5664';
     if(up){ g.fillRect(x,y,1,1); g.fillRect(x+1,y+1,1,1); g.fillRect(x+2,y,1,1); } else { g.fillRect(x,y+1,1,1); g.fillRect(x+1,y,1,1); g.fillRect(x+2,y+1,1,1); }
   }
@@ -13879,9 +13845,23 @@ function menuMilky(){
 /* CICLO ACELERADO (tecla T u Opciones): un día entero en 20 segundos para verlo; al pararlo la hora vuelve a ser la de tu partida
    (menuLapseBak en p2_core.js hace que mientras tanto se guarde la hora de verdad) */
 const MENU_LAPSE=60;
-function menuLapse(on){
+let menuLapseK=MENU_LAPSE;   // velocidad: x60 el ciclo del día, x2 para ver un eclipse
+function menuLapse(on,k){
   if(on&&!menuLapseBak) menuLapseBak={clock:save.clock,day:save.day};
   else if(!on&&menuLapseBak){ save.clock=menuLapseBak.clock; save.day=menuLapseBak.day; menuLapseBak=null; }
+  menuLapseK=k||MENU_LAPSE;
+}
+/* VER UN ECLIPSE (tecla E u Opciones): salta a la próxima luna nueva que cae de día (con el sol alto) un poco antes de que
+   la luna tape el sol, y lo pasa a velocidad x2 (unos 15 s de totalidad). Al salir, vuelve la hora de tu partida. */
+function menuEclipseGo(){
+  if(menuLapseBak){ menuLapse(false); return; }
+  menuLapse(true,2);
+  const at=t=>{ save.day=Math.floor(t); save.clock=t-Math.floor(t); };
+  // el que tenga el sol en el hueco libre de la pantalla: entre el faro y los paneles, por encima de la linterna y debajo del título
+  let t=skyDays()+(1-skyMoonPhase())*SKY_MONTH, bt=t, bs=-1e9;
+  for(let i=0;i<150;i++,t+=SKY_MONTH){ at(t); const {alt,az}=skyNow().sun, sc=-Math.abs(alt-52)-(az<-67||az>32?40:az>-24&&az<10?25:0);
+    if(sc>bs){ bs=sc; bt=t; } if(sc>-3) break; }
+  at(bt-0.04);
 }
 
 /* ===================== FLUJO DE PARTIDA ===================== */
@@ -14244,7 +14224,7 @@ function fitGame(){
   fitVW=innerWidth; fitVH=innerHeight;
   let w=600*asp, h=600;
   if(w<800){ w=800; h=clamp(800/asp,600,800); }
-  w=Math.round(clamp(w,800,1200)/3)*3; h=Math.round(h/3)*3;   // múltiplos de 3: el pixel art se amplía x3 exacto
+  w=Math.round(clamp(w,800,1200)/6)*6; h=Math.round(h/6)*6;   // múltiplos de 6: el pixel art se amplía exacto (x3 el juego, x2 el menú)
   if(w!==W||h!==H){ cv.width=w; cv.height=h; W=w; H=h; }
   const cw=W*10/9, ch=H*10/9;            // misma proporción CSS/dibujo que el diseño original (1000x667 para 900x600)
   gameWrapEl.style.width=cw+'px'; gameWrapEl.style.height=ch+'px';
