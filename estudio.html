@@ -80,7 +80,7 @@
   <div id="stHint">Arrastra el fondo: girar la cámara (↔ alrededor, ↕ altura) · Rueda: acercar · Clic derecho, botón central o Mayús + arrastrar: mover · Doble clic: centrar · Arrastra un punto: girar esa articulación</div></section>
 <aside id="stRight"><h2>POSE DEL FOTOGRAMA</h2><div class="row" id="stJoints"></div><div id="stAxes"></div><div class="row" id="stActs"></div>
   <h2>CÓMO LLEVA EL HACHA</h2><div id="stGrip"></div><div class="row"><button class="ch" id="stGripReset">↺ RESTABLECER</button></div>
-  <p class="note">Todo se guarda solo, en este navegador. El juego lo usa al abrirse (y al momento si ya está abierto en otra pestaña). EXPORTAR guarda una copia en un archivo. Teclas: Espacio reproducir · ← → fotograma · Ctrl+Z deshacer · Ctrl+C / Ctrl+V copiar y pegar la pose. Arrastra un fotograma de la tira para cambiarlo de sitio; su ✕ (o Supr) lo borra.</p></aside>
+  <p class="note">Todo se guarda solo, en este navegador. El juego lo usa al abrirse (y al momento si ya está abierto en otra pestaña). EXPORTAR guarda una copia en un archivo. Teclas: Espacio reproducir · ← → fotograma · Ctrl+Z deshacer · Ctrl+C / Ctrl+V copiar y pegar la pose · H solo esqueleto. Arrastra un fotograma de la tira para cambiarlo de sitio; su ✕ (o Supr) lo borra.</p></aside>
 <footer id="stTime"><div id="stCtl"></div><div id="stStrip"></div></footer>
 <script>
 (function(){
@@ -602,7 +602,7 @@ const ST_BASE=[['PARADO',0,2,2/88*60],['ANDAR',1,8,8/19.2*60],['CORRER',2,8,8/20
 const ST_VIEWS=[['3/4',3,20],['FRENTE',0,0],['PERFIL',4,0],['ESPALDA',8,10],['ARRIBA',3,90],['JUEGO',3,35]];   // nombre, hacia dónde mira (0-16) y altura de la cámara
 const ST_SPEED=[0.25,0.5,1,2], ST_S=4, ST_TOOLS=[['','NINGUNA'],['hacha','HACHA']];
 const V={d:3,el:20,zoom:1,px:0,py:0};   // la vista: rumbo (16 = una vuelta), altura de la cámara, zoom y desplazamiento
-let stId=0, stF=0, stPlay=false, stSpeed=2, stJoint='armR', stDrag=null, stSliding=false, stOnion=true, stDirty=true, stStripDirty=true, stStripT=0, stLast=0, stSaveT=0, stCopy=null;
+let stId=0, stF=0, stPlay=false, stSpeed=2, stJoint='armR', stDrag=null, stSliding=false, stOnion=true, stDirty=true, stStripDirty=true, stStripT=0, stLast=0, stSaveT=0, stCopy=null, stSkel=false;
 const stUndoL=[], stPals={};
 const stEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ch=(txt,on,attr,extra='')=>'<button class="ch'+(on?' on':'')+extra+'" '+attr+'>'+txt+'</button>';
@@ -650,8 +650,9 @@ function stRender(){
     const T=stXf(w,h), Wp=PR_W*ST_S*T.k, Hp=PR_H*ST_S*T.k, K=ST_S*T.k;
     stGrid(g,T,d);
     g.fillStyle='rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(T.fx,T.fy,11*K,Math.max(1,7*K*prCamSE),0,0,Math.PI*2); g.fill();
-    if(stOnion&&!stPlay&&A.n>1&&!(stDrag&&stDrag.kind!=='joint')){ g.globalAlpha=0.3; g.drawImage(stPose(A,(f-1+A.n)%A.n,d),T.x0,T.y0,Wp,Hp); g.globalAlpha=1; }
-    g.drawImage(stPose(A,f,d),T.x0,T.y0,Wp,Hp);
+    const pf=(f-1+A.n)%A.n, onion=stOnion&&!stPlay&&A.n>1&&!(stDrag&&stDrag.kind!=='joint');
+    if(stSkel){ if(onion){ g.globalAlpha=0.3; stSkelDraw(g,T,A,pf,d,true); g.globalAlpha=1; } stSkelDraw(g,T,A,f,d,false); }   // solo los huesos: sin el cuerpo
+    else { if(onion){ g.globalAlpha=0.3; g.drawImage(stPose(A,pf,d),T.x0,T.y0,Wp,Hp); g.globalAlpha=1; } g.drawImage(stPose(A,f,d),T.x0,T.y0,Wp,Hp); }
     if(!stPlay) stJointsDraw(g,T,A,f,d);
   }); } finally { prSkyFix=null; }
   $('stInfo').innerHTML=stEsc(A.name)+' · fotograma '+(f+1)+'/'+A.n+'<br>cámara '+Math.round(V.el)+'° · zoom ×'+V.zoom.toFixed(1);
@@ -671,8 +672,20 @@ function stJointsXY(T,A,f,d){ const J=prJoints(stPal(A.tool||''),d,A.id,f,ST_S),
 function stJointsDraw(g,T,A,f,d){
   const J=stJointsXY(T,A,f,d);
   g.lineWidth=2; g.strokeStyle='rgba(62,230,230,.6)';
-  for(const [a,b] of DEV_BONES){ g.beginPath(); g.moveTo(J[a][0],J[a][1]); g.lineTo(J[b][0],J[b][1]); g.stroke(); }
+  if(!stSkel) for(const [a,b] of DEV_BONES){ g.beginPath(); g.moveTo(J[a][0],J[a][1]); g.lineTo(J[b][0],J[b][1]); g.stroke(); }
   for(const [id] of stJointIds(A)){ const [x,y]=J[id], on=id===stJoint; g.fillStyle=on?'#f5c518':'#e8f6ff'; g.strokeStyle='#05070c'; g.beginPath(); g.arc(x,y,on?7:5,0,Math.PI*2); g.fill(); g.stroke(); }
+}
+/* SOLO ESQUELETO: los huesos gruesos y de color (izquierda azul, derecha naranja, el centro blanco), la columna de la cadera
+   a la cabeza y la cabeza como un círculo de su tamaño. ghost = el fotograma anterior (piel de cebolla) */
+function stSkelDraw(g,T,A,f,d,ghost){
+  const J=stJointsXY(T,A,f,d), mid=(a,b)=>[(J[a][0]+J[b][0])/2,(J[a][1]+J[b][1])/2], hip=mid('legL','legR'), sh=mid('armL','armR');
+  const sd=id=>/L$/.test(id)?'L':/R$/.test(id)?'R':'', col=(a,b)=>sd(a)&&sd(a)===sd(b)?(sd(a)==='L'?'#4fb3ff':'#ff9a3c'):'#e8f6ff';
+  const line=(p,q,c)=>{ g.strokeStyle=c; g.beginPath(); g.moveTo(p[0],p[1]); g.lineTo(q[0],q[1]); g.stroke(); };
+  g.lineCap='round'; g.lineWidth=ghost?3:5;
+  line(hip,J.body,'#e8f6ff'); line(J.body,sh,'#e8f6ff'); line(sh,J.head,'#e8f6ff');
+  for(const [a,b] of DEV_BONES) if(a!=='body') line(J[a],J[b],col(a,b));
+  g.lineWidth=2; g.strokeStyle='#e8f6ff'; g.beginPath(); g.arc(J.head[0],J.head[1],5.8*ST_S*T.k,0,Math.PI*2); g.stroke();
+  g.lineCap='butt';
 }
 function stHit(x,y){   // ¿hay una articulación bajo el puntero?
   const r=$('stCv').getBoundingClientRect(), A=stCur();
@@ -796,7 +809,8 @@ function stRight(){
 function stCtl(){
   $('stCtl').innerHTML=ch('◀',false,'data-c="prev" title="Fotograma anterior (←)"')+ch(stPlay?'⏸ PAUSA':'▶ REPRODUCIR',stPlay,'data-c="play" title="Espacio"')+ch('▶',false,'data-c="next" title="Fotograma siguiente (→)"')
     +'<span class="gap"></span>'+ST_SPEED.map((v,i)=>ch('×'+v,i===stSpeed,'data-c="sp" data-v="'+i+'"')).join('')
-    +'<span class="gap"></span>'+ch('🧅 PIEL DE CEBOLLA',stOnion,'data-c="onion" title="El fotograma anterior se ve en transparente detrás"');
+    +'<span class="gap"></span>'+ch('🧅 PIEL DE CEBOLLA',stOnion,'data-c="onion" title="El fotograma anterior se ve en transparente detrás"')
+    +ch('🦴 SOLO ESQUELETO',stSkel,'data-c="skel" title="Oculta el cuerpo y deja los huesos: izquierda azul, derecha naranja (tecla H)"');
   $('stViews').innerHTML=ST_VIEWS.map(([txt],i)=>ch(txt,false,'data-v="'+i+'"')).join('');
 }
 function stStep(s){ const n=stCur().n; stPlay=false; stF=(stFr()+s+n)%n; stCtl(); stRight(); stMark(); stDirty=true; }
@@ -859,7 +873,7 @@ $('stActs').addEventListener('click',e=>{
 $('stCtl').addEventListener('click',e=>{
   const b=e.target.closest('[data-c]'); if(!b) return; const c=b.dataset.c;
   if(c==='prev') return stStep(-1); if(c==='next') return stStep(1); if(c==='play') return stTogglePlay();
-  if(c==='sp') stSpeed=+b.dataset.v; else if(c==='onion') stOnion=!stOnion;
+  if(c==='sp') stSpeed=+b.dataset.v; else if(c==='onion') stOnion=!stOnion; else if(c==='skel') stSkel=!stSkel;
   stCtl(); stDirty=true;
 });
 $('stViews').addEventListener('click',e=>{ const b=e.target.closest('[data-v]'); if(!b) return; const [,d,el]=ST_VIEWS[+b.dataset.v]; V.d=d; V.el=el; stDirty=true; });
@@ -930,6 +944,7 @@ addEventListener('keydown',e=>{
   else if(k===' '){ e.preventDefault(); stTogglePlay(); }
   else if(k==='arrowleft'){ e.preventDefault(); stStep(-1); }
   else if(k==='arrowright'){ e.preventDefault(); stStep(1); }
+  else if(k==='h'&&!mod){ stSkel=!stSkel; stCtl(); stDirty=true; }
   else if(k==='delete'){ e.preventDefault(); stDelFrame(stFr()); }
 });
 addEventListener('resize',()=>{ stDirty=true; });
