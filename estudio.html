@@ -121,9 +121,8 @@ function prCamera(deg){
 }
 const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27,wood:28,edge:29,steel:30};
 const PR_SWING=48;   // lo que dura un golpe de herramienta
-/* Cómo lleva la herramienta: se edita a mano en el MENÚ DEV (p9v_tools.js) y se guarda en save.toolGrip. Ángulos en radianes */
+/* Cómo lleva la herramienta (cada modelo el suyo: ANIMS[..].grip), se edita en el MENÚ DEV y en el ESTUDIO. Ángulos en radianes */
 const TOOL_GRIP_DEF={grip:0,size:1,twist:0,lat:0,rest:0.4,up:1.25,hit:0.1,armUp:2.9,armHit:1.1};
-const toolGrip=Object.assign({},TOOL_GRIP_DEF);
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle,PM.edge]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
 const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
@@ -143,16 +142,20 @@ function prClear(q,s,r,g,pz,sway){
 }
 /* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
    Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
-/* RETOQUES A MANO (editor de poses del MENÚ DEV): poseEdits[modo][fotograma] = {articulación: ángulo extra en radianes}.
-   Se suman a la pose calculada, así que sin retoques el muñeco se mueve igual que siempre */
-const poseEdits={}, PR_NOD={};
-const poseD=(mode,f)=>(poseEdits[mode]&&poseEdits[mode][f])||PR_NOD;
-/* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): prClips[modo] = {name, n fotogramas, fps, base (0-3: la
+/* ANIMACIONES DE CADA MODELO: el masculino y el femenino tienen las suyas, independientes. En cada uno:
+   · edits[modo][fotograma] = {articulación: ángulo extra en radianes}: retoques a mano que se suman a la pose calculada
+     (sin retoques el muñeco se mueve igual que siempre);
+   · grip: cómo lleva el hacha; · clips: sus animaciones nuevas.
+   Los androides (cuerpo neutro) usan las del masculino. */
+const PR_NOD={}, ANIMS={m:{edits:{},grip:Object.assign({},TOOL_GRIP_DEF),clips:{}},f:{edits:{},grip:Object.assign({},TOOL_GRIP_DEF),clips:{}}};
+const animOf=g=>ANIMS[g.sex==='f'?'f':'m'];
+const poseD=(mode,f,A=ANIMS.m)=>(A.edits[mode]&&A.edits[mode][f])||PR_NOD;
+/* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): ANIMS[..].clips[modo] = {name, n fotogramas, fps, base (0-3: la
    animación del juego de la que parte), follow (true: recorre los pasos de la base; false: se queda en su fotograma bf), tool,
    still (fotogramas SIN ANIMAR: de pie y quieto, solo con sus retoques; los demás se reparten los pasos de la base),
    bfs (si existe, manda: de qué fotograma de la base parte cada uno, null = sin animar; aparece al reordenarlos)}.
-   Sus modos empiezan en 10 y sus poses son retoques de poseEdits, como los de las animaciones del juego. */
-const prClips={}, PR_BASE_N=[2,8,8,8];
+   Sus modos empiezan en 10 y sus poses son retoques (edits), como los de las animaciones del juego. */
+const PR_BASE_N=[2,8,8,8];
 function prClipBase(C,f){   // de qué fotograma de la base parte el fotograma f de una animación nueva (null = sin animar)
   if(C.bfs&&f<C.bfs.length) return C.bfs[f];
   const S=C.still||[]; if(S.includes(f)) return null;
@@ -160,22 +163,24 @@ function prClipBase(C,f){   // de qué fotograma de la base parte el fotograma f
   return C.follow?Math.floor(k*PR_BASE_N[C.base]/na):C.bf||0;
 }
 function prPoseOf(mode,f,g){
-  const C=prClips[mode]; if(!C) return prPose(mode,mode?f/8:0,mode?0:f,g,poseD(mode,f));
-  const b0=prClipBase(C,f); if(b0===null) return prPose(0,0,0,g,poseD(mode,f));
+  const A=animOf(g), C=A.clips[mode], D=poseD(mode,f,A); if(!C) return prPose(mode,mode?f/8:0,mode?0:f,g,D);
+  const b0=prClipBase(C,f); if(b0===null) return prPose(0,0,0,g,D);
   const m=C.base, b=b0%PR_BASE_N[m];
-  return prPose(m,m?b/8:0,m?0:b,g,poseD(mode,f));
+  return prPose(m,m?b/8:0,m?0:b,g,D);
 }
 /* Las animaciones (retoques, agarre del hacha y animaciones nuevas) se guardan aparte de la partida, en ANIM_KEY: así el
    estudio y el juego las comparten sin pisarse la partida */
-const ANIM_KEY='isleforge_anim_v1';
+const ANIM_KEY='isleforge_anim_v1';   // v:2 = {m:{..}, f:{..}}; v:1 (una para todos) se copia a los dos al leerla
 function animRead(){ try{ return JSON.parse(localStorage.getItem(ANIM_KEY)); }catch(e){ return null; } }
-function animWrite(){ try{ localStorage.setItem(ANIM_KEY,JSON.stringify({v:1,edits:poseEdits,grip:toolGrip,clips:prClips})); }catch(e){} }
+function animWrite(){ try{ localStorage.setItem(ANIM_KEY,JSON.stringify({v:2,m:ANIMS.m,f:ANIMS.f})); }catch(e){} }
 function animApply(A){
-  for(const k in poseEdits) delete poseEdits[k]; Object.assign(poseEdits,A.edits||{});
-  Object.assign(toolGrip,TOOL_GRIP_DEF,A.grip||{});
-  for(const k in prClips) delete prClips[k]; Object.assign(prClips,A.clips||{});
+  for(const s of ['m','f']){ const S=JSON.parse(JSON.stringify(A.v===2?A[s]||{}:A)), T=ANIMS[s];   // copia: los dos modelos nunca comparten datos
+    for(const k in T.edits) delete T.edits[k]; Object.assign(T.edits,S.edits||{});
+    for(const k in T.clips) delete T.clips[k]; Object.assign(T.clips,S.clips||{});
+    Object.assign(T.grip,TOOL_GRIP_DEF,S.grip||{}); }
   for(const q in prCache) delete prCache[q];
 }
+function animInit(){ const A=animRead(); if(A) animApply(A); else { animApply({edits:save.poseEdits,grip:save.toolGrip}); animWrite(); } }   // la primera vez, lo que tenía la partida, para los dos
 /* Las articulaciones que se pueden girar a mano (id, nombre, [clave del retoque, nombre del eje]), los huesos que se dibujan
    entre ellas y los valores del agarre del hacha: los usan el MENÚ DEV (p9v_tools.js) y el ESTUDIO (e1_estudio.js) */
 const DEV_JOINTS=[['body','Tronco',[['body.lean','Inclinar']]],['head','Cabeza',[['head.yaw','Girar'],['head.pitch','Asentir']]],
@@ -202,7 +207,7 @@ function prPose(mode,ph,br,g,D=PR_NOD){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5+B*Math.sin(p));   // sube, baja de golpe y vuelve. Al andar, cada brazo va al revés que su pierna (antes iba con ella) y dobla el codo al ir hacia delante
+    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=animOf(g).grip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5+B*Math.sin(p));   // sube, baja de golpe y vuelve. Al andar, cada brazo va al revés que su pierna (antes iba con ella) y dobla el codo al ir hacia delante
     const e=(chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16)+dv('elbow'+sd), [sy,sz]=up(0,15.8+br*0.4);
     const ab=dv('arm'+sd+'.ab'), ca=Math.cos(ab), sa=Math.sin(ab);   // ab: abre el brazo hacia su lado
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow+s*sa*UA,sy+Math.sin(a)*UA*ca,sz-Math.cos(a)*UA*ca], c=a+e, q=g.arm;
@@ -213,7 +218,7 @@ function prPose(mode,ph,br,g,D=PR_NOD){
     return {sh,el,ha,c};
   };
   // el mango respecto al antebrazo, y hacia qué lado va el filo: al golpear baja por delante, con el filo en cabeza; en reposo cuelga
-  const G=toolGrip, tk=mode===3?(ph<0.45?G.up:ph<0.7?lerp(G.up,G.hit,(ph-0.45)/0.25):lerp(G.hit,G.up,(ph-0.7)/0.3)):G.rest;
+  const G=animOf(g).grip, tk=mode===3?(ph<0.45?G.up:ph<0.7?lerp(G.up,G.hit,(ph-0.45)/0.25):lerp(G.hit,G.up,(ph-0.7)/0.3)):G.rest;
   return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br,tk:tk+dv('tool.ang'),ts:mode===3?-1:1,D};
 }
 /* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
@@ -235,7 +240,7 @@ const prGenCache={};
 function prGen(pal){
   const id=(pal.key?pal.gender:'n')+(pal.build==null?1:pal.build); if(prGenCache[id]) return prGenCache[id];
   const g=PR_GEN[id[0]], b=PR_BUILD[+id[1]], T=g.loft;
-  return prGenCache[id]=Object.assign({},g,{
+  return prGenCache[id]=Object.assign({},g,{sex:id[0],
     sh:g.sh*b.chest, hip:g.hip*b.hip, stance:g.stance*b.hip, arm:g.arm*b.arm, hand:g.hand*b.end, boot:g.boot*b.end, nk:g.nk*Math.sqrt(b.chest), h:g.h*b.h,
     loft:[[T[0][0],T[0][1]*b.hip,T[0][2]*b.hip],[T[1][0],T[1][1]*b.waist,T[1][2]*b.waist],[T[2][0],T[2][1]*b.chest,T[2][2]*b.chest],[T[3][0],T[3][1]*b.chest,T[3][2]*b.chest]],
     th:g.th.map(v=>v*b.leg), cf:g.cf.map(v=>v*b.leg), seat:g.seat&&[g.seat[0]*b.hip,g.seat[1],g.seat[2],g.seat[3]*b.leg], cw:b.chest, hw:b.hip, hd:b.head});
@@ -339,7 +344,7 @@ function prParts(pal,P,yaw,expr,h){
     cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
   }
   if(pal.tool){   // el mango sale de la mano según el antebrazo; lat lo inclina a un lado, twist gira el filo sobre el mango, grip corre la mano por el mango
-    grp=5; const G=toolGrip, c=AR.c+P.tk, q=P.ts, cl=Math.cos(G.lat), sl=Math.sin(G.lat)*(AR.sh[0]<0?-1:1);
+    grp=5; const G=animOf(g).grip, c=AR.c+P.tk, q=P.ts, cl=Math.cos(G.lat), sl=Math.sin(G.lat)*(AR.sh[0]<0?-1:1);
     const dir=[sl,Math.sin(c)*cl,-Math.cos(c)*cl], s0=[0,q*Math.cos(c),q*Math.sin(c)];
     const x=[dir[1]*s0[2]-dir[2]*s0[1],dir[2]*s0[0]-dir[0]*s0[2],dir[0]*s0[1]-dir[1]*s0[0]], tw=G.twist+(P.D['tool.twist']||0), ct=Math.cos(tw), st=Math.sin(tw);
     const side=[0,1,2].map(i=>s0[i]*ct+x[i]*st), base=[0,1,2].map(i=>AR.ha[i]-dir[i]*G.grip*G.size);
@@ -606,6 +611,7 @@ const ch=(txt,on,attr,extra='')=>'<button class="ch'+(on?' on':'')+extra+'" '+at
 /* PERSONAJE: los retoques valen para los dos cuerpos, así que aquí se cambia de género y de complexión para comprobar la
    animación en cada uno (el resto del aspecto sale de tu partida) */
 const ST_WHO=[['gender','m','MASCULINO'],['gender','f','FEMENINO'],['build',0,'LIGERO'],['build',1,'NORMAL'],['build',2,'FUERTE']];
+const SA=()=>ANIMS[stWhoSel.gender==='f'?'f':'m'];   // las animaciones del modelo que estás editando
 const stWhoSel=Object.assign({gender:'m',build:1},save.look&&{gender:save.look.gender||'m',build:save.look.build??1});
 function stPal(tool){
   const id=tool+'|'+stWhoSel.gender+stWhoSel.build; if(stPals[id]) return stPals[id];
@@ -616,7 +622,7 @@ function stPal(tool){
 function stWho(){ const b=(a,z)=>'<div class="row">'+ST_WHO.slice(a,z).map(([k,v,txt],i)=>ch(txt,stWhoSel[k]===v,'data-w="'+(a+i)+'"')).join('')+'</div>'; $('stWho').innerHTML=b(0,2)+b(2,5); }
 function stAnims(){
   return ST_BASE.map(([name,id,n,fps])=>({id,name,n,fps,tool:id===3?'hacha':'',custom:false}))
-    .concat(Object.keys(prClips).map(Number).sort((a,b)=>a-b).map(id=>Object.assign({id,custom:true},prClips[id])));
+    .concat(Object.keys(SA().clips).map(Number).sort((a,b)=>a-b).map(id=>Object.assign({id,custom:true},SA().clips[id])));
 }
 const stCur=()=>stAnims().find(a=>a.id===stId)||stAnims()[0];
 const stFr=()=>Math.floor(stF)%stCur().n;
@@ -684,13 +690,13 @@ function stStrip(){
   finally{ prRes=ST_S; prSkyFix=null; }
   stMark();
 }
-function stMark(){ const A=stCur(), f=stFr(), E=poseEdits[A.id]||{}, C=prClips[A.id]; $('stStrip').querySelectorAll('canvas').forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('still',!!C&&prClipBase(C,i)===null); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
+function stMark(){ const A=stCur(), f=stFr(), E=SA().edits[A.id]||{}, C=SA().clips[A.id]; $('stStrip').querySelectorAll('canvas').forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('still',!!C&&prClipBase(C,i)===null); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
 
 /* ---------- datos: deshacer, guardar ---------- */
-function stGetD(){ const A=stCur(), f=stFr(); return ((poseEdits[A.id]=poseEdits[A.id]||{})[f]=poseEdits[A.id][f]||{}); }
-function stPush(){ stUndoL.push(JSON.stringify({edits:poseEdits,grip:toolGrip,clips:prClips})); if(stUndoL.length>80) stUndoL.shift(); }
+function stGetD(){ const A=stCur(), f=stFr(); return ((SA().edits[A.id]=SA().edits[A.id]||{})[f]=SA().edits[A.id][f]||{}); }
+function stPush(){ stUndoL.push(JSON.stringify({v:2,m:ANIMS.m,f:ANIMS.f})); if(stUndoL.length>80) stUndoL.shift(); }
 function stUndo(){ const s=stUndoL.pop(); if(!s) return; animApply(JSON.parse(s)); if(!stAnims().some(a=>a.id===stId)) stId=0; stChanged(true); stPanels(); }
-function stTidy(){ for(const m in poseEdits){ for(const f in poseEdits[m]){ const D=poseEdits[m][f]; for(const k in D) if(Math.abs(D[k])<1e-4) delete D[k]; if(!Object.keys(D).length) delete poseEdits[m][f]; } if(!Object.keys(poseEdits[m]).length) delete poseEdits[m]; } }
+function stTidy(){ for(const m in SA().edits){ for(const f in SA().edits[m]){ const D=SA().edits[m][f]; for(const k in D) if(Math.abs(D[k])<1e-4) delete D[k]; if(!Object.keys(D).length) delete SA().edits[m][f]; } if(!Object.keys(SA().edits[m]).length) delete SA().edits[m]; } }
 function stChanged(all){   // algo cambió: se repinta y se guarda un momento después (all = puede afectar a todos los fotogramas)
   const A=stCur(), f=stFr();
   if(all) for(const q in prCache) delete prCache[q]; else for(const q in prCache) if(q.includes('|'+A.id+'|'+f+'|')) delete prCache[q];
@@ -699,7 +705,11 @@ function stChanged(all){   // algo cambió: se repinta y se guarda un momento de
   stDirty=true; stStripDirty=true;
 }
 /* Lo que viene de un archivo: solo números y textos cortos en su sitio */
-function stClean(A){
+function stClean(A){   // un archivo de ahora trae los dos modelos; uno de antes, las mismas para los dos
+  if(A&&A.v===2) return {v:2,m:stClean1(A.m||{}),f:stClean1(A.f||{})};
+  const c=stClean1(A); return {v:2,m:c,f:c};
+}
+function stClean1(A){
   if(!A||typeof A!=='object') throw new Error('no es un objeto');
   const num=v=>typeof v==='number'&&isFinite(v), E={}, C={}, G={};
   for(const m in A.edits||{}) if(/^\d{1,3}$/.test(m)) for(const f in A.edits[m]) if(/^\d{1,2}$/.test(f)){
@@ -712,11 +722,20 @@ function stClean(A){
     if(Array.isArray(c.bfs)) C[id].bfs=c.bfs.slice(0,24).map(v=>v===null?null:clamp(Math.round(+v)||0,0,7)); }
   return {edits:E,grip:G,clips:C};
 }
-function stNewId(){ return Math.max(9,...Object.keys(prClips).map(Number))+1; }
+function stNewId(){ return Math.max(9,...Object.keys(SA().clips).map(Number))+1; }
+function stCopyOther(){   // la animación que ves, tal cual, al otro modelo (si allí ya había una con ese nombre, la sustituye)
+  const A=stCur(), O=ANIMS[stWhoSel.gender==='f'?'m':'f'], otro=stWhoSel.gender==='f'?'MASCULINO':'FEMENINO';
+  if(!confirm('¿Copiar «'+A.name+'» al modelo '+otro+'? Lo que tenga allí esa animación se sustituye (Ctrl+Z lo deshace).')) return;
+  stPush(); let id=A.id;
+  if(A.custom){ id=+(Object.keys(O.clips).find(k=>O.clips[k].name===A.name)||Math.max(9,...Object.keys(O.clips).map(Number))+1); O.clips[id]=JSON.parse(JSON.stringify(SA().clips[A.id])); }
+  if(SA().edits[A.id]) O.edits[id]=JSON.parse(JSON.stringify(SA().edits[A.id])); else delete O.edits[id];
+  if(A.tool) Object.assign(O.grip,SA().grip);   // con herramienta, también cómo la lleva
+  stChanged(true); $('stSaved').textContent='✔ copiada al '+otro.toLowerCase();
+}
 function stDup(A){
   const id=stNewId(), name=(A.name+' 2').slice(0,20);
-  prClips[id]=A.custom?Object.assign(JSON.parse(JSON.stringify(prClips[A.id])),{name}):{name,n:A.n,fps:Math.max(1,Math.round(A.fps)),base:A.id,follow:true,bf:0,tool:A.tool};
-  if(poseEdits[A.id]) poseEdits[id]=JSON.parse(JSON.stringify(poseEdits[A.id]));
+  SA().clips[id]=A.custom?Object.assign(JSON.parse(JSON.stringify(SA().clips[A.id])),{name}):{name,n:A.n,fps:Math.max(1,Math.round(A.fps)),base:A.id,follow:true,bf:0,tool:A.tool};
+  if(SA().edits[A.id]) SA().edits[id]=JSON.parse(JSON.stringify(SA().edits[A.id]));
   stId=id;
 }
 
@@ -726,7 +745,7 @@ function stDup(A){
 function stAddFrame(){
   const dup=!stCur().custom; stPush();
   if(dup) stDup(stCur());
-  const C=prClips[stCur().id]; if(C.n>=24) return;
+  const C=SA().clips[stCur().id]; if(C.n>=24) return;
   (C.still=C.still||[]).push(C.n); if(C.bfs) C.bfs.push(null); C.n++; stF=C.n-1; stPlay=false; stChanged(true); stPanels();
   if(dup) $('stProps').insertAdjacentHTML('afterbegin','<p class="note" style="color:#f5c518">Las animaciones del juego tienen sus fotogramas fijos: el nuevo está en esta copia.</p>');
 }
@@ -735,17 +754,18 @@ function stAddFrame(){
 function stFramesDo(fn,note){   // cambia la lista de fotogramas [pose de la base, retoques]; fn la modifica y dice cuál queda elegido
   const dup=!stCur().custom; stPush();
   if(dup) stDup(stCur());
-  const id=stCur().id, C=prClips[id], E=poseEdits[id]||{};
+  const id=stCur().id, C=SA().clips[id], E=SA().edits[id]||{};
   if(!C.bfs) C.bfs=Array.from({length:C.n},(_,f)=>prClipBase(C,f));
   const L=Array.from({length:C.n},(_,f)=>[C.bfs[f],E[f]]); stF=fn(L);
   C.n=L.length; C.bfs=L.map(q=>q[0]); C.still=C.bfs.map((v,f)=>v===null?f:-1).filter(f=>f>=0);
-  const NE={}; L.forEach((q,f)=>{ if(q[1]&&Object.keys(q[1]).length) NE[f]=q[1]; }); if(Object.keys(NE).length) poseEdits[id]=NE; else delete poseEdits[id];
+  const NE={}; L.forEach((q,f)=>{ if(q[1]&&Object.keys(q[1]).length) NE[f]=q[1]; }); if(Object.keys(NE).length) SA().edits[id]=NE; else delete SA().edits[id];
   stPlay=false; stChanged(true); stPanels();
   if(dup) $('stProps').insertAdjacentHTML('afterbegin','<p class="note" style="color:#f5c518">'+note+'</p>');
 }
 function stMoveFrame(i,j){ if(i!==j) stFramesDo(L=>{ L.splice(j,0,L.splice(i,1)[0]); return j; },'Las animaciones del juego tienen su orden fijo: el cambio está en esta copia.'); }
 function stDelFrame(i){ if(stCur().n>1) stFramesDo(L=>{ L.splice(i,1); return Math.min(i,L.length-1); },'Las animaciones del juego tienen sus fotogramas fijos: se ha quitado en esta copia.'); }   // Ctrl+Z lo recupera
 function stPanels(){ stWho(); stLeft(); stRight(); stCtl(); stDirty=true; stStripDirty=true; }
+const stCopyBtn=()=>'<div class="row">'+ch('⇄ COPIAR AL '+(stWhoSel.gender==='f'?'MASCULINO':'FEMENINO'),false,'data-p="other" title="Cada modelo tiene sus propias animaciones: esto copia la que ves al otro"')+'</div>';
 function stLeft(){
   const A=stCur();
   $('stList').innerHTML=stAnims().map(a=>'<div class="lrow">'+ch((a.custom?'✎ ':'')+stEsc(a.name)+' <small>'+a.n+' fot.</small>',a.id===A.id,'data-anim="'+a.id+'"')
@@ -757,12 +777,12 @@ function stLeft(){
     +'<div class="note">Parte de la pose de:</div><div class="row">'+ST_BASE.map(([nm,m])=>ch(nm,A.base===m,'data-p="base" data-v="'+m+'"')).join('')+'</div>'
     +(A.base?'<div class="row">'+ch('SIGUE SUS PASOS',A.follow,'data-p="follow" title="Encendido: recorre los fotogramas de esa animación; apagado: parte siempre de su primera pose"')+'</div>':'')
     +'<div class="note">Herramienta en la mano:</div><div class="row">'+ST_TOOLS.map(([k,txt])=>ch(txt,(A.tool||'')===k,'data-p="tool" data-v="'+k+'"')).join('')+'</div>'
-    +'<div class="row">'+ch('⧉ DUPLICAR',false,'data-p="dup"')+ch('🗑 BORRAR',false,'data-p="del"')+'</div>'
+    +'<div class="row">'+ch('⧉ DUPLICAR',false,'data-p="dup"')+ch('🗑 BORRAR',false,'data-p="del"')+'</div>'+stCopyBtn()
     +'<p class="note">Animación nueva: queda guardada para engancharla al juego (cavar, regar, picar…).</p>'
-   :'<p class="note">Animación del juego: lo que retoques aquí lo hace el piloto en el juego. Para probar una variante sin tocarla, duplícala.</p><div class="row">'+ch('⧉ DUPLICAR COMO NUEVA',false,'data-p="dup"')+'</div>';
+   :'<p class="note">Animación del juego: lo que retoques aquí lo hace el piloto en el juego. Para probar una variante sin tocarla, duplícala.</p><div class="row">'+ch('⧉ DUPLICAR COMO NUEVA',false,'data-p="dup"')+'</div>'+stCopyBtn();
 }
 function stRight(){
-  const A=stCur(), D=poseD(A.id,stFr());
+  const A=stCur(), D=poseD(A.id,stFr(),SA());
   $('stJoints').innerHTML=stJointIds(A).map(([id,txt,ax])=>ch(txt,id===stJoint,'data-j="'+id+'"',ax.some(([k])=>D[k])?' ed':'')).join('');
   $('stActs').innerHTML=ch('⇉ ESTE HUESO EN TODOS',false,'data-a="all" title="Copia el giro de esta articulación a todos los fotogramas"')+ch('↺ HUESO',false,'data-a="joint"')+ch('↺ FOTOGRAMA',false,'data-a="frame"')
     +ch('↺ ANIMACIÓN',false,'data-a="anim"')+ch('📋 COPIAR POSE',false,'data-a="copy"')+ch('📥 PEGAR POSE',false,'data-a="paste"',stCopy?'':' dis');
@@ -770,7 +790,7 @@ function stRight(){
   if(!stJointIds(A).some(j=>j[0]===stJoint)) stJoint='armR';
   $('stAxes').innerHTML=DEV_JOINTS.find(j=>j[0]===stJoint)[2].map(([k,txt])=>{ const v=Math.round((D[k]||0)*180/Math.PI);
     return '<label class="sl">'+txt+'<input type="range" data-pk="'+k+'" min="-180" max="180" step="1" value="'+v+'"><output>'+v+'°</output></label>'; }).join('');
-  $('stGrip').innerHTML=DEV_GRIP.map(([k,txt,a,b,s,raw])=>{ const v=raw?toolGrip[k]:Math.round(toolGrip[k]*180/Math.PI);
+  $('stGrip').innerHTML=DEV_GRIP.map(([k,txt,a,b,s,raw])=>{ const v=raw?SA().grip[k]:Math.round(SA().grip[k]*180/Math.PI);
     return '<label class="sl">'+txt+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'"><output>'+v+(raw?'':'°')+'</output></label>'; }).join('');
 }
 function stCtl(){
@@ -783,18 +803,19 @@ function stStep(s){ const n=stCur().n; stPlay=false; stF=(stFr()+s+n)%n; stCtl()
 function stTogglePlay(){ stPlay=!stPlay; if(!stPlay){ stF=stFr(); stRight(); } stCtl(); stDirty=true; }
 
 /* ---------- eventos ---------- */
-$('stWho').addEventListener('click',e=>{ const b=e.target.closest('[data-w]'); if(!b) return; const [k,v]=ST_WHO[+b.dataset.w]; stWhoSel[k]=v; stPanels(); });
+$('stWho').addEventListener('click',e=>{ const b=e.target.closest('[data-w]'); if(!b) return; const [k,v]=ST_WHO[+b.dataset.w]; stWhoSel[k]=v; if(!stAnims().some(a=>a.id===stId)) stId=0; stF=0; stPanels(); });
 function stDelClip(id){   // solo las animaciones nuevas (las del juego no tienen botón); se puede deshacer con Ctrl+Z
-  const C=prClips[id]; if(!C||!confirm('¿Borrar la animación «'+C.name+'»? (Ctrl+Z la recupera)')) return;
-  stPush(); delete prClips[id]; delete poseEdits[id]; if(stId===id){ stId=0; stF=0; } stChanged(true); stPanels();
+  const C=SA().clips[id]; if(!C||!confirm('¿Borrar la animación «'+C.name+'»? (Ctrl+Z la recupera)')) return;
+  stPush(); delete SA().clips[id]; delete SA().edits[id]; if(stId===id){ stId=0; stF=0; } stChanged(true); stPanels();
 }
 $('stList').addEventListener('click',e=>{ const d=e.target.closest('[data-del]'); if(d) return stDelClip(+d.dataset.del);
   const b=e.target.closest('[data-anim]'); if(!b) return; stId=+b.dataset.anim; stF=0; stPanels(); });
-$('stNew').onclick=()=>{ stPush(); const id=stNewId(); prClips[id]={name:'NUEVA '+(id-9),n:8,fps:8,base:0,follow:false,bf:0,tool:''}; stId=id; stF=0; stPlay=false; stChanged(true); stPanels(); };
+$('stNew').onclick=()=>{ stPush(); const id=stNewId(); SA().clips[id]={name:'NUEVA '+(id-9),n:8,fps:8,base:0,follow:false,bf:0,tool:''}; stId=id; stF=0; stPlay=false; stChanged(true); stPanels(); };
 $('stProps').addEventListener('click',e=>{
   const b=e.target.closest('[data-p]'); if(!b) return;
-  const A=stCur(), p=b.dataset.p, C=prClips[A.id];
+  const A=stCur(), p=b.dataset.p, C=SA().clips[A.id];
   if(p==='del') return stDelClip(A.id);
+  if(p==='other') return stCopyOther();
   stPush();
   if(p==='dup') stDup(A);
   else if(p==='n'){ C.n=clamp(C.n+ +b.dataset.v,1,24); C.still=(C.still||[]).filter(s=>s<C.n); stF=Math.min(stFr(),C.n-1);
@@ -806,7 +827,7 @@ $('stProps').addEventListener('click',e=>{
   stChanged(true); stPanels();
 });
 $('stProps').addEventListener('change',e=>{
-  if(e.target.id!=='stName') return; const C=prClips[stCur().id]; if(!C) return;
+  if(e.target.id!=='stName') return; const C=SA().clips[stCur().id]; if(!C) return;
   stPush(); C.name=e.target.value.trim().toUpperCase().slice(0,20)||'SIN NOMBRE'; stChanged(true); stPanels();
 });
 $('stJoints').addEventListener('click',e=>{ const b=e.target.closest('[data-j]'); if(b){ stJoint=b.dataset.j; stRight(); stDirty=true; } });
@@ -818,21 +839,21 @@ $('stAxes').addEventListener('input',e=>{
 });
 $('stGrip').addEventListener('input',e=>{
   const k=e.target.dataset.k; if(!k) return;
-  const raw=DEV_GRIP.find(q=>q[0]===k)[5], v=+e.target.value; toolGrip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°'); stChanged(true);
+  const raw=DEV_GRIP.find(q=>q[0]===k)[5], v=+e.target.value; SA().grip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°'); stChanged(true);
 });
-$('stGripReset').onclick=()=>{ stPush(); Object.assign(toolGrip,TOOL_GRIP_DEF); stChanged(true); stRight(); };
+$('stGripReset').onclick=()=>{ stPush(); Object.assign(SA().grip,TOOL_GRIP_DEF); stChanged(true); stRight(); };
 $('stActs').addEventListener('click',e=>{
   const b=e.target.closest('[data-a]'); if(!b) return;
-  const A=stCur(), f=stFr(), a=b.dataset.a, ax=DEV_JOINTS.find(j=>j[0]===stJoint)[2].map(q=>q[0]), E=poseEdits[A.id]||{};
-  if(a==='copy'){ stCopy=Object.assign({},poseD(A.id,f)); stRight(); return; }
+  const A=stCur(), f=stFr(), a=b.dataset.a, ax=DEV_JOINTS.find(j=>j[0]===stJoint)[2].map(q=>q[0]), E=SA().edits[A.id]||{};
+  if(a==='copy'){ stCopy=Object.assign({},poseD(A.id,f,SA())); stRight(); return; }
   if(a==='paste'&&!stCopy) return;
   if(a==='anim'&&!confirm('¿Quitar todos los retoques de «'+A.name+'»?')) return;
   stPush();
-  if(a==='all'){ const D=poseD(A.id,f); for(let i=0;i<A.n;i++){ const T=(poseEdits[A.id]=poseEdits[A.id]||{})[i]=poseEdits[A.id][i]||{}; for(const k of ax) T[k]=D[k]||0; } }
+  if(a==='all'){ const D=poseD(A.id,f,SA()); for(let i=0;i<A.n;i++){ const T=(SA().edits[A.id]=SA().edits[A.id]||{})[i]=SA().edits[A.id][i]||{}; for(const k of ax) T[k]=D[k]||0; } }
   else if(a==='joint'){ if(E[f]) for(const k of ax) delete E[f][k]; }
   else if(a==='frame') delete E[f];
-  else if(a==='anim') delete poseEdits[A.id];
-  else if(a==='paste') (poseEdits[A.id]=poseEdits[A.id]||{})[f]=Object.assign({},stCopy);
+  else if(a==='anim') delete SA().edits[A.id];
+  else if(a==='paste') (SA().edits[A.id]=SA().edits[A.id]||{})[f]=Object.assign({},stCopy);
   stChanged(true); stRight();
 });
 $('stCtl').addEventListener('click',e=>{
@@ -859,7 +880,7 @@ $('stStrip').addEventListener('click',e=>{ if(stStripMoved){ stStripMoved=false;
 $('stUndo').onclick=stUndo;
 $('stExport').onclick=()=>{
   stTidy(); const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,edits:poseEdits,grip:toolGrip,clips:prClips},null,1)],{type:'application/json'}));
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({v:2,m:ANIMS.m,f:ANIMS.f},null,1)],{type:'application/json'}));
   a.download='animaciones-isleforge.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 };
 $('stImport').onchange=async e=>{
@@ -904,8 +925,8 @@ addEventListener('keydown',e=>{
   if(e.target.type==='text'||(e.target.type==='range'&&e.key.startsWith('Arrow'))) return;
   const k=e.key.toLowerCase(), mod=e.ctrlKey||e.metaKey, A=stCur();
   if(mod&&k==='z'){ e.preventDefault(); stUndo(); }
-  else if(mod&&k==='c'){ stCopy=Object.assign({},poseD(A.id,stFr())); stRight(); }
-  else if(mod&&k==='v'){ if(stCopy){ stPush(); (poseEdits[A.id]=poseEdits[A.id]||{})[stFr()]=Object.assign({},stCopy); stChanged(true); stRight(); } }
+  else if(mod&&k==='c'){ stCopy=Object.assign({},poseD(A.id,stFr(),SA())); stRight(); }
+  else if(mod&&k==='v'){ if(stCopy){ stPush(); (SA().edits[A.id]=SA().edits[A.id]||{})[stFr()]=Object.assign({},stCopy); stChanged(true); stRight(); } }
   else if(k===' '){ e.preventDefault(); stTogglePlay(); }
   else if(k==='arrowleft'){ e.preventDefault(); stStep(-1); }
   else if(k==='arrowright'){ e.preventDefault(); stStep(1); }
@@ -924,7 +945,7 @@ function stLoop(now){
   requestAnimationFrame(stLoop);
 }
 /* Al abrir: las animaciones guardadas; la primera vez, las que ya tenía la partida (sin tocarla) */
-{ const A=animRead(); if(A) animApply(A); else { Object.assign(toolGrip,save.toolGrip||{}); for(const m in save.poseEdits||{}) poseEdits[m]=save.poseEdits[m]; animWrite(); } }
+animInit();
 $('stGame').href=/github\.io$/.test(location.hostname)?'./':'ISLEFORGE.html';
 stPanels(); requestAnimationFrame(stLoop);
 

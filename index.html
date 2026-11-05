@@ -11859,9 +11859,8 @@ function prCamera(deg){
 }
 const PM={suit:1,band:2,pocket:3,helm:4,helmD:5,skin:6,eye:7,lens:8,belt:10,buckle:11,glove:12,boot:13,sole:14,pack:15,metal:16,patch:17,mouth:18,led:19,hair:20,lips:21,blush:22,eyeW:23,inside:24,teeth:25,brow:26,seam:27,wood:28,edge:29,steel:30};
 const PR_SWING=48;   // lo que dura un golpe de herramienta
-/* Cómo lleva la herramienta: se edita a mano en el MENÚ DEV (p9v_tools.js) y se guarda en save.toolGrip. Ángulos en radianes */
+/* Cómo lleva la herramienta (cada modelo el suyo: ANIMS[..].grip), se edita en el MENÚ DEV y en el ESTUDIO. Ángulos en radianes */
 const TOOL_GRIP_DEF={grip:0,size:1,twist:0,lat:0,rest:0.4,up:1.25,hit:0.1,armUp:2.9,armHit:1.1};
-const toolGrip=Object.assign({},TOOL_GRIP_DEF);
 const PR_GLOSS=new Set([PM.helm,PM.lens,PM.metal,PM.boot,PM.buckle,PM.edge]), PR_GLOW=new Set([PM.patch,PM.led]);
 const PR_FLAT=new Set([PM.eye,PM.eyeW,PM.brow,PM.mouth,PM.lips,PM.inside,PM.teeth]);   // los rasgos de la cara no se aclaran con el sol: si no, se borran
 const PR_SMAX=4, prCache={}, prCvs={}, prArea=PR_W*PR_H*PR_SMAX*PR_SMAX;
@@ -11881,16 +11880,20 @@ function prClear(q,s,r,g,pz,sway){
 }
 /* Huesos de una pose. mode: 0 parado, 1 andar, 2 correr; ph: fase del paso (0..1); br: respiración (0/1).
    Ejes del muñeco: x a su lado, y hacia delante, z arriba, con el suelo en z=0 */
-/* RETOQUES A MANO (editor de poses del MENÚ DEV): poseEdits[modo][fotograma] = {articulación: ángulo extra en radianes}.
-   Se suman a la pose calculada, así que sin retoques el muñeco se mueve igual que siempre */
-const poseEdits={}, PR_NOD={};
-const poseD=(mode,f)=>(poseEdits[mode]&&poseEdits[mode][f])||PR_NOD;
-/* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): prClips[modo] = {name, n fotogramas, fps, base (0-3: la
+/* ANIMACIONES DE CADA MODELO: el masculino y el femenino tienen las suyas, independientes. En cada uno:
+   · edits[modo][fotograma] = {articulación: ángulo extra en radianes}: retoques a mano que se suman a la pose calculada
+     (sin retoques el muñeco se mueve igual que siempre);
+   · grip: cómo lleva el hacha; · clips: sus animaciones nuevas.
+   Los androides (cuerpo neutro) usan las del masculino. */
+const PR_NOD={}, ANIMS={m:{edits:{},grip:Object.assign({},TOOL_GRIP_DEF),clips:{}},f:{edits:{},grip:Object.assign({},TOOL_GRIP_DEF),clips:{}}};
+const animOf=g=>ANIMS[g.sex==='f'?'f':'m'];
+const poseD=(mode,f,A=ANIMS.m)=>(A.edits[mode]&&A.edits[mode][f])||PR_NOD;
+/* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): ANIMS[..].clips[modo] = {name, n fotogramas, fps, base (0-3: la
    animación del juego de la que parte), follow (true: recorre los pasos de la base; false: se queda en su fotograma bf), tool,
    still (fotogramas SIN ANIMAR: de pie y quieto, solo con sus retoques; los demás se reparten los pasos de la base),
    bfs (si existe, manda: de qué fotograma de la base parte cada uno, null = sin animar; aparece al reordenarlos)}.
-   Sus modos empiezan en 10 y sus poses son retoques de poseEdits, como los de las animaciones del juego. */
-const prClips={}, PR_BASE_N=[2,8,8,8];
+   Sus modos empiezan en 10 y sus poses son retoques (edits), como los de las animaciones del juego. */
+const PR_BASE_N=[2,8,8,8];
 function prClipBase(C,f){   // de qué fotograma de la base parte el fotograma f de una animación nueva (null = sin animar)
   if(C.bfs&&f<C.bfs.length) return C.bfs[f];
   const S=C.still||[]; if(S.includes(f)) return null;
@@ -11898,22 +11901,24 @@ function prClipBase(C,f){   // de qué fotograma de la base parte el fotograma f
   return C.follow?Math.floor(k*PR_BASE_N[C.base]/na):C.bf||0;
 }
 function prPoseOf(mode,f,g){
-  const C=prClips[mode]; if(!C) return prPose(mode,mode?f/8:0,mode?0:f,g,poseD(mode,f));
-  const b0=prClipBase(C,f); if(b0===null) return prPose(0,0,0,g,poseD(mode,f));
+  const A=animOf(g), C=A.clips[mode], D=poseD(mode,f,A); if(!C) return prPose(mode,mode?f/8:0,mode?0:f,g,D);
+  const b0=prClipBase(C,f); if(b0===null) return prPose(0,0,0,g,D);
   const m=C.base, b=b0%PR_BASE_N[m];
-  return prPose(m,m?b/8:0,m?0:b,g,poseD(mode,f));
+  return prPose(m,m?b/8:0,m?0:b,g,D);
 }
 /* Las animaciones (retoques, agarre del hacha y animaciones nuevas) se guardan aparte de la partida, en ANIM_KEY: así el
    estudio y el juego las comparten sin pisarse la partida */
-const ANIM_KEY='isleforge_anim_v1';
+const ANIM_KEY='isleforge_anim_v1';   // v:2 = {m:{..}, f:{..}}; v:1 (una para todos) se copia a los dos al leerla
 function animRead(){ try{ return JSON.parse(localStorage.getItem(ANIM_KEY)); }catch(e){ return null; } }
-function animWrite(){ try{ localStorage.setItem(ANIM_KEY,JSON.stringify({v:1,edits:poseEdits,grip:toolGrip,clips:prClips})); }catch(e){} }
+function animWrite(){ try{ localStorage.setItem(ANIM_KEY,JSON.stringify({v:2,m:ANIMS.m,f:ANIMS.f})); }catch(e){} }
 function animApply(A){
-  for(const k in poseEdits) delete poseEdits[k]; Object.assign(poseEdits,A.edits||{});
-  Object.assign(toolGrip,TOOL_GRIP_DEF,A.grip||{});
-  for(const k in prClips) delete prClips[k]; Object.assign(prClips,A.clips||{});
+  for(const s of ['m','f']){ const S=JSON.parse(JSON.stringify(A.v===2?A[s]||{}:A)), T=ANIMS[s];   // copia: los dos modelos nunca comparten datos
+    for(const k in T.edits) delete T.edits[k]; Object.assign(T.edits,S.edits||{});
+    for(const k in T.clips) delete T.clips[k]; Object.assign(T.clips,S.clips||{});
+    Object.assign(T.grip,TOOL_GRIP_DEF,S.grip||{}); }
   for(const q in prCache) delete prCache[q];
 }
+function animInit(){ const A=animRead(); if(A) animApply(A); else { animApply({edits:save.poseEdits,grip:save.toolGrip}); animWrite(); } }   // la primera vez, lo que tenía la partida, para los dos
 /* Las articulaciones que se pueden girar a mano (id, nombre, [clave del retoque, nombre del eje]), los huesos que se dibujan
    entre ellas y los valores del agarre del hacha: los usan el MENÚ DEV (p9v_tools.js) y el ESTUDIO (e1_estudio.js) */
 const DEV_JOINTS=[['body','Tronco',[['body.lean','Inclinar']]],['head','Cabeza',[['head.yaw','Girar'],['head.pitch','Asentir']]],
@@ -11940,7 +11945,7 @@ function prPose(mode,ph,br,g,D=PR_NOD){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5+B*Math.sin(p));   // sube, baja de golpe y vuelve. Al andar, cada brazo va al revés que su pierna (antes iba con ella) y dobla el codo al ir hacia delante
+    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=animOf(g).grip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5+B*Math.sin(p));   // sube, baja de golpe y vuelve. Al andar, cada brazo va al revés que su pierna (antes iba con ella) y dobla el codo al ir hacia delante
     const e=(chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16)+dv('elbow'+sd), [sy,sz]=up(0,15.8+br*0.4);
     const ab=dv('arm'+sd+'.ab'), ca=Math.cos(ab), sa=Math.sin(ab);   // ab: abre el brazo hacia su lado
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow+s*sa*UA,sy+Math.sin(a)*UA*ca,sz-Math.cos(a)*UA*ca], c=a+e, q=g.arm;
@@ -11951,7 +11956,7 @@ function prPose(mode,ph,br,g,D=PR_NOD){
     return {sh,el,ha,c};
   };
   // el mango respecto al antebrazo, y hacia qué lado va el filo: al golpear baja por delante, con el filo en cabeza; en reposo cuelga
-  const G=toolGrip, tk=mode===3?(ph<0.45?G.up:ph<0.7?lerp(G.up,G.hit,(ph-0.45)/0.25):lerp(G.hit,G.up,(ph-0.7)/0.3)):G.rest;
+  const G=animOf(g).grip, tk=mode===3?(ph<0.45?G.up:ph<0.7?lerp(G.up,G.hit,(ph-0.45)/0.25):lerp(G.hit,G.up,(ph-0.7)/0.3)):G.rest;
   return {pz,L,R,up,sway,lean,AL:arm(-1,th+Math.PI),AR:arm(1,th),br,tk:tk+dv('tool.ang'),ts:mode===3?-1:1,D};
 }
 /* Las piezas del muñeco: cápsulas de a a b con radios ra y rb. f elige el material según el punto de la superficie;
@@ -11973,7 +11978,7 @@ const prGenCache={};
 function prGen(pal){
   const id=(pal.key?pal.gender:'n')+(pal.build==null?1:pal.build); if(prGenCache[id]) return prGenCache[id];
   const g=PR_GEN[id[0]], b=PR_BUILD[+id[1]], T=g.loft;
-  return prGenCache[id]=Object.assign({},g,{
+  return prGenCache[id]=Object.assign({},g,{sex:id[0],
     sh:g.sh*b.chest, hip:g.hip*b.hip, stance:g.stance*b.hip, arm:g.arm*b.arm, hand:g.hand*b.end, boot:g.boot*b.end, nk:g.nk*Math.sqrt(b.chest), h:g.h*b.h,
     loft:[[T[0][0],T[0][1]*b.hip,T[0][2]*b.hip],[T[1][0],T[1][1]*b.waist,T[1][2]*b.waist],[T[2][0],T[2][1]*b.chest,T[2][2]*b.chest],[T[3][0],T[3][1]*b.chest,T[3][2]*b.chest]],
     th:g.th.map(v=>v*b.leg), cf:g.cf.map(v=>v*b.leg), seat:g.seat&&[g.seat[0]*b.hip,g.seat[1],g.seat[2],g.seat[3]*b.leg], cw:b.chest, hw:b.hip, hd:b.head});
@@ -12077,7 +12082,7 @@ function prParts(pal,P,yaw,expr,h){
     cap([H.ha[0]-s*1.8,H.ha[1]+1.6,H.ha[2]-0.6],[H.ha[0]-s*1.9,H.ha[1]+2,H.ha[2]-2],g.hand*0.36,g.hand*0.32,PM.glove);   // el pulgar
   }
   if(pal.tool){   // el mango sale de la mano según el antebrazo; lat lo inclina a un lado, twist gira el filo sobre el mango, grip corre la mano por el mango
-    grp=5; const G=toolGrip, c=AR.c+P.tk, q=P.ts, cl=Math.cos(G.lat), sl=Math.sin(G.lat)*(AR.sh[0]<0?-1:1);
+    grp=5; const G=animOf(g).grip, c=AR.c+P.tk, q=P.ts, cl=Math.cos(G.lat), sl=Math.sin(G.lat)*(AR.sh[0]<0?-1:1);
     const dir=[sl,Math.sin(c)*cl,-Math.cos(c)*cl], s0=[0,q*Math.cos(c),q*Math.sin(c)];
     const x=[dir[1]*s0[2]-dir[2]*s0[1],dir[2]*s0[0]-dir[0]*s0[2],dir[0]*s0[1]-dir[1]*s0[0]], tw=G.twist+(P.D['tool.twist']||0), ct=Math.cos(tw), st=Math.sin(tw);
     const side=[0,1,2].map(i=>s0[i]*ct+x[i]*st), base=[0,1,2].map(i=>AR.ha[i]-dir[i]*G.grip*G.size);
@@ -12925,48 +12930,49 @@ devEl('devDir').addEventListener('input',e=>{ devDir=+e.target.value; renderDev(
 devEl('devCam').addEventListener('input',e=>devCamSet(+e.target.value));
 devEl('btnToolDev').onclick=()=>{ S.pickup(); openDev(); };
 
-/* EDITAR CÓMO LLEVA EL HACHA: cada barra cambia un valor de toolGrip (p9r_person.js); se ve en vivo y se guarda */
+/* EDITAR CÓMO LLEVA EL HACHA: cada barra cambia un valor del agarre del modelo del piloto (ANIMS, p9r_person.js); se ve en vivo y se guarda */
+const devA=()=>animOf(prGen(devPal||PILOT_PAL));   // las animaciones del modelo (masculino o femenino) de tu piloto
 let devDirty=false;
-Object.assign(toolGrip,save.toolGrip||{});
 function devGripHtml(){
-  return DEV_GRIP.map(([k,t,a,b,s,raw])=>{ const v=raw?toolGrip[k]:Math.round(toolGrip[k]*180/Math.PI);
+  return DEV_GRIP.map(([k,t,a,b,s,raw])=>{ const G=devA().grip, v=raw?G[k]:Math.round(G[k]*180/Math.PI);
     return '<label>'+t+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'"><output>'+v+(raw?'':'°')+'</output></label>'; }).join('');
 }
-function devGripChanged(){ for(const q in prCache) delete prCache[q]; save.toolGrip=Object.assign({},toolGrip); saveSave(); animWrite(); devDirty=true; }
+function devGripChanged(){ for(const q in prCache) delete prCache[q]; animWrite(); devDirty=true; }
 devEl('devGrip').addEventListener('input',e=>{
   const k=e.target.dataset.k; if(!k) return;
   const raw=DEV_GRIP.find(d=>d[0]===k)[5], v=+e.target.value;
-  toolGrip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°');
+  devA().grip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°');
   devGripChanged();
 });
 devEl('devMenu').addEventListener('click',e=>{
   const b=e.target.closest('[data-g],[data-l]'); if(!b) return;
   if(b.dataset.l){ save.pencil=!save.pencil; saveSave(); devDirty=true; return; }
-  if(b.dataset.g==='reset'){ Object.assign(toolGrip,TOOL_GRIP_DEF); devGripChanged(); devEl('devGrip').innerHTML=devGripHtml(); }
-  else { const txt=JSON.stringify(toolGrip,(k,v)=>typeof v==='number'?+v.toFixed(3):v); try{ navigator.clipboard.writeText(txt); }catch(err){} b.textContent='✔ COPIADO'; setTimeout(()=>{ b.textContent='📋 COPIAR VALORES'; },1500); }
+  if(b.dataset.g==='reset'){ Object.assign(devA().grip,TOOL_GRIP_DEF); devGripChanged(); devEl('devGrip').innerHTML=devGripHtml(); }
+  else { const txt=JSON.stringify(devA().grip,(k,v)=>typeof v==='number'?+v.toFixed(3):v); try{ navigator.clipboard.writeText(txt); }catch(err){} b.textContent='✔ COPIADO'; setTimeout(()=>{ b.textContent='📋 COPIAR VALORES'; },1500); }
 });
 
 /* EDITOR DE POSES: como el modo pose de Blender. Eliges una articulación (o pulsas su punto en el muñeco) y la giras arrastrando
-   o con sus barras; el retoque se guarda solo para este fotograma de esta animación (poseEdits en p9r_person.js, y en save.poseEdits)
+   o con sus barras; el retoque se guarda solo para este fotograma de esta animación (en las animaciones del modelo del piloto: ANIMS, p9r_person.js)
    y se ve también en el juego. La tira de abajo marca con borde discontinuo los fotogramas retocados. */
 let devJoint='armR', devDrag=null;
-{ const A=animRead(); if(A) animApply(A); else { for(const m in save.poseEdits||{}) poseEdits[m]=save.poseEdits[m]; animWrite(); } }   // viven aparte de la partida: las comparte el ESTUDIO (estudio.html)
+animInit();   // viven aparte de la partida: las comparte el ESTUDIO (estudio.html)
 addEventListener('storage',e=>{ if(e.key===ANIM_KEY){ const A=animRead(); if(A){ animApply(A); devDirty=true; } } });   // retocadas en el estudio (otra pestaña): se ven aquí al momento
 const devMode=()=>DEV_ANIM[devAnim][1], devFr=()=>Math.floor(devF)%DEV_ANIM[devAnim][2];
-const devFrameEd=(m,f)=>!!(poseEdits[m]&&poseEdits[m][f]&&Object.keys(poseEdits[m][f]).length);
-function devGetD(){ const m=devMode(), f=devFr(); return ((poseEdits[m]=poseEdits[m]||{})[f]=poseEdits[m][f]||{}); }
+const devFrameEd=(m,f)=>{ const E=devA().edits; return !!(E[m]&&E[m][f]&&Object.keys(E[m][f]).length); };
+function devGetD(){ const m=devMode(), f=devFr(), E=devA().edits; return ((E[m]=E[m]||{})[f]=E[m][f]||{}); }
 function devPoseSaved(){
+  const poseEdits=devA().edits;
   for(const m in poseEdits){ for(const f in poseEdits[m]){ const D=poseEdits[m][f]; for(const k in D) if(Math.abs(D[k])<1e-4) delete D[k]; if(!Object.keys(D).length) delete poseEdits[m][f]; } if(!Object.keys(poseEdits[m]).length) delete poseEdits[m]; }
-  save.poseEdits=JSON.parse(JSON.stringify(poseEdits)); saveSave(); animWrite();
+  animWrite();
   for(const q in prCache) delete prCache[q];
   devDirty=true;
 }
 function devAxesHtml(){
-  const J=DEV_JOINTS.find(j=>j[0]===devJoint), D=poseD(devMode(),devFr());
+  const J=DEV_JOINTS.find(j=>j[0]===devJoint), D=poseD(devMode(),devFr(),devA());
   return J[2].map(([k,t])=>{ const v=Math.round((D[k]||0)*180/Math.PI); return '<label>'+t+'<input type="range" data-pk="'+k+'" min="-180" max="180" step="1" value="'+v+'"><output>'+v+'°</output></label>'; }).join('');
 }
 function renderPoseEd(){
-  const m=devMode(), f=devFr(), D=poseD(m,f);
+  const m=devMode(), f=devFr(), D=poseD(m,f,devA());
   devEl('devJoints').innerHTML=DEV_JOINTS.map(([id,t,ax])=>'<button class="lkChip'+(id===devJoint?' on':'')+(ax.some(a=>D[a[0]])?' ed':'')+'" data-j="'+id+'">'+t+'</button>').join('');
   devEl('devAxes').innerHTML=devAxesHtml();
   [...devEl('devStrip').children].forEach((c,i)=>c.classList.toggle('ed',devFrameEd(m,i)));
@@ -13003,13 +13009,13 @@ devEl('devAxes').addEventListener('input',e=>{
 devEl('devMenu').addEventListener('click',e=>{
   const b=e.target.closest('[data-j],[data-pe]'); if(!b) return;
   if(b.dataset.j){ devJoint=b.dataset.j; renderDev(); return; }
-  const m=devMode(), f=devFr(), ax=DEV_JOINTS.find(j=>j[0]===devJoint)[2].map(a=>a[0]), A=poseEdits[m]||{};
+  const m=devMode(), f=devFr(), ax=DEV_JOINTS.find(j=>j[0]===devJoint)[2].map(a=>a[0]), poseEdits=devA().edits, A=poseEdits[m]||{};
   const act=b.dataset.pe;
-  if(act==='all'){ const D=poseD(m,f); for(let i=0;i<DEV_ANIM[devAnim][2];i++){ const T=(poseEdits[m]=poseEdits[m]||{})[i]=poseEdits[m][i]||{}; for(const k of ax) T[k]=D[k]||0; } }
+  if(act==='all'){ const D=poseD(m,f,devA()); for(let i=0;i<DEV_ANIM[devAnim][2];i++){ const T=(poseEdits[m]=poseEdits[m]||{})[i]=poseEdits[m][i]||{}; for(const k of ax) T[k]=D[k]||0; } }
   else if(act==='joint'){ if(A[f]) for(const k of ax) delete A[f][k]; }
   else if(act==='frame'){ delete A[f]; }
   else if(act==='anim'){ delete poseEdits[m]; }
-  else { try{ navigator.clipboard.writeText(JSON.stringify(save.poseEdits||{})); }catch(err){} b.textContent='✔ COPIADO'; setTimeout(()=>{ b.textContent='📋 COPIAR POSES'; },1500); return; }
+  else { try{ navigator.clipboard.writeText(JSON.stringify(devA().edits)); }catch(err){} b.textContent='✔ COPIADO'; setTimeout(()=>{ b.textContent='📋 COPIAR POSES'; },1500); return; }
   S.tick(); devPoseSaved();
 });
 
