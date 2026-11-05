@@ -32,6 +32,8 @@
   #stStrip canvas{ flex:0 0 auto; width:64px; height:72px; image-rendering:pixelated; background:#121b28; border:2px solid var(--border); border-radius:4px; cursor:pointer; }
   #stStrip canvas.ed{ border-style:dashed; border-color:var(--cyan); }
   #stStrip canvas.on{ border-color:var(--gold); }
+  #stStrip canvas.ghost{ outline:2px dotted #b06cff; outline-offset:2px; }   /* el que se ve de piel de cebolla */
+  select.ch option{ color:var(--text); background:#0d1420; }
   #stStrip canvas.still{ background:#1d2416; }   /* sin animar */
   #stStrip .fr{ position:relative; flex:0 0 auto; }
   .frDel{ position:absolute; top:3px; right:3px; display:none; width:20px; height:20px; padding:0; font:700 12px var(--font-body); line-height:18px; color:#fff; background:#a8323a; border:1px solid #ff4757; border-radius:3px; cursor:pointer; }
@@ -602,7 +604,7 @@ const ST_BASE=[['PARADO',0,2,2/88*60],['ANDAR',1,8,8/19.2*60],['CORRER',2,8,8/20
 const ST_VIEWS=[['3/4',3,20],['FRENTE',0,0],['PERFIL',4,0],['ESPALDA',8,10],['ARRIBA',3,90],['JUEGO',3,35]];   // nombre, hacia dónde mira (0-16) y altura de la cámara
 const ST_SPEED=[0.25,0.5,1,2], ST_S=4, ST_TOOLS=[['','NINGUNA'],['hacha','HACHA']];
 const V={d:3,el:20,zoom:1,px:0,py:0};   // la vista: rumbo (16 = una vuelta), altura de la cámara, zoom y desplazamiento
-let stId=0, stF=0, stPlay=false, stSpeed=2, stJoint='armR', stDrag=null, stSliding=false, stOnion=true, stDirty=true, stStripDirty=true, stStripT=0, stLast=0, stSaveT=0, stCopy=null, stSkel=false;
+let stId=0, stF=0, stPlay=false, stSpeed=2, stJoint='armR', stDrag=null, stSliding=false, stOnion=true, stDirty=true, stStripDirty=true, stStripT=0, stLast=0, stSaveT=0, stCopy=null, stSkel=false, stOnionMode='prev';   // piel de cebolla: 'prev' (el anterior), 'next' (el siguiente) o el número de un fotograma
 const stUndoL=[], stPals={};
 const stEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ch=(txt,on,attr,extra='')=>'<button class="ch'+(on?' on':'')+extra+'" '+attr+'>'+txt+'</button>';
@@ -650,7 +652,7 @@ function stRender(){
     const T=stXf(w,h), Wp=PR_W*ST_S*T.k, Hp=PR_H*ST_S*T.k, K=ST_S*T.k;
     stGrid(g,T,d);
     g.fillStyle='rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(T.fx,T.fy,11*K,Math.max(1,7*K*prCamSE),0,0,Math.PI*2); g.fill();
-    const pf=(f-1+A.n)%A.n, onion=stOnion&&!stPlay&&A.n>1&&!(stDrag&&stDrag.kind!=='joint');
+    const pf=stOnionF(A,f), onion=stOnion&&!stPlay&&pf!==f&&!(stDrag&&stDrag.kind!=='joint');
     if(stSkel){ if(onion){ g.globalAlpha=0.3; stSkelDraw(g,T,A,pf,d,true); g.globalAlpha=1; } stSkelDraw(g,T,A,f,d,false); }   // solo los huesos: sin el cuerpo
     else { if(onion){ g.globalAlpha=0.3; g.drawImage(stPose(A,pf,d),T.x0,T.y0,Wp,Hp); g.globalAlpha=1; } g.drawImage(stPose(A,f,d),T.x0,T.y0,Wp,Hp); }
     if(!stPlay) stJointsDraw(g,T,A,f,d);
@@ -703,7 +705,8 @@ function stStrip(){
   finally{ prRes=ST_S; prSkyFix=null; }
   stMark();
 }
-function stMark(){ const A=stCur(), f=stFr(), E=SA().edits[A.id]||{}, C=SA().clips[A.id]; $('stStrip').querySelectorAll('canvas').forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('still',!!C&&prClipBase(C,i)===null); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
+function stOnionF(A,f){ const n=A.n, k=+stOnionMode; return stOnionMode==='next'?(f+1)%n:stOnionMode!=='prev'&&k<n?k:(f-1+n)%n; }   // qué fotograma se ve detrás
+function stMark(){ const g=stOnionF(stCur(),stFr()), A=stCur(), f=stFr(), E=SA().edits[A.id]||{}, C=SA().clips[A.id]; $('stStrip').querySelectorAll('canvas').forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('ghost',stOnion&&i===g&&i!==f); c.classList.toggle('still',!!C&&prClipBase(C,i)===null); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
 
 /* ---------- datos: deshacer, guardar ---------- */
 function stGetD(){ const A=stCur(), f=stFr(); return ((SA().edits[A.id]=SA().edits[A.id]||{})[f]=SA().edits[A.id][f]||{}); }
@@ -809,7 +812,9 @@ function stRight(){
 function stCtl(){
   $('stCtl').innerHTML=ch('◀',false,'data-c="prev" title="Fotograma anterior (←)"')+ch(stPlay?'⏸ PAUSA':'▶ REPRODUCIR',stPlay,'data-c="play" title="Espacio"')+ch('▶',false,'data-c="next" title="Fotograma siguiente (→)"')
     +'<span class="gap"></span>'+ST_SPEED.map((v,i)=>ch('×'+v,i===stSpeed,'data-c="sp" data-v="'+i+'"')).join('')
-    +'<span class="gap"></span>'+ch('🧅 PIEL DE CEBOLLA',stOnion,'data-c="onion" title="El fotograma anterior se ve en transparente detrás"')
+    +'<span class="gap"></span>'+ch('🧅 PIEL DE CEBOLLA',stOnion,'data-c="onion" title="Otro fotograma se ve en transparente detrás (en la tira, con borde morado)"')
+    +'<select id="stOnionSel" class="ch" title="Qué fotograma se ve detrás">'+[['prev','EL ANTERIOR'],['next','EL SIGUIENTE']].concat(Array.from({length:stCur().n},(_,i)=>[String(i),'EL FOTOGRAMA '+(i+1)]))
+      .map(([v,txt])=>'<option value="'+v+'"'+(v===stOnionMode?' selected':'')+'>'+txt+'</option>').join('')+'</select>'
     +ch('🦴 SOLO ESQUELETO',stSkel,'data-c="skel" title="Oculta el cuerpo y deja los huesos: izquierda azul, derecha naranja (tecla H)"');
   $('stViews').innerHTML=ST_VIEWS.map(([txt],i)=>ch(txt,false,'data-v="'+i+'"')).join('');
 }
@@ -870,10 +875,11 @@ $('stActs').addEventListener('click',e=>{
   else if(a==='paste') (SA().edits[A.id]=SA().edits[A.id]||{})[f]=Object.assign({},stCopy);
   stChanged(true); stRight();
 });
+$('stCtl').addEventListener('change',e=>{ if(e.target.id!=='stOnionSel') return; stOnionMode=e.target.value; stOnion=true; stCtl(); stMark(); stDirty=true; });
 $('stCtl').addEventListener('click',e=>{
   const b=e.target.closest('[data-c]'); if(!b) return; const c=b.dataset.c;
   if(c==='prev') return stStep(-1); if(c==='next') return stStep(1); if(c==='play') return stTogglePlay();
-  if(c==='sp') stSpeed=+b.dataset.v; else if(c==='onion') stOnion=!stOnion; else if(c==='skel') stSkel=!stSkel;
+  if(c==='sp') stSpeed=+b.dataset.v; else if(c==='onion'){ stOnion=!stOnion; stMark(); } else if(c==='skel') stSkel=!stSkel;
   stCtl(); stDirty=true;
 });
 $('stViews').addEventListener('click',e=>{ const b=e.target.closest('[data-v]'); if(!b) return; const [,d,el]=ST_VIEWS[+b.dataset.v]; V.d=d; V.el=el; stDirty=true; });
