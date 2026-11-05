@@ -90,14 +90,15 @@ function shade(hex,amt){
   return '#'+[f(r),f(g),f(b)].map(v=>clamp(v,0,255).toString(16).padStart(2,'0')).join('');
 }
 
-/* ===================== PERSONAS EN 3D (personaje v0.3) =====================
+/* ===================== PERSONAS EN 3D (personaje v0.4) =====================
    El piloto y los androides de la base son un muñeco 3D hecho de esferas, con huesos que respiran, andan y corren. Cada pose se
    pinta en píxeles desde la cámara de la base y se guarda: de cada píxel, hacia dónde mira su superficie y de qué material es.
    Lo que se calcula cada fotograma es solo la LUZ (sol o luna de verdad, color del cielo, farolas y balizas). Por eso gira en
    16 direcciones, le da el sol por el lado que toca y el rojo del helipuerto le tiñe al pasar. Su sombra sale de sus huesos.
-   Mide unas 5,3 cabezas: proporciones de adulto. Las versiones anteriores siguen en sprites/personaje (0.1 a mano, 0.2 con 3,4 cabezas)
-   y en las etiquetas personaje-v0.1 y personaje-v0.2 de git. */
+   Mide unas 5,2 cabezas: proporciones de adulto. Las versiones anteriores siguen en sprites/personaje (0.1 a mano, 0.2 con 3,4 cabezas)
+   y en las etiquetas personaje-v0.1 a personaje-v0.3 de git (0.3: cuello más largo y la nariz de ella escondida). */
 const PR_W=92, PR_H=104, PR_OX=46, PR_OY=84;              // lienzo de una pose y dónde caen los pies
+const PR_HEADZ=28;   // altura del centro de la cabeza (v0.3: 29,2; con el cuello tan largo parecía Candace)
 const PR_STEP=[9.2,14.8];   // cuánto crece u.walk en una vuelta de piernas, andando y corriendo: a este ritmo el pie apoyado no resbala (tools/prueba_poses.py)
 const PR_SE=0.57, PR_CE=0.82;                            // la cámara mira desde 35° sobre el horizonte
 /* La cámara de ahora: la de la base o la que elijas en las vistas previas (TU PILOTO y MENÚ DEV), de 0° (a su altura) a 90°
@@ -330,14 +331,14 @@ function prParts(pal,P,yaw,expr,h){
   }
   grp=1;
   // cuello y solapas del traje, abiertas por delante
-  const n=pt(0,0,18.4+br*0.3), nr=g.nk+0.7;
+  const n=pt(0,0,18.9+br*0.3), nr=g.nk+0.7;   // el cuello del traje, algo más alto: tapa la base del cuello
   cap(pt(0,0,16),pt(0,0.3,24),g.nk,g.nk*0.92,pilot?PM.skin:PM.metal);
   for(let i=0;i<16;i++){ const a=i/16*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a); if(sa>0.86) continue; const q=[n[0]+ca*nr,n[1]+sa*nr,n[2]]; cap(q,q,1.1,1.1,pilot?PM.suit:PM.band); }
   // cabeza: esfera con casco, gafas y cara pintados según el punto; orejeras y gafas con relieve; yaw = hacia dónde mira
   // la cabeza se inclina hacia arriba solo cuando mira a la cámara, para que desde tan alto se le vea la cara: de lado o de espaldas
   // esa inclinación la haría mirar al cielo. Las medidas de la cara van en unidades de una cabeza de radio 9,4: hs la pasa a su tamaño
   yaw+=P.D['head.yaw']||0;
-  const HR=5.8*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h))*clamp(prCamSE/PR_SE,0,1.4)+(P.D['head.pitch']||0), hc=pt(0,0.8,29.2+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const HR=5.8*g.hd, hs=HR/9.4, pitch=0.1+0.43*Math.max(0,Math.cos(h))*clamp(prCamSE/PR_SE,0,1.4)+(P.D['head.pitch']||0), hc=pt(0,0.8,PR_HEADZ+br*0.5), cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
   const hp=(x,y,z)=>{ const yy=(y*cp-z*sp)*hs, zz=(y*sp+z*cp)*hs, xx=x*hs; return [hc[0]+xx*cy+yy*sy,hc[1]-xx*sy+yy*cy,hc[2]+zz]; };
   const hq=(x,y,z)=>{ const dx=x-hc[0], dy=y-hc[1], dz=z-hc[2], yy=dx*sy+dy*cy; return [(dx*cy-dy*sy)/hs,(yy*cp+dz*sp)/hs,(dz*cp-yy*sp)/hs]; };   // al revés: del mundo a la cabeza
   const headF=(x,y,z)=>{
@@ -368,7 +369,7 @@ function prParts(pal,P,yaw,expr,h){
   grp=4;
   cap(hp(0,0,1.2),hp(0,0,-3),HR,HR*g.jaw,PM.skin,headF);   // ovalada: arriba el cráneo, abajo la mandíbula
   if(pilot){
-    const ns=hp(0,fem?7.5:8.4,-3); cap(ns,ns,(fem?0.8:1.1)*hs,(fem?0.8:1.1)*hs,PM.skin);   // nariz
+    const ns=hp(0,fem?8.6:8.4,-3); cap(ns,ns,(fem?0.9:1.1)*hs,(fem?0.9:1.1)*hs,PM.skin);   // nariz: asoma de la cara (la de ella antes quedaba dentro de la cabeza)
     if(hd==='pelo'||hd==='gorra') for(const s of [-1,1]) cap(hp(s*8.6,1,-2),hp(s*8.6,1,-2),1.9*hs,1.9*hs,PM.skin);   // orejas
   }
   const hw=(x,y,z)=>[hc[0]+(x*cy+y*sy)*hs,hc[1]+(y*cy-x*sy)*hs,hc[2]+z*hs];   // lo que cuelga no se inclina con la cabeza
@@ -405,7 +406,7 @@ function prSmooth(BW,BH,R,dx,dy,edge){
 function prJoints(pal,d,mode,f,S){
   const g=prGen(pal), P=prPoseOf(mode,f,g), h=d/16*Math.PI*2, c=Math.cos(h), s=Math.sin(h);
   const V=q=>{ const wx=q[0]*c+q[1]*s, wy=-q[0]*s+q[1]*c; return [(PR_OX+wx)*S,(PR_OY+wy*prCamSE-q[2]*prCamCE)*S]; };
-  const hip=s0=>[s0*4*g.hip+P.sway,0,P.pz], [by,bz]=P.up(0,11), [hy,hz]=P.up(0.8,29.2);
+  const hip=s0=>[s0*4*g.hip+P.sway,0,P.pz], [by,bz]=P.up(0,11), [hy,hz]=P.up(0.8,PR_HEADZ);
   return {body:V([0,by,bz]),head:V([0,hy,hz]),armL:V(P.AL.sh),armR:V(P.AR.sh),elbowL:V(P.AL.el),elbowR:V(P.AR.el),handL:V(P.AL.ha),handR:V(P.AR.ha),
     legL:V(hip(-1)),legR:V(hip(1)),kneeL:V(P.L.knee),kneeR:V(P.R.knee),footL:V(P.L.ank),footR:V(P.R.ank),toeL:V(P.L.toe),toeR:V(P.R.toe),tool:V(P.AR.ha)};
 }
