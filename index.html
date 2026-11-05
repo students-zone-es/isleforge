@@ -11887,13 +11887,20 @@ const poseEdits={}, PR_NOD={};
 const poseD=(mode,f)=>(poseEdits[mode]&&poseEdits[mode][f])||PR_NOD;
 /* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): prClips[modo] = {name, n fotogramas, fps, base (0-3: la
    animación del juego de la que parte), follow (true: recorre los pasos de la base; false: se queda en su fotograma bf), tool,
-   still (fotogramas SIN ANIMAR: de pie y quieto, solo con sus retoques; los demás se reparten los pasos de la base)}.
+   still (fotogramas SIN ANIMAR: de pie y quieto, solo con sus retoques; los demás se reparten los pasos de la base),
+   bfs (si existe, manda: de qué fotograma de la base parte cada uno, null = sin animar; aparece al reordenarlos)}.
    Sus modos empiezan en 10 y sus poses son retoques de poseEdits, como los de las animaciones del juego. */
 const prClips={}, PR_BASE_N=[2,8,8,8];
+function prClipBase(C,f){   // de qué fotograma de la base parte el fotograma f de una animación nueva (null = sin animar)
+  if(C.bfs&&f<C.bfs.length) return C.bfs[f];
+  const S=C.still||[]; if(S.includes(f)) return null;
+  const k=f-S.filter(s=>s<f).length, na=Math.max(1,C.n-S.filter(s=>s<C.n).length);
+  return C.follow?Math.floor(k*PR_BASE_N[C.base]/na):C.bf||0;
+}
 function prPoseOf(mode,f,g){
   const C=prClips[mode]; if(!C) return prPose(mode,mode?f/8:0,mode?0:f,g,poseD(mode,f));
-  const S=C.still||[]; if(S.includes(f)) return prPose(0,0,0,g,poseD(mode,f));
-  const k=f-S.filter(s=>s<f).length, na=Math.max(1,C.n-S.filter(s=>s<C.n).length), m=C.base, b=C.follow?Math.floor(k*PR_BASE_N[m]/na):C.bf||0;
+  const b0=prClipBase(C,f); if(b0===null) return prPose(0,0,0,g,poseD(mode,f));
+  const m=C.base, b=b0%PR_BASE_N[m];
   return prPose(m,m?b/8:0,m?0:b,g,poseD(mode,f));
 }
 /* Las animaciones (retoques, agarre del hacha y animaciones nuevas) se guardan aparte de la partida, en ANIM_KEY: así el

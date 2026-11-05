@@ -33,6 +33,9 @@
   #stStrip canvas.ed{ border-style:dashed; border-color:var(--cyan); }
   #stStrip canvas.on{ border-color:var(--gold); }
   #stStrip canvas.still{ background:#1d2416; }   /* sin animar */
+  #stStrip canvas.drag{ opacity:.35; }
+  #stStrip canvas.insL{ box-shadow:-6px 0 0 -2px var(--gold); }   /* aquí caerá el fotograma que arrastras */
+  #stStrip canvas.insR{ box-shadow:6px 0 0 -2px var(--gold); }
   .stAdd{ flex:0 0 auto; width:64px; height:72px; font:700 30px var(--font-body); color:var(--text-dim); background:none; border:2px dashed var(--border); border-radius:4px; cursor:pointer; }
   .stAdd:hover{ color:var(--gold); border-color:var(--gold); }
   .ch{ padding:5px 9px; font-family:var(--font-body); font-size:13.5px; font-weight:700; color:var(--text-dim); background:#0d1420; border:1px solid var(--border); border-radius:3px; cursor:pointer; text-decoration:none; }
@@ -71,7 +74,7 @@
   <div id="stHint">Arrastra el fondo: girar la cámara (↔ alrededor, ↕ altura) · Rueda: acercar · Clic derecho, botón central o Mayús + arrastrar: mover · Doble clic: centrar · Arrastra un punto: girar esa articulación</div></section>
 <aside id="stRight"><h2>POSE DEL FOTOGRAMA</h2><div class="row" id="stJoints"></div><div id="stAxes"></div><div class="row" id="stActs"></div>
   <h2>CÓMO LLEVA EL HACHA</h2><div id="stGrip"></div><div class="row"><button class="ch" id="stGripReset">↺ RESTABLECER</button></div>
-  <p class="note">Todo se guarda solo, en este navegador. El juego lo usa al abrirse (y al momento si ya está abierto en otra pestaña). EXPORTAR guarda una copia en un archivo. Teclas: Espacio reproducir · ← → fotograma · Ctrl+Z deshacer · Ctrl+C / Ctrl+V copiar y pegar la pose.</p></aside>
+  <p class="note">Todo se guarda solo, en este navegador. El juego lo usa al abrirse (y al momento si ya está abierto en otra pestaña). EXPORTAR guarda una copia en un archivo. Teclas: Espacio reproducir · ← → fotograma · Ctrl+Z deshacer · Ctrl+C / Ctrl+V copiar y pegar la pose. Arrastra un fotograma de la tira para cambiarlo de sitio.</p></aside>
 <footer id="stTime"><div id="stCtl"></div><div id="stStrip"></div></footer>
 <script>
 (function(){
@@ -140,13 +143,20 @@ const poseEdits={}, PR_NOD={};
 const poseD=(mode,f)=>(poseEdits[mode]&&poseEdits[mode][f])||PR_NOD;
 /* ANIMACIONES NUEVAS (las crea el ESTUDIO DE ANIMACIÓN, estudio.html): prClips[modo] = {name, n fotogramas, fps, base (0-3: la
    animación del juego de la que parte), follow (true: recorre los pasos de la base; false: se queda en su fotograma bf), tool,
-   still (fotogramas SIN ANIMAR: de pie y quieto, solo con sus retoques; los demás se reparten los pasos de la base)}.
+   still (fotogramas SIN ANIMAR: de pie y quieto, solo con sus retoques; los demás se reparten los pasos de la base),
+   bfs (si existe, manda: de qué fotograma de la base parte cada uno, null = sin animar; aparece al reordenarlos)}.
    Sus modos empiezan en 10 y sus poses son retoques de poseEdits, como los de las animaciones del juego. */
 const prClips={}, PR_BASE_N=[2,8,8,8];
+function prClipBase(C,f){   // de qué fotograma de la base parte el fotograma f de una animación nueva (null = sin animar)
+  if(C.bfs&&f<C.bfs.length) return C.bfs[f];
+  const S=C.still||[]; if(S.includes(f)) return null;
+  const k=f-S.filter(s=>s<f).length, na=Math.max(1,C.n-S.filter(s=>s<C.n).length);
+  return C.follow?Math.floor(k*PR_BASE_N[C.base]/na):C.bf||0;
+}
 function prPoseOf(mode,f,g){
   const C=prClips[mode]; if(!C) return prPose(mode,mode?f/8:0,mode?0:f,g,poseD(mode,f));
-  const S=C.still||[]; if(S.includes(f)) return prPose(0,0,0,g,poseD(mode,f));
-  const k=f-S.filter(s=>s<f).length, na=Math.max(1,C.n-S.filter(s=>s<C.n).length), m=C.base, b=C.follow?Math.floor(k*PR_BASE_N[m]/na):C.bf||0;
+  const b0=prClipBase(C,f); if(b0===null) return prPose(0,0,0,g,poseD(mode,f));
+  const m=C.base, b=b0%PR_BASE_N[m];
   return prPose(m,m?b/8:0,m?0:b,g,poseD(mode,f));
 }
 /* Las animaciones (retoques, agarre del hacha y animaciones nuevas) se guardan aparte de la partida, en ANIM_KEY: así el
@@ -605,7 +615,7 @@ function stAnims(){
 const stCur=()=>stAnims().find(a=>a.id===stId)||stAnims()[0];
 const stFr=()=>Math.floor(stF)%stCur().n;
 const stD=()=>(Math.round(V.d*4)/4%16+16)%16;   // 64 rumbos: girar es suave y cada pose se puede guardar
-const stExpr=A=>A.id===3?'enfado':'normal';
+const stExpr=A=>(A.custom?A.base:A.id)===3?'enfado':'normal';   // la cara de esfuerzo de TALAR también en las que parten de ella
 function stPose(A,f,d){ const pal=stPal(A.tool||''); return prRender(prBuild(pal,d,A.id,f,0,stExpr(A)),pal,prLight({x:0,y:0}),false); }
 function stCam(fn){ const e=Math.round(V.el); prCamera(e===35?null:e); try{ return fn(); } finally { prCamera(null); } }   // la cámara elegida solo vale aquí dentro
 /* De la pose (px de su lienzo) a la pantalla: k = px de pantalla por px de pose; los pies en (fx, fy). El muñeco queda centrado
@@ -660,14 +670,14 @@ function stHit(x,y){   // ¿hay una articulación bajo el puntero?
 /* La tira de fotogramas (siempre desde la misma vista, para compararlos): borde dorado = el actual, discontinuo = retocado */
 function stStrip(){
   const A=stCur(), st=$('stStrip');
-  if(st.dataset.k!==A.id+'|'+A.n){ st.dataset.k=A.id+'|'+A.n; st.innerHTML=Array.from({length:A.n},(_,i)=>'<canvas width="'+PR_W*2+'" height="'+PR_H*2+'" data-f="'+i+'" title="Fotograma '+(i+1)+'"></canvas>').join('')
+  if(st.dataset.k!==A.id+'|'+A.n){ st.dataset.k=A.id+'|'+A.n; st.innerHTML=Array.from({length:A.n},(_,i)=>'<canvas width="'+PR_W*2+'" height="'+PR_H*2+'" data-f="'+i+'" title="Fotograma '+(i+1)+' · arrástralo para cambiarlo de sitio"></canvas>').join('')
     +(A.n<24?'<button class="stAdd" title="Añadir un fotograma SIN ANIMAR: de pie y quieto, para posarlo a mano">+</button>':''); }
   prRes=2; prSkyFix=ST_SKY;
   try{ st.querySelectorAll('canvas').forEach((c,i)=>{ const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); g.drawImage(stPose(A,i,3),0,0); }); }
   finally{ prRes=ST_S; prSkyFix=null; }
   stMark();
 }
-function stMark(){ const A=stCur(), f=stFr(), E=poseEdits[A.id]||{}, Q=A.still||[]; $('stStrip').querySelectorAll('canvas').forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('still',Q.includes(i)); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
+function stMark(){ const A=stCur(), f=stFr(), E=poseEdits[A.id]||{}, C=prClips[A.id]; $('stStrip').querySelectorAll('canvas').forEach((c,i)=>{ c.classList.toggle('on',i===f); c.classList.toggle('still',!!C&&prClipBase(C,i)===null); c.classList.toggle('ed',!!(E[i]&&Object.keys(E[i]).length)); }); }
 
 /* ---------- datos: deshacer, guardar ---------- */
 function stGetD(){ const A=stCur(), f=stFr(); return ((poseEdits[A.id]=poseEdits[A.id]||{})[f]=poseEdits[A.id][f]||{}); }
@@ -691,7 +701,8 @@ function stClean(A){
   for(const k in TOOL_GRIP_DEF) if(A.grip&&num(A.grip[k])) G[k]=A.grip[k];
   for(const id in A.clips||{}){ const c=A.clips[id]; if(!/^\d{2,3}$/.test(id)||+id<10||!c||typeof c!=='object') continue;
     C[id]={name:String(c.name||'SIN NOMBRE').slice(0,20),n:clamp(Math.round(+c.n)||8,1,24),fps:clamp(Math.round(+c.fps)||8,1,30),base:[0,1,2,3].includes(c.base)?c.base:0,
-      follow:!!c.follow,bf:clamp(Math.round(+c.bf)||0,0,7),tool:c.tool==='hacha'?'hacha':'',still:Array.isArray(c.still)?c.still.filter(s=>Number.isInteger(s)&&s>=0&&s<24).slice(0,24):[]}; }
+      follow:!!c.follow,bf:clamp(Math.round(+c.bf)||0,0,7),tool:c.tool==='hacha'?'hacha':'',still:Array.isArray(c.still)?c.still.filter(s=>Number.isInteger(s)&&s>=0&&s<24).slice(0,24):[]};
+    if(Array.isArray(c.bfs)) C[id].bfs=c.bfs.slice(0,24).map(v=>v===null?null:clamp(Math.round(+v)||0,0,7)); }
   return {edits:E,grip:G,clips:C};
 }
 function stNewId(){ return Math.max(9,...Object.keys(prClips).map(Number))+1; }
@@ -709,8 +720,22 @@ function stAddFrame(){
   const dup=!stCur().custom; stPush();
   if(dup) stDup(stCur());
   const C=prClips[stCur().id]; if(C.n>=24) return;
-  (C.still=C.still||[]).push(C.n); C.n++; stF=C.n-1; stPlay=false; stChanged(true); stPanels();
+  (C.still=C.still||[]).push(C.n); if(C.bfs) C.bfs.push(null); C.n++; stF=C.n-1; stPlay=false; stChanged(true); stPanels();
   if(dup) $('stProps').insertAdjacentHTML('afterbegin','<p class="note" style="color:#f5c518">Las animaciones del juego tienen sus fotogramas fijos: el nuevo está en esta copia.</p>');
+}
+/* ARRASTRAR UN FOTOGRAMA en la tira lo cambia de sitio: se lleva sus retoques y la pose de la que parte (bfs). Las animaciones
+   del juego tienen su orden fijo, así que se reordena una copia */
+function stMoveFrame(i,j){
+  if(i===j) return;
+  const dup=!stCur().custom; stPush();
+  if(dup) stDup(stCur());
+  const id=stCur().id, C=prClips[id], E=poseEdits[id]||{};
+  if(!C.bfs) C.bfs=Array.from({length:C.n},(_,f)=>prClipBase(C,f));
+  const L=Array.from({length:C.n},(_,f)=>[C.bfs[f],E[f]]); L.splice(j,0,L.splice(i,1)[0]);
+  C.bfs=L.map(q=>q[0]); C.still=C.bfs.map((v,f)=>v===null?f:-1).filter(f=>f>=0);
+  const NE={}; L.forEach((q,f)=>{ if(q[1]&&Object.keys(q[1]).length) NE[f]=q[1]; }); if(Object.keys(NE).length) poseEdits[id]=NE; else delete poseEdits[id];
+  stF=j; stPlay=false; stChanged(true); stPanels();
+  if(dup) $('stProps').insertAdjacentHTML('afterbegin','<p class="note" style="color:#f5c518">Las animaciones del juego tienen su orden fijo: el cambio está en esta copia.</p>');
 }
 function stPanels(){ stWho(); stLeft(); stRight(); stCtl(); stDirty=true; stStripDirty=true; }
 function stLeft(){
@@ -759,10 +784,11 @@ $('stProps').addEventListener('click',e=>{
   stPush();
   if(p==='dup') stDup(A);
   else if(p==='del'){ delete prClips[A.id]; delete poseEdits[A.id]; stId=0; stF=0; }
-  else if(p==='n'){ C.n=clamp(C.n+ +b.dataset.v,1,24); C.still=(C.still||[]).filter(s=>s<C.n); stF=Math.min(stFr(),C.n-1); }
+  else if(p==='n'){ C.n=clamp(C.n+ +b.dataset.v,1,24); C.still=(C.still||[]).filter(s=>s<C.n); stF=Math.min(stFr(),C.n-1);
+    if(C.bfs){ while(C.bfs.length<C.n) C.bfs.push(C.bfs[C.bfs.length-1]??0); C.bfs.length=C.n; } }   // reordenada: el nuevo repite la pose del último
   else if(p==='fps') C.fps=clamp(C.fps+ +b.dataset.v,1,30);
-  else if(p==='base'){ C.base=+b.dataset.v; C.follow=C.base>0&&C.follow; }
-  else if(p==='follow') C.follow=!C.follow;
+  else if(p==='base'){ C.base=+b.dataset.v; C.follow=C.base>0&&C.follow; delete C.bfs; }
+  else if(p==='follow'){ C.follow=!C.follow; delete C.bfs; }   // otra base: los pasos se vuelven a repartir en orden (los quietos siguen quietos)
   else if(p==='tool') C.tool=b.dataset.v;
   stChanged(true); stPanels();
 });
@@ -803,7 +829,19 @@ $('stCtl').addEventListener('click',e=>{
   stCtl(); stDirty=true;
 });
 $('stViews').addEventListener('click',e=>{ const b=e.target.closest('[data-v]'); if(!b) return; const [,d,el]=ST_VIEWS[+b.dataset.v]; V.d=d; V.el=el; stDirty=true; });
-$('stStrip').addEventListener('click',e=>{ if(e.target.closest('.stAdd')) return stAddFrame(); const c=e.target.closest('canvas'); if(!c) return; stPlay=false; stF=+c.dataset.f; stCtl(); stRight(); stMark(); stDirty=true; });
+/* arrastrar en la tira: el fotograma se ve transparente y una raya dorada marca dónde caerá */
+let stSDrag=null;
+$('stStrip').addEventListener('pointerdown',e=>{ const c=e.target.closest('canvas'); if(!c||e.button) return; stSDrag={i:+c.dataset.f,x:e.clientX,on:false,to:+c.dataset.f}; c.setPointerCapture(e.pointerId); });
+$('stStrip').addEventListener('pointermove',e=>{
+  if(!stSDrag) return; if(!stSDrag.on&&Math.abs(e.clientX-stSDrag.x)<6) return; stSDrag.on=true;
+  const cs=[...$('stStrip').querySelectorAll('canvas')]; let p=cs.length; cs.forEach((c,k)=>{ const r=c.getBoundingClientRect(); if(p===cs.length&&e.clientX<r.left+r.width/2) p=k; });
+  cs.forEach((c,k)=>{ c.classList.toggle('drag',k===stSDrag.i); c.classList.toggle('insL',k===p); c.classList.toggle('insR',p===cs.length&&k===cs.length-1); });
+  stSDrag.to=p>stSDrag.i?p-1:p;
+});
+$('stStrip').addEventListener('pointerup',()=>{ const d=stSDrag; stSDrag=null; if(!d||!d.on) return;
+  $('stStrip').querySelectorAll('canvas').forEach(c=>c.classList.remove('drag','insL','insR')); stStripMoved=true; setTimeout(()=>{ stStripMoved=false; },0); stMoveFrame(d.i,d.to); });
+let stStripMoved=false;   // el clic que llega al soltar un arrastre no selecciona nada
+$('stStrip').addEventListener('click',e=>{ if(stStripMoved){ stStripMoved=false; return; } if(e.target.closest('.stAdd')) return stAddFrame(); const c=e.target.closest('canvas'); if(!c) return; stPlay=false; stF=+c.dataset.f; stCtl(); stRight(); stMark(); stDirty=true; });
 $('stUndo').onclick=stUndo;
 $('stExport').onclick=()=>{
   stTidy(); const a=document.createElement('a');
