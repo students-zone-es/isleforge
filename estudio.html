@@ -48,6 +48,9 @@
   .row{ display:flex; gap:4px; flex-wrap:wrap; margin:5px 0; }
   .list{ display:flex; flex-direction:column; gap:4px; }
   .list .ch{ text-align:left; }
+  .lrow{ display:flex; gap:4px; }
+  .lrow .ch:first-child{ flex:1; }
+  .lrow [data-del]:hover{ color:#fff; background:#a8323a; border-color:#ff4757; }
   label.sl{ display:grid; grid-template-columns:100px 1fr 44px; align-items:center; gap:6px; margin:3px 0; font-size:13px; font-weight:700; color:var(--text-dim); }
   label.sl input{ width:100%; accent-color:var(--cyan); }
   label.sl output{ text-align:right; color:#fff; }
@@ -196,7 +199,7 @@ function prPose(mode,ph,br,g,D=PR_NOD){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5-B*Math.sin(p));   // sube, baja de golpe y vuelve
+    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5+B*Math.sin(p));   // sube, baja de golpe y vuelve. Al andar, cada brazo va al revés que su pierna (antes iba con ella) y dobla el codo al ir hacia delante
     const e=(chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16)+dv('elbow'+sd), [sy,sz]=up(0,15.8+br*0.4);
     const ab=dv('arm'+sd+'.ab'), ca=Math.cos(ab), sa=Math.sin(ab);   // ab: abre el brazo hacia su lado
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow+s*sa*UA,sy+Math.sin(a)*UA*ca,sz-Math.cos(a)*UA*ca], c=a+e, q=g.arm;
@@ -740,7 +743,8 @@ function stMoveFrame(i,j){
 function stPanels(){ stWho(); stLeft(); stRight(); stCtl(); stDirty=true; stStripDirty=true; }
 function stLeft(){
   const A=stCur();
-  $('stList').innerHTML=stAnims().map(a=>ch((a.custom?'✎ ':'')+stEsc(a.name)+' <small>'+a.n+' fot.</small>',a.id===A.id,'data-anim="'+a.id+'"')).join('');
+  $('stList').innerHTML=stAnims().map(a=>'<div class="lrow">'+ch((a.custom?'✎ ':'')+stEsc(a.name)+' <small>'+a.n+' fot.</small>',a.id===A.id,'data-anim="'+a.id+'"')
+    +(a.custom?ch('✕',false,'data-del="'+a.id+'" title="Borrar esta animación"'):'')+'</div>').join('');   // las del juego no se pueden borrar
   $('stProps').innerHTML=A.custom?'<h2>AJUSTES</h2>'
     +'<label class="fld">NOMBRE <input type="text" id="stName" maxlength="20" value="'+stEsc(A.name)+'"></label>'
     +'<div class="fld">FOTOGRAMAS '+ch('−',false,'data-p="n" data-v="-1"')+'<b>'+A.n+'</b>'+ch('+',false,'data-p="n" data-v="1"')+'</div>'
@@ -775,15 +779,19 @@ function stTogglePlay(){ stPlay=!stPlay; if(!stPlay){ stF=stFr(); stRight(); } s
 
 /* ---------- eventos ---------- */
 $('stWho').addEventListener('click',e=>{ const b=e.target.closest('[data-w]'); if(!b) return; const [k,v]=ST_WHO[+b.dataset.w]; stWhoSel[k]=v; stPanels(); });
-$('stList').addEventListener('click',e=>{ const b=e.target.closest('[data-anim]'); if(!b) return; stId=+b.dataset.anim; stF=0; stPanels(); });
+function stDelClip(id){   // solo las animaciones nuevas (las del juego no tienen botón); se puede deshacer con Ctrl+Z
+  const C=prClips[id]; if(!C||!confirm('¿Borrar la animación «'+C.name+'»? (Ctrl+Z la recupera)')) return;
+  stPush(); delete prClips[id]; delete poseEdits[id]; if(stId===id){ stId=0; stF=0; } stChanged(true); stPanels();
+}
+$('stList').addEventListener('click',e=>{ const d=e.target.closest('[data-del]'); if(d) return stDelClip(+d.dataset.del);
+  const b=e.target.closest('[data-anim]'); if(!b) return; stId=+b.dataset.anim; stF=0; stPanels(); });
 $('stNew').onclick=()=>{ stPush(); const id=stNewId(); prClips[id]={name:'NUEVA '+(id-9),n:8,fps:8,base:0,follow:false,bf:0,tool:''}; stId=id; stF=0; stPlay=false; stChanged(true); stPanels(); };
 $('stProps').addEventListener('click',e=>{
   const b=e.target.closest('[data-p]'); if(!b) return;
   const A=stCur(), p=b.dataset.p, C=prClips[A.id];
-  if(p==='del'&&!confirm('¿Borrar la animación «'+A.name+'»?')) return;
+  if(p==='del') return stDelClip(A.id);
   stPush();
   if(p==='dup') stDup(A);
-  else if(p==='del'){ delete prClips[A.id]; delete poseEdits[A.id]; stId=0; stF=0; }
   else if(p==='n'){ C.n=clamp(C.n+ +b.dataset.v,1,24); C.still=(C.still||[]).filter(s=>s<C.n); stF=Math.min(stFr(),C.n-1);
     if(C.bfs){ while(C.bfs.length<C.n) C.bfs.push(C.bfs[C.bfs.length-1]??0); C.bfs.length=C.n; } }   // reordenada: el nuevo repite la pose del último
   else if(p==='fps') C.fps=clamp(C.fps+ +b.dataset.v,1,30);

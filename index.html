@@ -11940,7 +11940,7 @@ function prPose(mode,ph,br,g,D=PR_NOD){
   for(const G of [L,R]) for(const q of [G.knee,G.ank,G.toe]) q[2]+=pz;
   const up=(y,z)=>{ const q=z*g.h; return [y+q*Math.sin(lean),pz+q*Math.cos(lean)]; };   // lo de cintura para arriba se inclina al correr
   const arm=(s,p)=>{
-    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5-B*Math.sin(p));   // sube, baja de golpe y vuelve
+    const sd=s<0?'L':'R', chop=mode===3&&s>0, G=toolGrip, a=dv('arm'+sd+'.sw')+(chop?(ph<0.45?lerp(0.3,G.armUp,ph/0.45):ph<0.7?lerp(G.armUp,G.armHit,(ph-0.45)/0.25):lerp(G.armHit,0.3,(ph-0.7)/0.3)):lean*0.5+B*Math.sin(p));   // sube, baja de golpe y vuelve. Al andar, cada brazo va al revés que su pierna (antes iba con ella) y dobla el codo al ir hacia delante
     const e=(chop?0.3:run?1.55:walk?0.35+0.3*Math.max(0,Math.sin(p)):0.16)+dv('elbow'+sd), [sy,sz]=up(0,15.8+br*0.4);
     const ab=dv('arm'+sd+'.ab'), ca=Math.cos(ab), sa=Math.sin(ab);   // ab: abre el brazo hacia su lado
     const sh=[s*8.6*g.sh,sy,sz], el=[s*9.6*g.sh*g.elbow+s*sa*UA,sy+Math.sin(a)*UA*ca,sz-Math.cos(a)*UA*ca], c=a+e, q=g.arm;
