@@ -56,9 +56,12 @@
   .lrow{ display:flex; gap:4px; }
   .lrow .ch:first-child{ flex:1; }
   .lrow [data-del]:hover{ color:#fff; background:#a8323a; border-color:#ff4757; }
-  label.sl{ display:grid; grid-template-columns:100px 1fr 44px; align-items:center; gap:6px; margin:3px 0; font-size:13px; font-weight:700; color:var(--text-dim); }
+  label.sl{ display:grid; grid-template-columns:96px 1fr 62px; align-items:center; gap:6px; margin:3px 0; font-size:13px; font-weight:700; color:var(--text-dim); }
   label.sl input{ width:100%; accent-color:var(--cyan); }
-  label.sl output{ text-align:right; color:#fff; }
+  .nw{ display:flex; align-items:center; gap:2px; }
+  .nw input{ min-width:0; padding:2px 3px; font:700 13px var(--font-body); color:#fff; text-align:right; background:#0d1420; border:1px solid var(--border); border-radius:3px; }
+  .nw input:focus{ outline:none; border-color:var(--gold); }
+  .nw i{ font-style:normal; color:var(--text-dim); }
   .fld{ display:flex; align-items:center; gap:6px; margin:6px 0; font-size:13px; font-weight:700; color:var(--text-dim); }
   .fld input{ flex:1; min-width:0; padding:4px 6px; font:inherit; color:#fff; background:#0d1420; border:1px solid var(--border); border-radius:3px; }
   .fld b{ min-width:48px; text-align:center; color:#fff; }
@@ -805,9 +808,9 @@ function stRight(){
   if(stSliding) return;   // no rehacer la barra que estás moviendo
   if(!stJointIds(A).some(j=>j[0]===stJoint)) stJoint='armR';
   $('stAxes').innerHTML=DEV_JOINTS.find(j=>j[0]===stJoint)[2].map(([k,txt])=>{ const v=Math.round((D[k]||0)*180/Math.PI);
-    return '<label class="sl">'+txt+'<input type="range" data-pk="'+k+'" min="-180" max="180" step="1" value="'+v+'"><output>'+v+'°</output></label>'; }).join('');
+    return '<label class="sl">'+txt+'<input type="range" data-pk="'+k+'" min="-180" max="180" step="1" value="'+v+'">'+stNum('data-pk="'+k+'"',-180,180,1,v,1)+'</label>'; }).join('');
   $('stGrip').innerHTML=DEV_GRIP.map(([k,txt,a,b,s,raw])=>{ const v=raw?SA().grip[k]:Math.round(SA().grip[k]*180/Math.PI);
-    return '<label class="sl">'+txt+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'"><output>'+v+(raw?'':'°')+'</output></label>'; }).join('');
+    return '<label class="sl">'+txt+'<input type="range" data-k="'+k+'" min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'">'+stNum('data-k="'+k+'"',a,b,s,v,!raw)+'</label>'; }).join('');
 }
 function stCtl(){
   $('stCtl').innerHTML=ch('◀',false,'data-c="prev" title="Fotograma anterior (←)"')+ch(stPlay?'⏸ PAUSA':'▶ REPRODUCIR',stPlay,'data-c="play" title="Espacio"')+ch('▶',false,'data-c="next" title="Fotograma siguiente (→)"')
@@ -851,14 +854,28 @@ $('stProps').addEventListener('change',e=>{
 });
 $('stJoints').addEventListener('click',e=>{ const b=e.target.closest('[data-j]'); if(b){ stJoint=b.dataset.j; stRight(); stDirty=true; } });
 $('stRight').addEventListener('pointerdown',e=>{ if(e.target.type==='range'){ stPush(); stSliding=true; } });
-addEventListener('pointerup',()=>{ if(stSliding){ stSliding=false; stRight(); } });
+addEventListener('pointerup',()=>{ if(stSliding&&!stNumF){ stSliding=false; stRight(); } });
+/* LOS NÚMEROS se pueden escribir: cada barra lleva al lado su casilla con el valor (el de siempre, por defecto). Mientras escribes
+   no se rehace el panel; al primer cambio se guarda para deshacer y al salir de la casilla se ajusta a lo que admite la barra */
+const stNum=(attr,a,b,s,v,deg)=>'<span class="nw"><input type="number" '+attr+' min="'+a+'" max="'+b+'" step="'+s+'" value="'+v+'">'+(deg?'<i>°</i>':'')+'</span>';
+let stNumF=null;   // la casilla en la que estás escribiendo
+function stVal(el){   // el valor de la barra o de la casilla, dentro de lo que admite la barra; la otra se pone igual
+  const v=parseFloat(el.value); if(!isFinite(v)) return null;
+  const c=clamp(v,+el.min,+el.max); el.closest('label').querySelectorAll('input').forEach(i=>{ if(i!==el) i.value=c; });
+  if(el===stNumF&&!stNumF.pushed){ stPush(); stNumF.pushed=true; }
+  return c;
+}
+$('stRight').addEventListener('focusin',e=>{ if(e.target.type==='number'){ stNumF=e.target; stSliding=true; } });
+$('stRight').addEventListener('focusout',e=>{ if(e.target===stNumF){ stNumF=null; stSliding=false; stRight(); } });
+$('stRight').addEventListener('keydown',e=>{ if(e.target.type==='number'&&e.key==='Enter') e.target.blur(); });
 $('stAxes').addEventListener('input',e=>{
   const k=e.target.dataset.pk; if(!k) return;
-  stPlay=false; stGetD()[k]=+e.target.value*Math.PI/180; e.target.nextElementSibling.textContent=e.target.value+'°'; stChanged(false); stRight();
+  const v=stVal(e.target); if(v===null) return;
+  stPlay=false; stGetD()[k]=v*Math.PI/180; stChanged(false); stRight();
 });
 $('stGrip').addEventListener('input',e=>{
   const k=e.target.dataset.k; if(!k) return;
-  const raw=DEV_GRIP.find(q=>q[0]===k)[5], v=+e.target.value; SA().grip[k]=raw?v:v*Math.PI/180; e.target.nextElementSibling.textContent=v+(raw?'':'°'); stChanged(true);
+  const raw=DEV_GRIP.find(q=>q[0]===k)[5], v=stVal(e.target); if(v===null) return; SA().grip[k]=raw?v:v*Math.PI/180; stChanged(true);
 });
 $('stGripReset').onclick=()=>{ stPush(); Object.assign(SA().grip,TOOL_GRIP_DEF); stChanged(true); stRight(); };
 $('stActs').addEventListener('click',e=>{
@@ -942,7 +959,7 @@ stCv.addEventListener('wheel',e=>{   // acercar hacia el puntero: el punto bajo 
 },{passive:false});
 stCv.addEventListener('dblclick',()=>{ V.zoom=1; V.px=V.py=0; stDirty=true; });
 addEventListener('keydown',e=>{
-  if(e.target.type==='text'||(e.target.type==='range'&&e.key.startsWith('Arrow'))) return;
+  if(e.target.type==='text'||e.target.type==='number'||(e.target.type==='range'&&e.key.startsWith('Arrow'))) return;   // escribiendo un número, las teclas son suyas
   const k=e.key.toLowerCase(), mod=e.ctrlKey||e.metaKey, A=stCur();
   if(mod&&k==='z'){ e.preventDefault(); stUndo(); }
   else if(mod&&k==='c'){ stCopy=Object.assign({},poseD(A.id,stFr(),SA())); stRight(); }
