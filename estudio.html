@@ -66,7 +66,7 @@
   <label class="ch" title="Carga animaciones desde un archivo exportado">⬆ IMPORTAR<input type="file" id="stImport" accept=".json,application/json" hidden></label>
   <a class="ch" id="stGame" href="ISLEFORGE.html">← AL JUEGO</a>
 </header>
-<aside id="stLeft"><h2>ANIMACIONES</h2><div class="list" id="stList"></div><div class="row"><button class="ch" id="stNew">+ NUEVA ANIMACIÓN</button></div><div id="stProps"></div></aside>
+<aside id="stLeft"><h2>PERSONAJE</h2><div id="stWho"></div><h2>ANIMACIONES</h2><div class="list" id="stList"></div><div class="row"><button class="ch" id="stNew">+ NUEVA ANIMACIÓN</button></div><div id="stProps"></div></aside>
 <section id="stView"><canvas id="stCv"></canvas><div id="stViews"></div><div id="stInfo"></div>
   <div id="stHint">Arrastra el fondo: girar la cámara (↔ alrededor, ↕ altura) · Rueda: acercar · Clic derecho, botón central o Mayús + arrastrar: mover · Doble clic: centrar · Arrastra un punto: girar esa articulación</div></section>
 <aside id="stRight"><h2>POSE DEL FOTOGRAMA</h2><div class="row" id="stJoints"></div><div id="stAxes"></div><div class="row" id="stActs"></div>
@@ -586,12 +586,17 @@ const stEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;
 const ch=(txt,on,attr,extra='')=>'<button class="ch'+(on?' on':'')+extra+'" '+attr+'>'+txt+'</button>';
 
 /* El piloto con el aspecto de tu partida (y una copia con la herramienta en la mano) */
+/* PERSONAJE: los retoques valen para los dos cuerpos, así que aquí se cambia de género y de complexión para comprobar la
+   animación en cada uno (el resto del aspecto sale de tu partida) */
+const ST_WHO=[['gender','m','MASCULINO'],['gender','f','FEMENINO'],['build',0,'LIGERO'],['build',1,'NORMAL'],['build',2,'FUERTE']];
+const stWhoSel=Object.assign({gender:'m',build:1},save.look&&{gender:save.look.gender||'m',build:save.look.build??1});
 function stPal(tool){
-  if(stPals[tool]) return stPals[tool];
-  const k=Object.assign({},ST_LOOK,save.look);
-  return stPals[tool]={suit:k.suit,light:shade(k.suit,0.32),dark:shade(k.suit,-0.34),skin:k.skin,hair:k.hair,cap:k.helm,eye:'#1a1206',
-    gender:k.gender,head:k.head,goggles:k.goggles,beard:k.beard,build:k.build,key:'p'+k.gender+k.head+(+k.goggles)+(+k.beard)+k.build,tool};
+  const id=tool+'|'+stWhoSel.gender+stWhoSel.build; if(stPals[id]) return stPals[id];
+  const k=Object.assign({},ST_LOOK,save.look,stWhoSel), beard=k.gender==='m'&&k.beard;
+  return stPals[id]={suit:k.suit,light:shade(k.suit,0.32),dark:shade(k.suit,-0.34),skin:k.skin,hair:k.hair,cap:k.helm,eye:'#1a1206',
+    gender:k.gender,head:k.head,goggles:k.goggles,beard,build:k.build,key:'p'+k.gender+k.head+(+k.goggles)+(+beard)+k.build,tool};
 }
+function stWho(){ const b=(a,z)=>'<div class="row">'+ST_WHO.slice(a,z).map(([k,v,txt],i)=>ch(txt,stWhoSel[k]===v,'data-w="'+(a+i)+'"')).join('')+'</div>'; $('stWho').innerHTML=b(0,2)+b(2,5); }
 function stAnims(){
   return ST_BASE.map(([name,id,n,fps])=>({id,name,n,fps,tool:id===3?'hacha':'',custom:false}))
     .concat(Object.keys(prClips).map(Number).sort((a,b)=>a-b).map(id=>Object.assign({id,custom:true},prClips[id])));
@@ -706,7 +711,7 @@ function stAddFrame(){
   (C.still=C.still||[]).push(C.n); C.n++; stF=C.n-1; stPlay=false; stChanged(true); stPanels();
   if(dup) $('stProps').insertAdjacentHTML('afterbegin','<p class="note" style="color:#f5c518">Las animaciones del juego tienen sus fotogramas fijos: el nuevo está en esta copia.</p>');
 }
-function stPanels(){ stLeft(); stRight(); stCtl(); stDirty=true; stStripDirty=true; }
+function stPanels(){ stWho(); stLeft(); stRight(); stCtl(); stDirty=true; stStripDirty=true; }
 function stLeft(){
   const A=stCur();
   $('stList').innerHTML=stAnims().map(a=>ch((a.custom?'✎ ':'')+stEsc(a.name)+' <small>'+a.n+' fot.</small>',a.id===A.id,'data-anim="'+a.id+'"')).join('');
@@ -743,6 +748,7 @@ function stStep(s){ const n=stCur().n; stPlay=false; stF=(stFr()+s+n)%n; stCtl()
 function stTogglePlay(){ stPlay=!stPlay; if(!stPlay){ stF=stFr(); stRight(); } stCtl(); stDirty=true; }
 
 /* ---------- eventos ---------- */
+$('stWho').addEventListener('click',e=>{ const b=e.target.closest('[data-w]'); if(!b) return; const [k,v]=ST_WHO[+b.dataset.w]; stWhoSel[k]=v; stPanels(); });
 $('stList').addEventListener('click',e=>{ const b=e.target.closest('[data-anim]'); if(!b) return; stId=+b.dataset.anim; stF=0; stPanels(); });
 $('stNew').onclick=()=>{ stPush(); const id=stNewId(); prClips[id]={name:'NUEVA '+(id-9),n:8,fps:8,base:0,follow:false,bf:0,tool:''}; stId=id; stF=0; stPlay=false; stChanged(true); stPanels(); };
 $('stProps').addEventListener('click',e=>{
