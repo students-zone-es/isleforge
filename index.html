@@ -361,6 +361,7 @@
       </div>
       <div id="abilBar">
         <div class="abil" id="abF"><span class="k">F</span><span class="ic">👻</span><span class="cost">CAMUFLA</span><div class="cd"></div></div>
+        <div class="abil" id="abZ" title="Modo taladro del Centinela"><span class="k">Z</span><span class="ic">⛏️</span><span class="cost">TALADRO</span><div class="cd"></div></div>
         <div class="abil" id="abG"><span class="k">CLIC DER</span><span class="ic">💣</span><span class="cost">ARCO</span><div class="cd"></div></div>
         <div class="abil" id="abR"><span class="k">R</span><span class="ic">🤖</span><span class="cost">◆20</span><div class="cd"></div></div>
         <div class="abil" id="abV"><span class="k">V</span><span class="ic">⚡</span><span class="cost">◆15</span><div class="cd"></div></div>
@@ -454,7 +455,7 @@
 
     <div id="scrPause" class="overlay hidden">
       <h1 class="title" style="font-size:16px;">PAUSA</h1>
-      <p class="controls"><b>WASD</b> mover · <b>Ratón</b> apuntar · <b>Clic izq / Espacio</b> disparar · <b>Clic der / Shift</b> ataque en arco · <b>F</b> camuflaje · <b>R</b> evolucionar aliado · <b>E</b> mini-dron · <b>T</b> torreta · <b>Q</b> escuadra · <b>G</b> la escuadra escolta a los rehenes · <b>X</b> pedir el Orbe Vital (cada 40 s)</p>
+      <p class="controls"><b>WASD</b> mover · <b>Ratón</b> apuntar · <b>Clic izq / Espacio</b> disparar · <b>Clic der / Shift</b> ataque en arco · <b>F</b> camuflaje · <b>Z</b> modo taladro (Centinela) · <b>R</b> evolucionar aliado · <b>E</b> mini-dron · <b>T</b> torreta · <b>Q</b> escuadra · <b>G</b> la escuadra escolta a los rehenes · <b>X</b> pedir el Orbe Vital (cada 40 s)</p>
       <p class="controls">Consejos: los <b>VIGÍAS</b> (amarillos, con radar) avisan a todos si te ven. El <b>pasto alto</b> te esconde. Si un enemigo se queda solo o con menos de 10 de vida puede cargar un <b style="color:#c77dff">HOLLOW BOOM</b> (la prueba de lo que hace la Abyssalita): <b>si te toca, tu máquina queda destruida al instante</b>; mátalo antes o apártate de la franja morada. Con una escuadra (Q) y rehenes, pulsa <b>G</b>: la escuadra los lleva a la zona segura en sigilo y, si los descubren, uno o dos soldados distraen al enemigo. Lleva a los rehenes al Orbe Vital o a un helipuerto para subir el nivel de tu arma. En los mundos, destruye los <b style="color:#ff3df0">GENERADORES</b> para abrir cada compuerta. Puedes <b>volver atrás</b>, pero el enemigo pedirá <b style="color:#ff8a3a">refuerzos cada vez más fuertes</b> mientras retrocedes.</p>
       <div class="row" style="margin-top:8px;">
         <button class="btn small" id="btnResume">▶ CONTINUAR</button>
@@ -1833,7 +1834,8 @@ function updatePlayer(dt){
   if(p.recoil>0) p.recoil=Math.max(0,p.recoil-0.6*dt);
   if(p.fireCd>0) p.fireCd-=dt;
   if(p.burstN>0&&(p.burstT-=dt)<=0){ p.burstN--; p.burstT=BURST_GAP; firePlayerWeapon(true); }   // resto de la ráfaga «. . .»
-  if((keys[' ']||mouse.down) && p.fireCd<=0 && !stunned) firePlayerWeapon();
+  if((keys[' ']||mouse.down) && p.fireCd<=0 && !stunned && !p.drill) firePlayerWeapon();   // con el taladro puesto no dispara
+  if(p.drill && !stunned) mechDrill(p,dt);
   if(p.nadeCd>0) p.nadeCd-=dt;
   if((mouse.right||keys.shift) && p.nadeCd<=0 && !stunned && !p.noNade) throwGrenade();
   if(p.cloak>0){ p.cloak-=dt; if(p.cloak<=0){ p.cloak=0; p.cloakCd=p.cloakCdBase; S.uncloak(); popup(p.x,p.y-26,'VISIBLE','#8ea0b8',12); } }
@@ -4545,7 +4547,7 @@ function drawPlayer(){
   if(p.invuln>0 && Math.floor(t*0.4)%2===0) alpha*=0.45;
   ctx.save(); ctx.globalAlpha=alpha;
   if(p.hurtFlash>0) ctx.filter='brightness(2.2)';
-  if(p.ch.id==='mech') drawMech(p);
+  if(p.ch.id==='mech'){ drawMech(p); if(p.drill) drawMechDrill(p); }
   else if(p.ch.id==='tank') drawTankTier(p);
   else if(p.ch.id==='moto') drawPlayerMoto(p);
   else drawChacal(p);
@@ -5305,6 +5307,7 @@ function render(){
   drawSunShadowsTop();
   drawTrees(cx,cy);
   drawWorldTop(cx,cy);
+  drawFloodPoles();   // farolas gigantes de la arena del jefe (p9m_daynight.js)
   drawBullets();
   for(const en of enemies) if(en.alive&&en.air) drawEnemy(en);
   drawDrones();
@@ -8543,6 +8546,41 @@ function drawDriller(en){
     ctx.save(); ctx.font='bold 12px Rajdhani, monospace'; ctx.textAlign='left'; ctx.fillStyle='#000'; ctx.fillText('×'+n,en.x+2,y+5); ctx.fillStyle=MINERALS[min].col; ctx.fillText('×'+n,en.x+1,y+4); ctx.restore(); }
 }
 
+/* ===================== MODO TALADRO del CENTINELA (tecla Z) =====================
+   El mecha cambia el cañón por su minitaladro: no dispara, pero rompe las vetas mucho más deprisa que a tiros (suelta los
+   trozos igual) y taladra al enemigo que tenga delante. La punta va hacia donde mira el mecha. Solo el Centinela lo tiene */
+const MECH_DRILL={dep:5, enemy:12, dmg:4};   // fotogramas por golpe a una veta y a un enemigo, y daño por golpe (× tus mejoras de daño)
+function toggleDrill(){
+  const p=player; if(!p||!p.alive) return;
+  if(p.ch.id!=='mech'){ popup(p.x,p.y-30,'SOLO EL CENTINELA TIENE TALADRO','#8ea0b8',12); return; }
+  p.drill=!p.drill; p.drillT=0; p.drillTouch=false; S.tick();
+  popup(p.x,p.y-30,p.drill?'⛏ MODO TALADRO':'MODO CAÑÓN',p.drill?'#ffd76e':'#cfd6df',13);
+}
+function mechDrill(p,dt){
+  const a=p.body, reach=p.radius*1.6, tx=p.x+Math.cos(a)*reach, ty=p.y+Math.sin(a)*reach;
+  p.drillT=(p.drillT||0)+dt; let touch=false;
+  const d=depState().list.find(q=>q.alive&&Math.abs(q.x-tx)<TILE+4&&Math.abs(q.y-ty)<TILE+4);   // la veta que toca la punta
+  if(d){ touch=true; if(p.drillT>=MECH_DRILL.dep){ p.drillT=0; hitDeposit(d,1); } }
+  else for(const en of enemies){
+    if(!en.alive||en.air||Math.hypot(en.x-tx,en.y-ty)>en.radius+6) continue;
+    touch=true; if(p.drillT>=MECH_DRILL.enemy){ p.drillT=0; damageEnemy(en,MECH_DRILL.dmg*p.dmgMul,{src:p}); push(en,p.x,p.y,1.5); }
+    break;
+  }
+  if(touch&&Math.random()<0.7*dt) particles.push({x:tx+rand(-3,3),y:ty+rand(-3,3),vx:rand(-1.8,1.8),vy:rand(-2,0.5),life:12,maxLife:12,color:pick(['#ffd76e','#fff4c0','#ff9a3a']),size:2});
+  p.drillTouch=touch;
+}
+/* El taladro delante del mecha: cono de acero con su espiral, que gira deprisa cuando toca algo */
+function drawMechDrill(p){
+  const R=p.radius, spin=t*(p.drillTouch?0.9:0.3), x0=R*0.55, L=R*1.05, W2=R*0.34;
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.body);
+  ctx.fillStyle='#2a2f36'; ctx.fillRect(x0-3,-W2-1,5,W2*2+2);
+  ctx.fillStyle='#9aa0a8'; ctx.beginPath(); ctx.moveTo(x0,-W2); ctx.lineTo(x0+L,0); ctx.lineTo(x0,W2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#4a4e55'; ctx.lineWidth=1.5;
+  for(let i=0;i<4;i++){ const u=((i/4+spin*0.15)%1), x=x0+u*L, w=W2*(1-u); ctx.beginPath(); ctx.moveTo(x,-w); ctx.lineTo(x+L*0.12,w); ctx.stroke(); }
+  ctx.fillStyle='#ffd76e'; ctx.fillRect(x0+L-2,-1,2,2);
+  ctx.restore();
+}
+
 /* ===================== MUNDOS 3-5: PIEZAS COMUNES =====================
    - BANDOS: los bandidos (fac 'b') pelean contra los robots (fac 'r') y contra ti. Si te escondes,
      puedes dejar que se maten entre ellos (lo que mata un bando no te da puntos, pero sí suelta WORK).
@@ -10893,11 +10931,14 @@ function nightLights(){
     for(const [c,r] of homeLamps) L.push([c*TILE+15,r*TILE-4,95,0.95]);
     return L;
   }
-  const p=player;
-  if(p&&p.alive&&!p.lamp&&!p.carLights) L.push([p.x,p.y,140*dreadLightK(),1]);   // halo de luz (no con linterna ni con faros)
-  if(p&&p.alive&&p.lamp) L.push(...lampBeam(p));
-  if(p&&p.alive&&p.carLights) L.push(...headLights(p));
-  L.push(...enemyLamps());   // linternas enemigas (LED): también abren la oscuridad, con sus sombras
+  const p=player, fl=floodState(), lit=floodLit(fl);
+  if(fl) for(const [x,y,k] of fl) if(k>0) L.push([x,y+60,480,k]);   // farolas gigantes de la arena del jefe
+  if(!lit){   // con la arena iluminada se apagan las linternas portátiles (las tuyas y las de los enemigos)
+    if(p&&p.alive&&!p.lamp&&!p.carLights) L.push([p.x,p.y,140*dreadLightK(),1]);   // halo de luz (no con linterna ni con faros)
+    if(p&&p.alive&&p.lamp) L.push(...lampBeam(p));
+    if(p&&p.alive&&p.carLights) L.push(...headLights(p));
+    L.push(...enemyLamps());   // linternas enemigas (LED): también abren la oscuridad, con sus sombras
+  }
   if(orb) L.push([orb.x,orb.y,110,0.95]);
   if(mate&&mate.alive) L.push([mate.x,mate.y,70,0.8]);
   for(const tu of turrets) if(tu.alive) L.push([tu.x,tu.y,50,0.7]);
@@ -10905,6 +10946,42 @@ function nightLights(){
   if(boss&&boss.alive) L.push([boss.x,boss.y,90,0.6]);   // el reactor del jefe brilla
   lavaLights(L);   // la lava alumbra de noche
   return L;
+}
+/* FAROLAS GIGANTES de la arena del jefe (Mundos 1-5): seis torres con focos de estadio. Cuando está oscuro y entras en la
+   arena se encienden una tras otra (con su chasquido y un parpadeo) y la iluminan entera; mientras lucen, las linternas
+   portátiles (la tuya, los faros y las de los enemigos) se apagan porque ya no hacen falta. */
+const FLOOD_POS=[[5,11],[34,11],[5,21],[34,21],[5,31],[34,31]];
+function floodState(){   // [[x, y, cuánto luce 0..1], ...] o null si no toca
+  const w=world;
+  if(inHome||!w||!w.arenaRow||!player||player.y>w.arenaRow*TILE||lampDark()<0.3){ if(w){ w.floodT=null; w.floodN=0; } return null; }
+  if(w.floodT==null){ w.floodT=t; w.floodN=0; }
+  return FLOOD_POS.map(([c,r],i)=>{
+    const e=t-w.floodT-i*24; let k=0;
+    if(e>=0){
+      if(w.floodN<=i){ w.floodN=i+1; beep(70,0.3,'square',0.06); noise(0.2,0.05,300);
+        if(i===0&&player.alive) popup(player.x,player.y-40,'💡 FOCOS ENCENDIDOS · linternas apagadas','#fff3b0',14); }
+      k=e<14?(Math.floor(e/3)%2?1:0.25):1;   // parpadeo al arrancar
+    }
+    return [c*TILE+15,r*TILE+15,k];
+  });
+}
+function floodLit(fl){ fl=fl===undefined?floodState():fl; return !!fl&&fl[0][2]>0; }
+/* Las torres se ven siempre (de día apagadas); se dibujan en el mundo, encima de las unidades del suelo */
+function drawFloodPoles(){
+  if(inHome||!world||!world.arenaRow||cam.y>world.arenaRow*TILE+60) return;
+  const fl=floodState();
+  FLOOD_POS.forEach(([c,r],i)=>{
+    const x=c*TILE+15, y=r*TILE+15, k=fl?fl[i][2]:0, top=y-120;
+    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x+5,y+3,18,7,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#2a2e34'; ctx.fillRect(x-11,y-7,22,11);   // zócalo
+    ctx.fillStyle='#4a5059'; ctx.fillRect(x-4,top+10,8,y-top-15); ctx.fillStyle='#6b717a'; ctx.fillRect(x-4,top+10,3,y-top-15);
+    ctx.strokeStyle='#22262c'; ctx.lineWidth=1; ctx.beginPath();
+    for(let yy=top+14;yy<y-14;yy+=10){ ctx.moveTo(x-4,yy); ctx.lineTo(x+4,yy+10); } ctx.stroke();   // celosía
+    ctx.fillStyle='#1a1d22'; ctx.fillRect(x-27,top-14,54,26); ctx.fillStyle='#3a3f46'; ctx.fillRect(x-27,top-14,54,3);
+    for(let j=0;j<6;j++){ const bx=x-23+(j%3)*16, by=top-9+Math.floor(j/3)*11;
+      ctx.fillStyle=k>0.5?'#fffbe0':k>0?'#c8b878':'#3a3e45'; ctx.fillRect(bx,by,14,8); }
+    if(k>0.5){ ctx.save(); ctx.globalAlpha=0.5; glowCircle(x,top-1,26,'#fff3b0'); ctx.restore(); }
+  });
 }
 /* Se dibuja en coordenadas de pantalla, encima del mundo y del clima */
 function drawNight(cx,cy){
@@ -11041,7 +11118,7 @@ function headLights(p){
 }
 /* Tinte del haz encima de la oscuridad: amarillento en la linterna casera, blanco cálido en los faros */
 function drawLampTint(cx,cy){
-  const p=player; if(!p||!p.alive||inHome||(!p.lamp&&!p.carLights)) return;
+  const p=player; if(!p||!p.alive||inHome||(!p.lamp&&!p.carLights)||floodLit()) return;
   const cones=p.lamp?[lampBeam(p)[0]]:headLights(p), rgb=p.lamp?'255,214,140':'255,244,214';
   for(const [x,y,r,s,a,sp] of cones){
     const sx=x-cx, sy=y-cy, gr=ctx.createRadialGradient(sx,sy,4,sx,sy,r);
@@ -11745,7 +11822,8 @@ function upgradeTurrets(){
 .tcPad{position:absolute;bottom:12px;width:112px;height:112px;border-radius:50%;background:rgba(20,26,36,.35);border:2px solid rgba(255,255,255,.25);pointer-events:auto;touch-action:none}
 .tcPad i{position:absolute;left:36px;top:36px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.35)}
 #tcMove{left:12px} #tcAim{right:12px} #tcAim i{background:rgba(255,90,90,.45)}
-.tcBtns{position:absolute;right:134px;bottom:12px;display:grid;grid-template-columns:repeat(3,46px);gap:6px;pointer-events:none}
+.tcBtns{position:absolute;inset:0;pointer-events:none}
+.tcBtns .tcB{position:absolute}
 .tcB{width:46px;height:46px;border-radius:50%;background:rgba(20,26,36,.45);border:2px solid rgba(255,255,255,.3);color:#fff;font:bold 10px Rajdhani,monospace;pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1}
 .tcB.on{background:rgba(255,215,110,.5)}
 #tcPause{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:38px;height:38px}
@@ -11753,9 +11831,12 @@ function upgradeTurrets(){
   document.head.appendChild(st);
   const L=document.createElement('div'); L.id='tcLayer'; L.className='off';
   // [etiqueta, tecla, solo en misión]
+  // en arco alrededor del joystick derecho (su centro está a 68 px de la esquina): [ángulo°, distancia], al alcance del pulgar
+  const ARC=[[180,98],[135,98],[90,98],[170,152],[130,152],[95,152]];
   const BTNS=[['ARCO\nCORRER','shift',false],['E\nUSAR','e',false],['F\nCAMUF.','f',true],['T\nTORRETA','t',true],['Q\nESCUADRA','q',true],['R\nALIADO','r',true]];
   L.innerHTML='<div class="tcPad" id="tcMove"><i></i></div><div class="tcPad tcAimOnly" id="tcAim"><i></i></div><div class="tcBtns">'+
-    BTNS.map(([l,k,m])=>'<div class="tcB'+(m?' tcAimOnly':'')+'" data-k="'+k+'">'+l.replace('\n','<br>')+'</div>').join('')+
+    BTNS.map(([l,k,m],i)=>{ const [a,r]=ARC[i], x=68-Math.cos(a/57.3)*r-23, y=68+Math.sin(a/57.3)*r-23;
+      return '<div class="tcB'+(m?' tcAimOnly':'')+'" data-k="'+k+'" style="right:'+x.toFixed(0)+'px;bottom:'+y.toFixed(0)+'px">'+l.replace('\n','<br>')+'</div>'; }).join('')+
     '</div><div class="tcB" id="tcPause" data-k="escape">II</div>';
   document.body.appendChild(L);
 
@@ -11855,7 +11936,7 @@ function menuCardHtml(){
     const K=(keys,txt)=>'<div class="kRow"><span>'+keys.map(k=>'<kbd>'+k+'</kbd>').join('')+'</span><em>'+txt+'</em></div>';
     return '<div class="mCardHead">EN COMBATE</div>'+
       K(['W','A','S','D'],'mover')+K(['RATÓN'],'apuntar (la torreta gira 360°)')+K(['CLIC IZQ','ESPACIO'],'disparar')+
-      K(['CLIC DER','SHIFT'],'ataque en arco: pasa por encima de los muros')+K(['F'],'camuflaje')+K(['R'],'evolucionar aliado ◆20')+
+      K(['CLIC DER','SHIFT'],'ataque en arco: pasa por encima de los muros')+K(['F'],'camuflaje')+K(['Z'],'modo taladro del Centinela: rompe vetas y taladra enemigos (no dispara)')+K(['R'],'evolucionar aliado ◆20')+
       K(['E'],'mini-dron ◆8')+K(['T'],'torreta ◆12')+K(['Q'],'escuadra ◆10')+K(['G'],'la escuadra escolta a los rehenes')+K(['X'],'pedir el Orbe Vital (en los mundos)')+K(['C'],'pegado a una moto aturdida: reprogramarla')+K(['P','ESC'],'pausa')+
       '<div class="mCardHead" style="margin-top:1cqw">EN LA BASE Y EN EL MAPA</div>'+
       K(['W','A','S','D'],'caminar · SHIFT correr')+K(['E'],'usar edificios y el huerto')+K(['← →'],'elegir destino · INTRO despegar');
@@ -13030,6 +13111,7 @@ function updateHUD(){
   // Habilidades
   const alive=p.alive&&cine<=0;
   abil('abF',!alive||p.noCloak?'off':p.cloak>0?'active':p.cloakCd>0?'':'ready',p.cloak>0?0:p.cloakCd/p.cloakCdBase);
+  abil('abZ',!alive||p.ch.id!=='mech'?'off':p.drill?'active':'ready',0);   // solo el Centinela tiene taladro
   abil('abG',!alive||p.noNade?'off':p.nadeCd>0?'':'ready',p.nadeCd/p.nadeCdBase);   // sin la habilidad en este nivel: apagada
   const canEvo=mate&&mate.alive&&mate.lvl<2;
   abil('abR',!canEvo?'off':runWork>=20?'ready':'',0);
@@ -13159,6 +13241,7 @@ window.addEventListener('keydown',e=>{
   if(k==='x') callOrbHere();
   if(k==='v') launchShock();   // bomba de choque (p9q_defenses.js)
   if(k==='g') startEscort();
+  if(k==='z') toggleDrill();   // modo taladro del Centinela (p9e_minerals.js)
 });
 window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
 window.addEventListener('blur',()=>{ for(const k in keys) delete keys[k]; mouse.down=false; mouse.right=false; });
