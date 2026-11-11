@@ -8397,6 +8397,7 @@ function seedDepositsWorld(id){
   } else if(world.secRows&&DEPOSIT_TABLES['w'+id]){   // Mundos 3-5: cada mapa dice qué filas ocupa cada sección y sobre qué suelo
     DEPOSIT_TABLES['w'+id].forEach((list,i)=>placeDeposits(list,{r0:world.secRows[i][0],r1:world.secRows[i][1],c0:3,c1:35,ground:world.depGround||[G,FLOOR],avoid:world.starts.map(s=>({x:s.x,y:s.y,d:160}))}));
   }
+  seedDrillers(irand(1,2));
 }
 /* ISLA CRÁTER (supervivencia): un fragmento del meteorito de la Abyssalita cayó aquí y su imitación convirtió la roca
    en todos los minerales. Están por ANILLOS: cuanto más al centro, mejores (y más lejos de tu base, que está en el borde).
@@ -8425,6 +8426,7 @@ function seedDepositsStage(){
     const list=(DEPOSIT_TABLES[era.id]||DEPOSIT_TABLES.isla).filter(inWorld), sel=[];
     if(list.length) for(let i=0;i<2;i++) sel.push(pick(list));
     placeDeposits(sel,{r0:2,r1:WR-3,c0:2,c1:WC-3,ground:[G],avoid:av});
+    if(Math.random()<0.5) seedDrillers(1);
   }
 }
 
@@ -8455,6 +8457,90 @@ function storeHtml(){
  const where=ORE_WHERE[k]||'';
     h+='<div class="oreCell'+(n?'':' none')+'" title="'+(M.veta?M.veta+' → '+M.name:M.name)+': '+where+'"><img src="'+oreIconUrl(k)+'" alt=""><b style="color:'+M.col+'">'+n+'</b><small>'+M.name+'</small></div>'; });
   return h+'</div><p class="subtitle" style="font-size:12px">Rompe los yacimientos a tiros en las misiones y recoge los trozos. Pasa el ratón por un mineral para ver dónde se encuentra: casi todos salen en la isla cráter del Archipiélago. Las mejoras del taller los piden desde su segundo nivel.</p>';
+}
+
+/* ===================== PERFORADOR: el mecha enemigo que saca material =====================
+   En las islas con vetas, el enemigo pone mechas con un minitaladro a sacar material. Sin verte, el perforador va a la veta
+   más cercana y la perfora (chispas y polvo): cada 0,75 s le quita 1 de vida y, si la acaba, SE LLEVA LA VETA ENTERA (ya no
+   la podrás romper tú). Si te ve, pelea con el taladro como un triturador; cuando te pierde, vuelve a perforar. Al caer suelta
+   todo lo que había sacado. Encima lleva un aviso con lo que carga. Salen junto a algunas vetas lejos de donde empiezas. */
+EDEFS.driller={name:'PERFORADOR', role:'melee', hp:40, speed:1.6, accel:0.3, radius:12, mass:1.6, view:250, fov:2.0, dmg:12, score:120, work:3,
+  color:'#c89a3a', look:'driller', purple:0, update:drillerUpdate, onDeath:drillerDeath, draw:drawDriller};
+const DRILL_EVERY=45;   // fotogramas por golpe de taladro a la veta
+function seedDrillers(n){   // pone n perforadores junto a vetas al azar (1-2 por mundo; en el Archipiélago, 1 la mitad de las veces)
+  const starts=world&&world.starts?world.starts:landing?[landing]:[];
+  const ok=depState().list.filter(d=>d.alive&&!starts.some(s=>Math.hypot(s.x-d.x,s.y-d.y)<380)).sort(()=>Math.random()-0.5);   // lejos de donde empiezas: que no te vea nada más llegar
+  for(const d of ok){
+    if(n<=0) break;
+    const nb=nearestWalkable(d.c+1,d.r+3,4); if(!nb) continue;
+    const en=addEnemy('driller',nb[0]*TILE+TILE/2,nb[1]*TILE+TILE/2,newSquad(),true);
+    en.home={x:en.x,y:en.y}; en.dep=d; en.ore={}; n--;
+  }
+}
+function nearestDeposit(en,R,ban){
+  let best=null, bd=R;
+  for(const d of depState().list){ if(!d.alive||d===ban) continue; const dd=Math.hypot(d.x-en.x,d.y-en.y); if(dd<bd){ bd=dd; best=d; } }
+  return best;
+}
+function drillerUpdate(en,dt){
+  en.drilling=false;
+  if(en.ai!=='patrol') return false;   // te ha visto: pelea como los demás (role melee)
+  if(en.stun>0) return false;
+  perceive(en,dt); if(en.ai!=='patrol') return false;
+  let d=en.dep;
+  if(!d||!d.alive){ d=en.dep=nearestDeposit(en,620,en.depBan); en.seekT=0; }
+  if(!d) return false;   // no quedan vetas: patrulla normal
+  const dd=Math.hypot(d.x-en.x,d.y-en.y);
+  if(dd>en.radius+TILE+10){   // camino de la veta (si no llega en 10 s, la deja por otra)
+    en.seekT=(en.seekT||0)+dt; if(en.seekT>600){ en.depBan=d; en.dep=null; return false; }
+    steerTo(en,d.x,d.y,dt,0.8); moveUnit(en,dt);
+    const sp=Math.hypot(en.vx,en.vy); if(sp>0.3) en.angle=turnTo(en.angle,Math.atan2(en.vy,en.vx),0.15*dt);
+    en.walk+=sp*dt*0.13; en.aim=en.angle;
+    return true;
+  }
+  en.vx*=0.6; en.vy*=0.6; moveUnit(en,dt);
+  en.angle=turnTo(en.angle,Math.atan2(d.y-en.y,d.x-en.x),0.2*dt); en.aim=en.angle; en.drilling=true;
+  const tx=en.x+Math.cos(en.angle)*(en.radius+10), ty=en.y+Math.sin(en.angle)*(en.radius+10);   // la punta del taladro
+  if(Math.random()<0.6*dt) particles.push({x:tx+rand(-3,3),y:ty+rand(-3,3),vx:rand(-1.6,1.6),vy:rand(-2,0.4),life:12,maxLife:12,color:pick(['#ffd76e','#fff4c0','#ff9a3a']),size:2});
+  if((en.drillT=(en.drillT||0)+dt)>=DRILL_EVERY){
+    en.drillT=0; d.hp-=1; d.flash=4;
+    spawnDebris(tx,ty,2,MINERALS[d.min].col);
+    if(d.hp<=0){   // se lleva la veta entera
+      const M=MINERALS[d.min]; breakDeposit(d,false);
+      en.ore[d.min]=(en.ore[d.min]||0)+M.drop; en.dep=null;
+      popup(en.x,en.y-30,'¡SE LLEVA LA VETA DE '+(M.veta||M.name).toUpperCase()+'!','#ff6b3a',13);
+    }
+  }
+  return true;
+}
+function drillerDeath(en){
+  let n=0;
+  for(const k in en.ore||{}) for(let i=0;i<en.ore[k];i++){
+    const a=Math.random()*Math.PI*2, sp=rand(1.5,3.5);
+    pickups.push({x:en.x,y:en.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,kind:'ore',min:k,value:1,life:1500}); n++;
+  }
+  if(n) popup(en.x,en.y-34,'¡SUELTA LO QUE HABÍA SACADO!','#ffd76e',14);
+}
+/* El cuerpo del triturador en ocre de obra, con un taladro cónico en el brazo derecho: sus franjas corren al girar
+   (deprisa al perforar o pelear) y encima, lo que carga */
+function drawDriller(en){
+  const spr=robotSprite('brawler',en.def.color), sc=en.radius*2/(spr.width-2);
+  drawFeet(en.x,en.y,en.angle,en.walk,sc,5,'#1e1a1a');
+  blit(spr,en.x,en.y,en.angle,sc);
+  const busy=en.drilling||en.ai==='combat', spin=t*(busy?0.9:0.12);
+  ctx.save(); ctx.translate(en.x,en.y); ctx.rotate(en.angle);
+  const x0=en.radius*0.35, y0=en.radius*0.55, L=en.radius*1.15, W2=en.radius*0.36;
+  ctx.fillStyle='#2a2f36'; ctx.fillRect(x0-3,y0-W2-1,5,W2*2+2);   // el soporte en el brazo
+  ctx.fillStyle='#8a9098'; ctx.beginPath(); ctx.moveTo(x0,y0-W2); ctx.lineTo(x0+L,y0); ctx.lineTo(x0,y0+W2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#4a4e55'; ctx.lineWidth=1.5;
+  for(let i=0;i<4;i++){ const u=((i/4+spin*0.15)%1), x=x0+u*L, w=W2*(1-u); ctx.beginPath(); ctx.moveTo(x,y0-w); ctx.lineTo(x+L*0.12,y0+w); ctx.stroke(); }   // la espiral
+  ctx.fillStyle='#d9dde3'; ctx.fillRect(x0+L-2,y0-1,2,2);
+  ctx.restore();
+  if(shadowPass) return;
+  let n=0, min=null; for(const k in en.ore||{}){ n+=en.ore[k]; min=k; }
+  if(n){ const ic=oreChunk(min), y=en.y-en.radius-20;
+    ctx.drawImage(ic,Math.round(en.x-ic.width-1),Math.round(y-ic.height/2));
+    ctx.save(); ctx.font='bold 12px Rajdhani, monospace'; ctx.textAlign='left'; ctx.fillStyle='#000'; ctx.fillText('×'+n,en.x+2,y+5); ctx.fillStyle=MINERALS[min].col; ctx.fillText('×'+n,en.x+1,y+4); ctx.restore(); }
 }
 
 /* ===================== MUNDOS 3-5: PIEZAS COMUNES =====================
@@ -11646,6 +11732,72 @@ function upgradeTurrets(){
     for(const u of e.units) if(u[0]==='emplacement'&&(n++)%2===1) u[0]='rocketpad'; }
 }
 
+/* ===================== CONTROLES TÁCTILES (móviles y tablets) =====================
+   Solo aparecen en pantallas táctiles, mientras juegas o caminas por la base.
+   - Joystick izquierdo: moverte (pulsa las teclas WASD por ti).
+   - Joystick derecho: apuntar y disparar (en misión).
+   - Botones: hacen lo mismo que su tecla (E, F, T, Q, R, Shift = arco/correr, Esc = pausa/menú). */
+(function(){
+  if(!(navigator.maxTouchPoints>0||matchMedia('(pointer: coarse)').matches)) return;
+  const st=document.createElement('style');
+  st.textContent=`#tcLayer{position:fixed;inset:0;pointer-events:none;z-index:50;user-select:none;-webkit-user-select:none;touch-action:none}
+#tcLayer.off{display:none}
+.tcPad{position:absolute;bottom:12px;width:112px;height:112px;border-radius:50%;background:rgba(20,26,36,.35);border:2px solid rgba(255,255,255,.25);pointer-events:auto;touch-action:none}
+.tcPad i{position:absolute;left:36px;top:36px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.35)}
+#tcMove{left:12px} #tcAim{right:12px} #tcAim i{background:rgba(255,90,90,.45)}
+.tcBtns{position:absolute;right:134px;bottom:12px;display:grid;grid-template-columns:repeat(3,46px);gap:6px;pointer-events:none}
+.tcB{width:46px;height:46px;border-radius:50%;background:rgba(20,26,36,.45);border:2px solid rgba(255,255,255,.3);color:#fff;font:bold 10px Rajdhani,monospace;pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1}
+.tcB.on{background:rgba(255,215,110,.5)}
+#tcPause{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:38px;height:38px}
+.tcHome .tcAimOnly{display:none}`;
+  document.head.appendChild(st);
+  const L=document.createElement('div'); L.id='tcLayer'; L.className='off';
+  // [etiqueta, tecla, solo en misión]
+  const BTNS=[['ARCO\nCORRER','shift',false],['E\nUSAR','e',false],['F\nCAMUF.','f',true],['T\nTORRETA','t',true],['Q\nESCUADRA','q',true],['R\nALIADO','r',true]];
+  L.innerHTML='<div class="tcPad" id="tcMove"><i></i></div><div class="tcPad tcAimOnly" id="tcAim"><i></i></div><div class="tcBtns">'+
+    BTNS.map(([l,k,m])=>'<div class="tcB'+(m?' tcAimOnly':'')+'" data-k="'+k+'">'+l.replace('\n','<br>')+'</div>').join('')+
+    '</div><div class="tcB" id="tcPause" data-k="escape">II</div>';
+  document.body.appendChild(L);
+
+  // Joystick: devuelve la dirección (-1..1) mientras lo tocas
+  function pad(el,onMove,onEnd){
+    const knob=el.querySelector('i'); let id=null;
+    const move=e=>{ for(const tt of e.changedTouches){ if(tt.identifier!==id) continue;
+      const r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2, R=r.width/2;
+      let dx=(tt.clientX-cx)/R, dy=(tt.clientY-cy)/R; const m=Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
+      knob.style.transform='translate('+dx*36+'px,'+dy*36+'px)'; onMove(dx,dy); } e.preventDefault(); };
+    el.addEventListener('touchstart',e=>{ ensureAudio(); id=e.changedTouches[0].identifier; move(e); },{passive:false});
+    el.addEventListener('touchmove',move,{passive:false});
+    const end=e=>{ for(const tt of e.changedTouches) if(tt.identifier===id){ id=null; knob.style.transform=''; onEnd(); } e.preventDefault(); };
+    el.addEventListener('touchend',end,{passive:false}); el.addEventListener('touchcancel',end,{passive:false});
+  }
+  pad(document.getElementById('tcMove'),(dx,dy)=>{
+    keys.a=dx<-0.35; keys.d=dx>0.35; keys.w=dy<-0.35; keys.s=dy>0.35;
+  },()=>{ keys.a=keys.d=keys.w=keys.s=false; });
+  pad(document.getElementById('tcAim'),(dx,dy)=>{
+    if(state!=='playing'||!player) return;
+    const m=Math.hypot(dx,dy); if(m<0.15) return;
+    mouse.sx=player.x-cam.x+dx/m*160; mouse.sy=player.y-cam.y+dy/m*160;
+    mouse.down=m>0.45;   // empuja más para disparar; poco = solo apuntar
+  },()=>{ mouse.down=false; });
+
+  // Botones: pulsan la tecla de verdad (así hacen exactamente lo mismo que en el teclado)
+  const key=(k,type)=>window.dispatchEvent(new KeyboardEvent(type,{key:k==='shift'?'Shift':k==='escape'?'Escape':k}));
+  L.querySelectorAll('.tcB').forEach(b=>{
+    const k=b.dataset.k;
+    b.addEventListener('touchstart',e=>{ ensureAudio(); b.classList.add('on'); key(k,'keydown'); e.preventDefault(); },{passive:false});
+    const up=e=>{ b.classList.remove('on'); key(k,'keyup'); e.preventDefault(); };
+    b.addEventListener('touchend',up,{passive:false}); b.addEventListener('touchcancel',up,{passive:false});
+  });
+
+  // Solo se ven mientras juegas o caminas por la base (en menús y pantallas, no estorban)
+  setInterval(()=>{
+    const show=state==='playing'||state==='home';
+    L.classList.toggle('off',!show); L.classList.toggle('tcHome',state==='home');
+    if(!show){ keys.a=keys.d=keys.w=keys.s=false; }
+  },200);
+})();
+
 /* ===================== MENÚ PRINCIPAL =====================
    Ideas tomadas de varios menús clásicos:
    - «PULSA CUALQUIER TECLA» como en Jackal y Metal Slug (y sirve para activar el sonido del navegador).
@@ -12015,7 +12167,8 @@ function menuBuildScene(){
   isle(30,60,4,'#1d1128','#3a1d3c',4);
   g=islD.getContext('2d');   // las mismas islas lejanas, de día (azuladas por la distancia)
   isle(6,78,9,'#6a86a0','#87a2b8',1); isle(206,262,6,'#6a86a0','#87a2b8',2); isle(266,299,4,'#6a86a0','#87a2b8',3); isle(30,60,4,'#7d97ae','#94acc0',4);
-  // tu base: isla de meseta (suelo plano en y=120) con hangar, forja, radar, grúa y faro APOYADOS en el suelo.
+  // isla de meseta (suelo plano en y=120) con hangar, forja, radar, grúa y faro APOYADOS en el suelo: un puesto enemigo donde
+  // sacan material (el perforador, menuDriller, trabaja entre el radar y el faro).
   // Se dibuja en una capa aparte (coordenadas de diseño) para poder reflejarla en el agua.
   const SIL='#120c1c', RIM='#2c1a32', GY=120, sil=mkCanvas(300,H0), b=sil.getContext('2d');
   for(let x=96;x<=204;x++){
@@ -12156,6 +12309,24 @@ function menuShipWake(g,sxr,sy,ts,SW){
   // ola de proa
   for(let i=0;i<4;i++){ if(opsHash(i,10,fr)<0.7){ g.fillStyle='rgba(236,242,255,0.7)'; g.fillRect(sxr+23+i,wl-1+(i>>1)+(opsHash(i,11,fr)<0.5?0:1),1,1); } }
 }
+/* EL PERFORADOR (mecha enemigo) saca material del suelo de la isla, entre el radar y el faro: el cuerpo da un respingo a
+   cada golpe, el taladro gira (franjas que corren), saltan chispas y polvo y al lado está el montón de piedra. De día con sus
+   colores; de noche en silueta, con el visor y las chispas encendidos. Coordenadas de diseño (suelo en y=120) */
+function menuDriller(g,M,ts){
+  const n=M.night??1, X=168, Y=120, bob=Math.floor(ts*7)%2, f=Math.floor(ts*20);
+  g.fillStyle=menuMix('#8a8178','#110b1a',n); g.fillRect(X+8,Y-2,4,2); g.fillRect(X+9,Y-3,2,1);   // el montón de piedra
+  g.fillStyle=menuMix('#2a2f36','#0b0812',n); g.fillRect(X,Y-3,2,3); g.fillRect(X+4,Y-3,2,3);      // patas
+  g.fillStyle=menuMix('#c89a3a','#160f1e',n); g.fillRect(X-1,Y-8+bob,8,5);                         // cuerpo ocre
+  g.fillStyle=menuMix('#8a6a2a','#0f0a16',n); g.fillRect(X-1,Y-4+bob,8,1);
+  g.fillStyle=menuMix('#4a4e55','#0f0a16',n); g.fillRect(X+6,Y-6+bob,2,3);                         // brazo
+  g.fillStyle=VISOR; g.fillRect(X+4,Y-7+bob,2,1);                                                  // visor
+  for(let k=0;k<3;k++){ g.fillStyle=(f+k)%2?menuMix('#d9dde3','#3a3550',n):menuMix('#6a7078','#1a1626',n); g.fillRect(X+6,Y-3+bob+k,2,1); }   // taladro girando, clavado en el suelo
+  g.save(); g.globalCompositeOperation='lighter';
+  for(let k=0;k<4;k++){ if(opsHash(f,k,77)<0.45) continue; g.fillStyle=opsHash(f,k,78)<0.5?'#ffd76e':'#fff4c0';   // chispas
+    g.fillRect(X+5+Math.floor(opsHash(f,k,79)*6)-2,Y-1-Math.floor(opsHash(f,k,80)*4),1,1); }
+  g.restore();
+  if(opsHash(f,9,81)<0.3){ g.fillStyle=menuMix('#b8ada0','#2a2236',n); g.fillRect(X+8+Math.floor(opsHash(f,9,82)*3),Y-4-Math.floor(opsHash(f,9,83)*2),1,1); }   // polvo
+}
 function menuSmooth(e0,e1,x){ const u=clamp((x-e0)/(e1-e0),0,1); return u*u*(3-2*u); }
 /* ¿Cuánta luz del faro llega a un punto (coordenadas de diseño)? 0..1 */
 function menuBeamLight(beams,LX,LY,px,py){
@@ -12271,6 +12442,7 @@ function drawMenuScene(){
   if(Math.random()<0.2) M.embers.push({x:147.5,y:72,vx:(Math.random()-0.3)*0.4,life:1});
   M.embers=M.embers.filter(p=>(p.life-=0.025)>0);
   for(const p of M.embers){ p.y-=0.45; p.x+=p.vx+0.08; g.fillStyle=p.life>0.5?'#ffd76e':'#ff6b3a'; g.fillRect(Math.round(p.x),Math.round(p.y),1,1); }
+  menuDriller(g,M,ts);
   g.restore();
   // bajo el mar: el brillo de la Abyssalita y sus ecos (anillos de sonar)
   g.save(); g.beginPath(); g.rect(0,HOR+1,SW,SH-HOR); g.clip();
