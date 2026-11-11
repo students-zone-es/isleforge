@@ -78,7 +78,7 @@
   <button class="ch" id="stUndo" title="Ctrl+Z">↶ DESHACER</button>
   <button class="ch" id="stExport" title="Guarda una copia de todas las animaciones en un archivo">⬇ EXPORTAR</button>
   <label class="ch" title="Carga animaciones desde un archivo exportado">⬆ IMPORTAR<input type="file" id="stImport" accept=".json,application/json" hidden></label>
-  <a class="ch" id="stGame" href="ISLEFORGE.html">← AL JUEGO</a>
+  <a class="ch" id="stGame" href="ISLEFORGE%203D.html">← AL JUEGO</a>
 </header>
 <aside id="stLeft"><h2>PERSONAJE</h2><div id="stWho"></div><h2>ANIMACIONES</h2><div class="list" id="stList"></div><div class="row"><button class="ch" id="stNew">+ NUEVA ANIMACIÓN</button></div><div id="stProps"></div></aside>
 <section id="stView"><canvas id="stCv"></canvas><div id="stViews"></div><div id="stInfo"></div>
@@ -984,7 +984,7 @@ function stLoop(now){
 }
 /* Al abrir: las animaciones guardadas; la primera vez, las que ya tenía la partida (sin tocarla) */
 animInit();
-$('stGame').href=/github\.io$/.test(location.hostname)?'./':'ISLEFORGE.html';
+$('stGame').href=/github\.io$/.test(location.hostname)?'3d.html':'ISLEFORGE%203D.html';   // en la web, la 3D vive en 3d.html (la principal es la 2D)
 stPanels(); requestAnimationFrame(stLoop);
 
 })();
